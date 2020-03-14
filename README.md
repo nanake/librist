@@ -1,11 +1,102 @@
+![librist logo](librist_logo.png)
+
 # librist
 
 A library that can be used to easily add the RIST protocol to your application.
 
-Documentation will follow shortly ...
+This code was written to comply with the Video Services Forum (VSF) Technical Recommendations TR-06-1 and TR-06-2. The protocol goes by the codename "RIST"
 
-In the mean time, we have two public support channels on telegram, one for users and one for developers:
+The canonical repository URL for this repo is https://code.videolan.org/rist/librist
 
-channel name: rist / url: https://t.me/ristusers
+This project is partially funded by the SipRadius LLC.
 
-channel name: librist / url: https://t.me/libristdev
+## Goal and Features
+
+The goal of this project is to provide a rist library for **most platforms**.
+
+It supports all features from the TR-06-1 and most of the features of TR-06-2.
+
+## License
+
+**librist** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
+
+The reasoning behind this decision is the same as for libvorbis, see [RMS on vorbis](https://lwn.net/2001/0301/a/rms-ov-license.php3).
+
+# Roadmap
+
+The plan is the following:
+
+### Reached
+1. Complete C implementation of the rist protocol,
+2. Provide a usable API,
+
+### On-going
+3. Improve C code base with [various tweaks](https://code.videolan.org/rist/librist/wikis/task-list),
+4. Port/test on most platforms
+5. Provide wrappers for other languages
+
+# Contribute
+
+Currently, we are looking for help from:
+- C developers,
+- asm developers,
+- platform-specific developers,
+- testers.
+
+Our contributions guidelines are quite strict. We want to build a coherent codebase to simplify maintenance and achieve the highest possible speed.
+
+Notably, the codebase is in pure C and asm.
+
+We are on Telegram, on the rist_users and librist_developers channels.
+
+See the [contributions document](CONTRIBUTING.md).
+
+## CLA
+
+There is no CLA.
+
+VideoLAN will only have the collective work rights.
+
+## CoC
+
+The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this project.
+
+# Compile
+
+1. Install [Meson](https://mesonbuild.com/) (0.47 or higher), [Ninja](https://ninja-build.org/), and, for x86\* targets, [nasm](https://nasm.us/) (2.14 or higher)
+2. Run `mkdir build && cd build` to create a build directory and enter it
+3. Run `meson ..` to configure meson, add `--default-library=static` if static linking is desired
+4. Run `ninja` to compile
+
+# Support
+
+This project is partially funded by the SipRadius LLC.
+
+This company can provide support and integration help, should you need it.
+
+
+# FAQ
+
+## Why do you not improve srt rather than starting a new project?
+
+- Although SRT provides a similar solution, it is the result of the vision and design of a single company. librist on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, rist has been based on clear and open standards.
+
+## Is librist a recursive acronym?
+
+- Yes, libRIST stands for Library - Reliable Internet Stream Transport
+
+## Can I help?
+
+- Yes. See the [contributions document](CONTRIBUTING.md).
+
+## I am not a developer. Can I help?
+
+- Yes. We need testers, bug reporters, and documentation writers.
+
+## What about the packet recovery patents?
+
+- This code was written to comply with the Video Services Forum (VSF) Technical Recommendations TR-06-1 and TR-06-2 and as such is free of any patent royalty payments
+
+## Will you care about <my_arch>? <my_os>?
+
+- We do, but we don't have either the time or the knowledge. Therefore, patches and contributions welcome.
