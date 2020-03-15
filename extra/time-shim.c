@@ -4,7 +4,6 @@
 * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
 */
 
-
 #include "time-shim.h"
 
 #ifdef _WIN32
@@ -81,10 +80,19 @@ int clock_gettime(clockid_t clock, timespec_t *tp)
 	return 0;
 }
 
-#else
+#endif
 
-void libristdummy(){ //Silence no symbol in file warning
+#ifdef __MACH__
+int clock_gettime_osx(timespec_t *ts)
+{
+  clock_serv_t cclock;
+  mach_timespec_t mts;
+  host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
+  clock_get_time(cclock, &mts);
+  mach_port_deallocate(mach_task_self(), cclock);
+  ts->tv_sec = mts.tv_sec;
+  ts->tv_nsec = mts.tv_nsec;
+  return 0;
 }
 
 #endif
-

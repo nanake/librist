@@ -22,6 +22,7 @@ int clock_gettime(clockid_t clock, timespec_t *tp);
 #include <mach/clock.h>
 #include <mach/mach.h>
 typedef mach_timespec_t timespec_t;
+int clock_gettime_osx(timespec_t *ts);
 
 #else
 # include <sys/time.h>

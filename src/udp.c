@@ -580,7 +580,11 @@ uint32_t rist_send_client_rtcp(struct rist_peer *peer)
 	sr->rtcp.len = htons(6);
 	uint64_t now = timestampNTP_u64();
 	timespec_t ts;
-	clock_gettime(CLOCK_REALTIME, (struct timespec *)&ts);
+#ifdef __APPLE__
+	clock_gettime_osx(&ts);
+#else
+	clock_gettime(CLOCK_REALTIME, &ts);
+#endif
 	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
 	uint32_t ntp_lsw = (uint32_t)ts.tv_nsec;
 	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
