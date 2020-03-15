@@ -305,6 +305,10 @@ int sem_post(sem_t *sem)
 
 #else
 
+#ifdef __APPLE__
+#include <sys/time.h>
+#endif
+
 // This is not part of the POSIX API
 // Convience function around pthread
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
@@ -318,7 +322,7 @@ int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint
 	ts.tv_sec = tv.tv_sec + odd / 1000000000ULL;
 	ts.tv_nsec = odd % 1000000000ULL;
 
-	return pthread_cond_timedwait(cond, mutex, &ts);
+	return pthread_cond_timedwait(cond, mutex, (const struct timespec*)&ts);
 }
 
 #endif

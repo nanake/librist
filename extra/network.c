@@ -209,13 +209,13 @@ static int SetMulticastHopLimit(int s, int family, int hop)
 	switch (family) {
 #ifdef IP_MULTICAST_TTL
 	case AF_INET:
-		proto = SOL_IP;
+		proto = IPPROTO_IP;
 		cmd = IP_MULTICAST_TTL;
 	break;
 #endif
 #ifdef IPV6_MULTICAST_HOPS
 	case AF_INET6:
-		proto = SOL_IPV6;
+		proto = IPPROTO_IPV6;
 		cmd = IPV6_MULTICAST_HOPS;
 	break;
 #endif
@@ -252,7 +252,7 @@ static int SetMulticastInterface(int s, int family, const char *intf)
 	switch(family) {
 #ifdef IPV6_MULTICAST_IF
 	case AF_INET6:
-		if (setsockopt(s, SOL_IPV6, IPV6_MULTICAST_IF, (char *)&scope, sizeof(scope)) == 0) {
+		if (setsockopt(s, IPPROTO_IPV6, IPV6_MULTICAST_IF, (char *)&scope, sizeof(scope)) == 0) {
 			return 0;
 		}
 	break;
@@ -266,7 +266,7 @@ static int SetMulticastInterface(int s, int family, const char *intf)
 #else
 	{
 		struct ip_mreqn req = { .imr_ifindex = scope };
-		if (setsockopt(s, SOL_IP, IP_MULTICAST_IF, (char *)&req, sizeof(req)) == 0) {
+		if (setsockopt(s, IPPROTO_IP, IP_MULTICAST_IF, (char *)&req, sizeof(req)) == 0) {
 			return 0;
 		}
 	}
@@ -566,7 +566,7 @@ static int udp_Subscribe(int fd, const char *miface,
 		assert(grplen >= sizeof (struct sockaddr_in6));
 		ipv6mr.ipv6mr_multiaddr = g6->sin6_addr;
 		ipv6mr.ipv6mr_interface = g6->sin6_scope_id;
-		if (setsockopt(fd, SOL_IPV6, IPV6_JOIN_GROUP, &ipv6mr, sizeof (ipv6mr)) == 0) {
+		if (setsockopt(fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &ipv6mr, sizeof (ipv6mr)) == 0) {
 			return 0;
 		}
 	} break;
@@ -578,7 +578,7 @@ static int udp_Subscribe(int fd, const char *miface,
 		 memset(&imr, 0, sizeof (imr));
 		 assert(grplen >= sizeof (struct sockaddr_in));
 		 imr.imr_multiaddr = ((const struct sockaddr_in *)grp)->sin_addr;
-		 if (setsockopt(fd, SOL_IP, IP_ADD_MEMBERSHIP, &imr, sizeof (imr)) == 0)
+		 if (setsockopt(fd, IPPROTO_IP, IP_ADD_MEMBERSHIP, &imr, sizeof (imr)) == 0)
 			 return 0;
 	} break;
  # endif
@@ -613,7 +613,7 @@ static int udp_SourceSubscribe(int fd, const char *miface,
 #ifdef AF_INET6
 		case AF_INET6: {
 			const struct sockaddr_in6 *g6 = (const struct sockaddr_in6 *)grp;
-			level = SOL_IPV6;
+			level = IPPROTO_IPV6;
 			assert(grplen >= sizeof (struct sockaddr_in6));
 			if (g6->sin6_scope_id != 0) {
 				gsr.gsr_interface = g6->sin6_scope_id;
@@ -621,7 +621,7 @@ static int udp_SourceSubscribe(int fd, const char *miface,
 		} break;
 #endif
 		case AF_INET:
-			level = SOL_IP;
+			level = IPPROTO_IP;
 		break;
 		default:
 			errno = EAFNOSUPPORT;
@@ -791,7 +791,7 @@ static int udp_ListenSimple(const char *host, int port, int protocol, const char
 #ifdef IPV6_V6ONLY
 		/* Try dual-mode IPv6 if available. */
 		if (ptr->ai_family == AF_INET6) {
-			setsockopt (fd, SOL_IPV6, IPV6_V6ONLY, (const char *)&(int){ 0 }, sizeof (int));
+			setsockopt (fd, IPPROTO_IPV6, IPV6_V6ONLY, (const char *)&(int){ 0 }, sizeof (int));
 		}
 #endif
 

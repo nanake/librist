@@ -25,9 +25,12 @@
 
 #include <assert.h>
 #include <string.h>
-#if defined(__GNUC__)
+
+#if defined(__linux__) || defined(__GLIBC__)
 #include <endian.h>
-#endif
+#elif defined(__APPLE__) || defined(__GLIBC__)
+#include <machine/endian.h>
+#endif /* __MacOS__ */
 
 #include "sha256.h"
 

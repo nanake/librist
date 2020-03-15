@@ -165,7 +165,7 @@ uint64_t timestampNTP_u64(void)
 	// Therefore, the first rollover occurs on February 7, 2036.
 
 	timespec_t ts;
-	clock_gettime(CLOCK_MONOTONIC, &ts);
+	clock_gettime(CLOCK_MONOTONIC, (const struct timespec*)&ts);
 	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
 	uint64_t t = (uint64_t)(ts.tv_nsec) << 32;
 	t /= 1000000000;
@@ -1656,7 +1656,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	if (ret <= 0) {
 		// TODO: should we close these sockets? who reopens them?
-#ifdef __unix__
+#if defined (__unix__) || defined(__APPLE__)
 		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Peer recvfrom returned zero bytes (%d), closing socket (%d)\n", ret, peer->sd);
 		//udp_Close(peer->sd);
 #else
