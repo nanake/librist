@@ -165,7 +165,7 @@ uint64_t timestampNTP_u64(void)
 	// Therefore, the first rollover occurs on February 7, 2036.
 
 	timespec_t ts;
-	clock_gettime(CLOCK_MONOTONIC, (const struct timespec*)&ts);
+	clock_gettime(CLOCK_MONOTONIC, (struct timespec*)&ts);
 	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
 	uint64_t t = (uint64_t)(ts.tv_nsec) << 32;
 	t /= 1000000000;
