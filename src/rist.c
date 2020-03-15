@@ -166,8 +166,8 @@ uint64_t timestampNTP_u64(void)
 
 	timespec_t ts;
 #ifdef __APPLE__
-  clock_gettime_osx(&ts);
-#elif
+  	clock_gettime_osx(&ts);
+#else
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 #endif
 	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
