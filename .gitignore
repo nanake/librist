@@ -1,4 +1,9 @@
 build/
-cmake-build-debug/
 librist.cbp
 librist.a
+cmake-build-debug/
+cmake-build-release/
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
