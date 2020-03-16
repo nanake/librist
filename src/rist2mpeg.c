@@ -326,8 +326,7 @@ int main(int argc, char *argv[])
 		}
 
 		// TODO: support ipv6 destinations
-		parsed_url[i] = parse_url(url[i]);
-		if (parsed_url[i].ret) {
+		if (parse_url(url[i], &parsed_url[i]) != 0) {
 			fprintf(stderr, "[ERROR] %s / %s\n", parsed_url[i].error, url[i]);
 			continue;
 		} {

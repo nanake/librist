@@ -249,8 +249,8 @@ int main(int argc, char *argv[])
 	}
 
 	/* MPEG Side: listen to the given address */
-	struct network_url parsed_url = parse_url(url);
-	if (parsed_url.ret != 0) {
+	struct network_url parsed_url;
+	if (parse_url(url, &parsed_url) != 0) {
 		fprintf(stderr, "[ERROR] %s / %s\n", parsed_url.error, url);
 		exit(1);
 	} else {
