@@ -2154,7 +2154,7 @@ static PTHREAD_START_FUNC(server_pthread_dataout, arg)
 		pthread_mutex_lock(&(flow->mutex));
 		int ret = pthread_cond_timedwait_ms(&(flow->condition), &(flow->mutex), max_output_jitter_ms);
 		pthread_mutex_unlock(&(flow->mutex));
-		if (ret && ret != 110) // 110 = ETIMEDOUT
+		if (ret && ret != ETIMEDOUT)
 			msg(flow->server_id, 0, RIST_LOG_ERROR, "[ERROR] Error %d in server data out loop\n", ret);
 		//msg(flow->server_id, 0, RIST_LOG_INFO, "[INFO] LOOP TIME is %"PRIu64" us\n", (timestampNTP_u64() - now) * 1000 / RIST_CLOCK);
 		//now = timestampNTP_u64();
@@ -2205,7 +2205,7 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 		pthread_mutex_lock(&(ctx->mutex));
 		int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
 		pthread_mutex_unlock(&(ctx->mutex));
-		if (ret && ret != 110) // 110 = ETIMEDOUT
+		if (ret && ret != ETIMEDOUT)
 			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d in client protocol loop, loop time was %d us\n", ret, (timestampNTP_u64() - now));
 
 		if (RIST_UNLIKELY(!ctx->common.startup_complete)) {

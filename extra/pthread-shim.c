@@ -313,16 +313,22 @@ int sem_post(sem_t *sem)
 // Convience function around pthread
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
 {
+#ifdef __APPLE__
+  struct timespec timeToWait;
+  clock_gettime(CLOCK_REALTIME, &timeToWait);
+  timeToWait.tv_nsec += ms * 1000000UL;
+  timeToWait.tv_nsec %= 1000000000UL;
+  timeToWait.tv_sec += timeToWait.tv_nsec < (ms * 1000000UL) ? 1 : 0;
+  return pthread_cond_timedwait(cond, mutex, &timeToWait);
+#else
 	timespec_t ts;
 	struct timeval tv;
-
 	gettimeofday(&tv, NULL);
-
 	uint64_t odd =  (tv.tv_usec + (ms * 1000)) * 1000;
 	ts.tv_sec = tv.tv_sec + odd / 1000000000ULL;
 	ts.tv_nsec = odd % 1000000000ULL;
-
 	return pthread_cond_timedwait(cond, mutex, (const struct timespec*)&ts);
+#endif
 }
 
 #endif

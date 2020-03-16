@@ -82,16 +82,15 @@ int clock_gettime(clockid_t clock, timespec_t *tp)
 
 #endif
 
-#ifdef __MACH__
+#ifdef __APPLE__
 int clock_gettime_osx(timespec_t *ts)
 {
-  clock_serv_t cclock;
-  mach_timespec_t mts;
-  host_get_clock_service(mach_host_self(), SYSTEM_CLOCK, &cclock);
-  clock_get_time(cclock, &mts);
-  mach_port_deallocate(mach_task_self(), cclock);
-  ts->tv_sec = mts.tv_sec;
-  ts->tv_nsec = mts.tv_nsec;
+  mach_timebase_info_data_t info;
+  mach_timebase_info(&info);
+  uint64_t elapsed = mach_absolute_time();
+  uint64_t now_ns = (elapsed * info.numer / info.denom);
+  ts->tv_sec = (int)(now_ns /   1000000000);
+  ts->tv_nsec = (int)(now_ns %  1000000000);
   return 0;
 }
 

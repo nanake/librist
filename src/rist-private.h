@@ -27,6 +27,7 @@ __BEGIN_DECLS
 #include "network.h"
 #include "libevsocket.h"
 #include "aes.h"
+#include <errno.h>
 
 // These 3 control the memory footprint of the lib
 #define RIST_SERVER_QUEUE_BUFFERS (65536 * 10)

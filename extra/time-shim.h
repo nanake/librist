@@ -19,8 +19,7 @@ typedef struct timespec timespec_t;
 int clock_gettime(clockid_t clock, timespec_t *tp);
 
 #elif defined(__APPLE__)
-#include <mach/clock.h>
-#include <mach/mach.h>
+#include <mach/mach_time.h>
 typedef mach_timespec_t timespec_t;
 int clock_gettime_osx(timespec_t *ts);
 
