@@ -1050,10 +1050,6 @@ static void rist_client_recv_nack(struct rist_peer *peer,
 		msg(0, client_id, RIST_LOG_ERROR,
 			"[ERROR] Received nack packet but handshake is still pending, ignoring ...\n");
 		return;
-	} else if (RIST_UNLIKELY(!peer->client_ctx->client_queue)) {
-		msg(0, client_id, RIST_LOG_ERROR,
-			"[ERROR] Ignoring nack request as we do not have a buffer yet (must be from an old connection)\n");
-		return;
 	}
 
 	struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *) payload;
