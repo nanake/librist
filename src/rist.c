@@ -2670,12 +2670,7 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 		ctx->bufferbloat_hard_limit = bufferbloat_hard_limit;
 	}
 
-	if (!rist_server_add_peer(ctx, default_peer_config->address)) {
-		return 0;
-	} else {
-		msg(ctx->id, 0, RIST_LOG_ERROR, "[INIT] Error starting server mode\n");
-		return -1;
-	}
+	return 0;
 }
 
 static int rist_encrypt_enable(struct rist_common_ctx *ctx,
