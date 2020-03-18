@@ -101,21 +101,22 @@ Reduce overhead GRE payload header (only one supported for now)
 */
 
 /*
-     RTP header format (RFC 3550)
-     The RTP header is always present as part of the payload
 
-    0                   1                   2                   3
-    0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |V=2|P|X|  CC   |M|     PT      |       sequence number         |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |                           timestamp                           |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
-   |           synchronization source (SSRC) identifier            |
-   +=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
-   |            contributing source (CSRC) identifiers             |
-   |                             ....                              |
-   +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+RTP header format (RFC 3550)
+The RTP header is always present on data packets
+
+0                   1                   2                   3
+0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|V=2|P|X|  CC   |M|     PT      |       sequence number         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                           timestamp                           |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|           synchronization source (SSRC) identifier            |
++=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+=+
+|            contributing source (CSRC) identifiers             |
+|                             ....                              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 */
 
@@ -152,8 +153,8 @@ RIST_PACKED_STRUCT(rist_gre_seq,{
 })
 
 RIST_PACKED_STRUCT(rist_gre_key_seq,{
-    uint8_t flags1;
-    uint8_t flags2;
+	uint8_t flags1;
+	uint8_t flags2;
 	uint16_t prot_type;
 	uint32_t checksum_reserved1;
 	uint32_t nonce;
@@ -161,93 +162,93 @@ RIST_PACKED_STRUCT(rist_gre_key_seq,{
 })
 
 RIST_PACKED_STRUCT(rist_rtp_hdr,{
-    uint8_t flags;
-    uint8_t payload_type;
-    uint16_t seq;
-    uint32_t ts;
-    uint32_t ssrc;
+	uint8_t flags;
+	uint8_t payload_type;
+	uint16_t seq;
+	uint32_t ts;
+	uint32_t ssrc;
 })
 
 RIST_PACKED_STRUCT(rist_protocol_hdr,{
-    uint16_t src_port;
-    uint16_t dst_port;
-    struct rist_rtp_hdr rtp;
+	uint16_t src_port;
+	uint16_t dst_port;
+	struct rist_rtp_hdr rtp;
 })
 
 RIST_PACKED_STRUCT(rist_rtp_nack_record,{
-    uint16_t start;
-    uint16_t extra;
+	uint16_t start;
+	uint16_t extra;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_hdr,{
-    uint8_t flags;
-    uint8_t ptype;
-    uint16_t len;
-    uint32_t ssrc;
+	uint8_t flags;
+	uint8_t ptype;
+	uint16_t len;
+	uint32_t ssrc;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_nack_range,{
-    uint8_t flags;
-    uint8_t ptype;
-    uint16_t len;
-    uint32_t ssrc_source;
-    uint8_t name[4];
+	uint8_t flags;
+	uint8_t ptype;
+	uint16_t len;
+	uint32_t ssrc_source;
+	uint8_t name[4];
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_nack_bitmask,{
-    uint8_t flags;
-    uint8_t ptype;
-    uint16_t len;
-    uint32_t ssrc_source;
-    uint32_t ssrc;
+	uint8_t flags;
+	uint8_t ptype;
+	uint16_t len;
+	uint32_t ssrc_source;
+	uint32_t ssrc;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_seqext,{
-    uint8_t flags;
-    uint8_t ptype;
-    uint16_t len;
-    uint32_t ssrc;
-    uint8_t  name[4];
-    uint16_t seq_msb;
-    uint16_t reserved0;
+	uint8_t flags;
+	uint8_t ptype;
+	uint16_t len;
+	uint32_t ssrc;
+	uint8_t  name[4];
+	uint16_t seq_msb;
+	uint16_t reserved0;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_sr_pkt,{
-    struct rist_rtcp_hdr rtcp;
-    uint32_t ntp_msw;
-    uint32_t ntp_lsw;
-    uint32_t rtp_ts;
-    uint32_t sender_pkts;
-    uint32_t sender_bytes;
+	struct rist_rtcp_hdr rtcp;
+	uint32_t ntp_msw;
+	uint32_t ntp_lsw;
+	uint32_t rtp_ts;
+	uint32_t sender_pkts;
+	uint32_t sender_bytes;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_rr_pkt,{
-    struct rist_rtcp_hdr rtcp;
-    uint32_t recv_ssrc;
-    uint8_t fraction_lost;
-    uint8_t cumulative_pkt_loss_msb;
-    uint16_t cumulative_pkt_loss_lshw;
-    uint32_t highest_seq;
-    uint32_t jitter;
-    uint32_t lsr;
-    uint32_t dlsr;
+	struct rist_rtcp_hdr rtcp;
+	uint32_t recv_ssrc;
+	uint8_t fraction_lost;
+	uint8_t cumulative_pkt_loss_msb;
+	uint16_t cumulative_pkt_loss_lshw;
+	uint32_t highest_seq;
+	uint32_t jitter;
+	uint32_t lsr;
+	uint32_t dlsr;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_rr_empty_pkt,{
-    struct rist_rtcp_hdr rtcp;
+	struct rist_rtcp_hdr rtcp;
 })
 
 RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
-    struct rist_rtcp_hdr rtcp;
-    uint8_t cname;
-    uint8_t name_len;
-    char udn[0];
+	struct rist_rtcp_hdr rtcp;
+	uint8_t cname;
+	uint8_t name_len;
+	char udn[0];
 })
 
 static inline uint32_t timestampRTP_u32( uint64_t i_ntp )
 {
-    // We just need the middle 32 bits
-    return (uint32_t)(i_ntp >> 16);
+	// We just need the middle 32 bits
+	return (uint32_t)(i_ntp >> 16);
 }
 
 /* shared functions in udp.c */

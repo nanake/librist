@@ -58,10 +58,10 @@ static inline void write32_be(uint32_t n, uint8_t out[4])
 static inline void write64_be(uint64_t n, uint8_t out[8])
 {
 #if defined(__GNUC__) &&  __GNUC__ >= 4 && __BYTE_ORDER == __LITTLE_ENDIAN
-  *(uint64_t *)(out) = __builtin_bswap64(n);
+	*(uint64_t *)(out) = __builtin_bswap64(n);
 #else
-  write32_be((n >> 32) & 0xffffffff, out);
-  write32_be(n & 0xffffffff, out + 4);
+	write32_be((n >> 32) & 0xffffffff, out);
+	write32_be(n & 0xffffffff, out + 4);
 #endif
 }
 
@@ -78,10 +78,10 @@ static inline void write64_be(uint64_t n, uint8_t out[8])
  * Message length is expressed in 32 bits (so suitable for sha1, sha256, sha512). */
 static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t msg)
 {
-  memset(block + used, 0, blocksz - used - 4);
-  block[used] = 0x80;
-  block += blocksz - 4;
-  write32_be((uint32_t) (msg * 8), block);
+	memset(block + used, 0, blocksz - used - 4);
+	block[used] = 0x80;
+	block += blocksz - 4;
+	write32_be((uint32_t) (msg * 8), block);
 }
 
 /* Internal function/type names for hash-specific things. */
@@ -255,57 +255,56 @@ static inline void md_pad(uint8_t *block, size_t blocksz, size_t used, size_t ms
 
 static inline void sha256_extract(SHA256_CTX *restrict ctx, uint8_t *restrict out)
 {
-  write32_be(ctx->state[0], out);
-  write32_be(ctx->state[1], out + 4);
-  write32_be(ctx->state[2], out + 8);
-  write32_be(ctx->state[3], out + 12);
-  write32_be(ctx->state[4], out + 16);
-  write32_be(ctx->state[5], out + 20);
-  write32_be(ctx->state[6], out + 24);
-  write32_be(ctx->state[7], out + 28);
+	write32_be(ctx->state[0], out);
+	write32_be(ctx->state[1], out + 4);
+	write32_be(ctx->state[2], out + 8);
+	write32_be(ctx->state[3], out + 12);
+	write32_be(ctx->state[4], out + 16);
+	write32_be(ctx->state[5], out + 20);
+	write32_be(ctx->state[6], out + 24);
+	write32_be(ctx->state[7], out + 28);
 }
 
 static inline void sha256_cpy(SHA256_CTX *restrict out, const SHA256_CTX *restrict in)
 {
-  out->state[0] = in->state[0];
-  out->state[1] = in->state[1];
-  out->state[2] = in->state[2];
-  out->state[3] = in->state[3];
-  out->state[4] = in->state[4];
-  out->state[5] = in->state[5];
-  out->state[6] = in->state[6];
-  out->state[7] = in->state[7];
+	out->state[0] = in->state[0];
+	out->state[1] = in->state[1];
+	out->state[2] = in->state[2];
+	out->state[3] = in->state[3];
+	out->state[4] = in->state[4];
+	out->state[5] = in->state[5];
+	out->state[6] = in->state[6];
+	out->state[7] = in->state[7];
 }
 
 static inline void sha256_xor(SHA256_CTX *restrict out, const SHA256_CTX *restrict in)
 {
-  out->state[0] ^= in->state[0];
-  out->state[1] ^= in->state[1];
-  out->state[2] ^= in->state[2];
-  out->state[3] ^= in->state[3];
-  out->state[4] ^= in->state[4];
-  out->state[5] ^= in->state[5];
-  out->state[6] ^= in->state[6];
-  out->state[7] ^= in->state[7];
+	out->state[0] ^= in->state[0];
+	out->state[1] ^= in->state[1];
+	out->state[2] ^= in->state[2];
+	out->state[3] ^= in->state[3];
+	out->state[4] ^= in->state[4];
+	out->state[5] ^= in->state[5];
+	out->state[6] ^= in->state[6];
+	out->state[7] ^= in->state[7];
 }
 
 DECL_PBKDF2(sha256,
-            64,
-            32,
-            SHA256_CTX,
-            SHA256_Init,
-            SHA256_Update,
-            SHA256_Transform,
-            SHA256_Final,
-            sha256_cpy,
-            sha256_extract,
-            sha256_xor)
+						64,
+						32,
+						SHA256_CTX,
+						SHA256_Init,
+						SHA256_Update,
+						SHA256_Transform,
+						SHA256_Final,
+						sha256_cpy,
+						sha256_extract,
+						sha256_xor)
 
 void fastpbkdf2_hmac_sha256(const uint8_t *pw, size_t npw,
-                            const uint8_t *salt, size_t nsalt,
-                            uint32_t iterations,
-                            uint8_t *out, size_t nout)
+														const uint8_t *salt, size_t nsalt,
+														uint32_t iterations,
+														uint8_t *out, size_t nout)
 {
-  PBKDF2(sha256)(pw, npw, salt, nsalt, iterations, out, nout);
+	PBKDF2(sha256)(pw, npw, salt, nsalt, iterations, out, nout);
 }
-
