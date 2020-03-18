@@ -106,7 +106,7 @@ struct rist_port_filter {
 	uint16_t dst_port;
 };
 
-static void cb_recv(void *arg, uint64_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
+static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 	(void) flow_id;
@@ -120,6 +120,11 @@ static void cb_recv(void *arg, uint64_t flow_id, const void *buf, size_t len, ui
 				sizeof(struct sockaddr_in));
 		}
 	}
+}
+
+static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+{
+	return 1;
 }
 
 int main(int argc, char *argv[])
@@ -294,7 +299,7 @@ int main(int argc, char *argv[])
 		.bufferbloat_hard_limit = buffer_bloat_hard_limit
 	};
 
-	if (rist_server_init(ctx, &default_peer_config, loglevel) == -1) {
+	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect) == -1) {
 		fprintf(stderr, "Could not init rist server\n");
 		exit(1);
 	}

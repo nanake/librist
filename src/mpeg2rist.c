@@ -101,6 +101,11 @@ static void usage(char *cmd)
 	exit(1);
 }
 
+static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+{
+	return 1;
+}
+
 int main(int argc, char *argv[])
 {
 	int rist;
@@ -296,7 +301,7 @@ int main(int argc, char *argv[])
 	// It must me an even number
 	adv_flow_id &= ~(1UL << 0);
 
-	rist = rist_client_init(ctx, adv_flow_id, loglevel);
+	rist = rist_client_init(ctx, adv_flow_id, loglevel, cb_auth_connect);
 	if (rist < 0) {
 		fprintf(stderr, "Could not initialize rist client\n");
 		exit(1);
