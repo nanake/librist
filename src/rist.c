@@ -1618,6 +1618,30 @@ static void client_peer_copy_settings(struct rist_peer *peer_src, struct rist_pe
 	peer->bufferbloat_hard_limit = peer_src->bufferbloat_hard_limit;
 }
 
+static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
+{
+	switch(sa->sa_family) {
+	case AF_INET:
+		inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
+					s, maxlen);
+		break;
+
+	case AF_INET6:
+		inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
+					s, maxlen);
+		break;
+
+	default:
+		strncpy(s, "Unknown AF", maxlen);
+		return NULL;
+	}
+
+	struct sockaddr_in *sin = (struct sockaddr_in *)s;
+	*port = htons (sin->sin_port);
+
+	return s;
+}
+
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
 	(void) evctx;
@@ -1977,6 +2001,32 @@ protocol_bypass:
 		p->adv_peer_id = new_peer_id;
 		p->state_local = p->state_peer = RIST_PEER_STATE_PING;
 		rist_populate_cname(p->sd, p->cname);
+
+		// Optional validation of connecting client
+		if (peer->server_ctx->auth_connect_callback) {
+			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
+			uint16_t port;
+			uint16_t dummyport;
+			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
+			char *parent_ip_string =
+				get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], &dummyport, INET6_ADDRSTRLEN);
+			if (!parent_ip_string){
+				parent_ip_string = "";
+			}
+			if (incoming_ip_string) {
+				if (peer->server_ctx->auth_connect_callback(peer->server_ctx->server_receive_callback_argument,
+						incoming_ip_string,
+						port,
+						parent_ip_string,
+						p->parent->local_port,
+						p)) {
+					free(p);
+					return;
+				}
+			}
+		}
+
 		if (payload.type == RIST_PAYLOAD_TYPE_RTCP && p->is_rtcp) {
 			if (peer->server_mode)
 				msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Enabling keepalive for peer %d\n", p->adv_peer_id);

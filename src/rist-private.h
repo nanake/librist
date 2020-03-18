@@ -275,6 +275,7 @@ struct rist_server {
 	/* Server Callback */
 	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port);
 	void *server_receive_callback_argument;
+	int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer);
 
 	/* Server thread variables */
 	pthread_t server_thread;
