@@ -2003,7 +2003,7 @@ protocol_bypass:
 		rist_populate_cname(p->sd, p->cname);
 
 		// Optional validation of connecting client
-		if (peer->server_ctx->auth_connect_callback) {
+		if (cctx->auth_connect_callback) {
 			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
 			uint16_t port;
@@ -2015,7 +2015,7 @@ protocol_bypass:
 				parent_ip_string = "";
 			}
 			if (incoming_ip_string) {
-				if (peer->server_ctx->auth_connect_callback(peer->server_ctx->server_receive_callback_argument,
+				if (!cctx->auth_connect_callback(cctx->auth_connect_callback_argument,
 						incoming_ip_string,
 						port,
 						parent_ip_string,
@@ -2404,7 +2404,8 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 	return 0;
 }
 
-int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_level log_level)
+int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_level log_level,
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer))
 {
 	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] RIST Client Library v%d.%d.%d\n",
 			RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
@@ -2430,6 +2431,7 @@ int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_le
 		return ret;
 	}
 
+	ctx->common.auth_connect_callback = auth_connect_callback;
 	ctx->client_initialized = true;
 
 	if (pthread_create(&ctx->client_thread, NULL, client_pthread_protocol, (void *)ctx) != 0) {
@@ -2673,7 +2675,8 @@ int rist_client_add_peer(struct rist_client *ctx,
 	return 0;
 }
 
-int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *default_peer_config, enum rist_log_level log_level)
+int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer))
 {
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] RIST Server Library v%d.%d.%d\n",
@@ -2684,6 +2687,8 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 		ctx->common.debug = true;
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode: %s\n", default_peer_config->address);
+
+	ctx->common.auth_connect_callback = auth_connect_callback;
 
 	if (default_peer_config) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing default configuration values\n");

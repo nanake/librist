@@ -138,10 +138,15 @@ RIST_API int rist_client_destroy(struct rist_client *ctx);
  * @param a RIST client context
  * @param flow_id Flow ID
  * @param loglevel Level of log messages to display
+ * @param auth_connect_callback A pointer to the function that will be called when a new peer
+ * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `auth_connect_callback`
  * @return 0 on success, -1,-2, or -3 in case of error.
  */
 RIST_API int rist_client_init(struct rist_client *ctx,
-		uint32_t flow_id, enum rist_log_level log_level);
+		uint32_t flow_id, enum rist_log_level log_level,
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+		);
 
 /**
  * @brief Add a peer connector to the existing client.
@@ -333,10 +338,15 @@ RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile prof
  * @param a RIST server context
  * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @param loglevel Level of log messages to display
+ * @param auth_connect_callback A pointer to the function that will be called when a new peer
+ * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `auth_connect_callback`
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_init(struct rist_server *ctx,
-		const struct rist_peer_config *default_peer_config, enum rist_log_level log_level);
+		const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+		);
 
 /**
  * @brief Add a peer connector to the existing server.
