@@ -214,7 +214,7 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 	return b;
 }
 
-static int server_insert_queue_packet(struct rist_flow *f, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
+static int server_insert_queue_packet(struct rist_flow *f, struct rist_peer *peer, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	/*
 		msg(f->server_id, f->client_id, RIST_LOG_INFO,
@@ -222,6 +222,7 @@ static int server_insert_queue_packet(struct rist_flow *f, size_t idx, const voi
 			seq, len, source_time, idx);
 	*/
 	f->server_queue[idx] = rist_new_buffer(buf, len, RIST_PAYLOAD_TYPE_DATA_RAW, seq, source_time, src_port, dst_port);
+	f->server_queue[idx]->peer = peer;
 	if (RIST_UNLIKELY(!f->server_queue[idx])) {
 		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside server buffer, OOM, decrease max bitrate or buffer time length\n");
 		return -1;
@@ -325,7 +326,7 @@ static int server_enqueue(struct rist_peer *peer, uint64_t source_time, const vo
 		f->server_queue_output_idx = idx_initial;
 		msg(f->server_id, f->client_id, RIST_LOG_INFO,
 			"[INIT] Storing first packet seq %"PRIu32", idx %zu, offset %"PRId64" ms\n", seq, idx_initial, peer->flow->time_offset/RIST_CLOCK);
-		server_insert_queue_packet(f, idx_initial, buf, len, seq, source_time, src_port, dst_port);
+		server_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port);
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->server_queue_has_items = true;
@@ -357,7 +358,7 @@ static int server_enqueue(struct rist_peer *peer, uint64_t source_time, const vo
 	}
 
 	/* Now, we insert the packet into server queue */
-	if (server_insert_queue_packet(f, idx, buf, len, seq, source_time, src_port, dst_port)) {
+	if (server_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port)) {
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
@@ -622,7 +623,7 @@ static void server_output(struct rist_server *ctx, struct rist_flow *f)
 				}
 				if (ctx->server_receive_callback && b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 					uint8_t *payload = b->data;
-					ctx->server_receive_callback(ctx->server_receive_callback_argument, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port);
+					ctx->server_receive_callback(ctx->server_receive_callback_argument, b->peer, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port);
 				}
 			}
 			//else
@@ -2893,7 +2894,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 }
 
 int rist_server_start(struct rist_server *ctx,
-	void(*receive_callback)(void *arg, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port),
+	void(*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port),
 	void *arg)
 {
 	ctx->server_receive_callback = receive_callback;

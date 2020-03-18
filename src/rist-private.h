@@ -273,7 +273,7 @@ struct rist_common_ctx {
 
 struct rist_server {
 	/* Server Callback */
-	void (*server_receive_callback)(void *arg, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port);
+	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port);
 	void *server_receive_callback_argument;
 
 	/* Server thread variables */

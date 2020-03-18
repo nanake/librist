@@ -8,7 +8,7 @@
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (1)
+#define RIST_API_VERSION (2)
 #define RIST_SUBVERSION (3)
 
 #include <stdint.h>
@@ -373,7 +373,7 @@ RIST_API int rist_server_encrypt_enable(struct rist_server *ctx, const char *sec
  * @note Return immediately
  */
 RIST_API int rist_server_start(struct rist_server *ctx,
-	void (*receive_callback)(void *arg, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port), void *arg);
+	void (*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port), void *arg);
 
 /**
  * @brief Set RIST retry timeout
