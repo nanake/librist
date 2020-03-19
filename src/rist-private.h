@@ -269,7 +269,8 @@ struct rist_common_ctx {
 	uint32_t peer_counter;
 
 	int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer);
-	void *auth_connect_callback_argument;
+	void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer);
+	void *auth_callback_argument;
 
 	bool debug;
 };

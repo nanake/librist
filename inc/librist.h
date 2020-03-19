@@ -8,8 +8,8 @@
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (2)
-#define RIST_SUBVERSION (3)
+#define RIST_API_VERSION (3)
+#define RIST_SUBVERSION (1)
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -140,13 +140,16 @@ RIST_API int rist_client_destroy(struct rist_client *ctx);
  * @param loglevel Level of log messages to display
  * @param auth_connect_callback A pointer to the function that will be called when a new peer
  * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `auth_connect_callback`
+ * @param auth_disconnect_callback A pointer to the function that will be called when a new peer
+ * is marked as dead (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `auth_connect_callback` and `auth_disconnect_callback`
  * @return 0 on success, -1,-2, or -3 in case of error.
  */
 RIST_API int rist_client_init(struct rist_client *ctx,
 		uint32_t flow_id, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
-		);
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+		void *arg);
 
 /**
  * @brief Add a peer connector to the existing client.
@@ -254,6 +257,18 @@ RIST_API int rist_client_encrypt_enable(struct rist_client *ctx,
 RIST_API int rist_client_compress_enable(struct rist_client *ctx, int compression);
 
 /**
+ * @brief Disconnect a client peer
+ *
+ * Disconnects a connected server peer or a client bound peer
+ *
+ * @param a RIST client context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer);
+
+/**
  * @brief Shutdown RIST client
  *
  * Shutdown the RIST instance
@@ -340,13 +355,16 @@ RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile prof
  * @param loglevel Level of log messages to display
  * @param auth_connect_callback A pointer to the function that will be called when a new peer
  * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `auth_connect_callback`
+ * @param auth_disconnect_callback A pointer to the function that will be called when a new peer
+ * is marked as dead (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `auth_connect_callback` and `auth_disconnect_callback`
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_init(struct rist_server *ctx,
 		const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
-		);
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+		void *arg);
 
 /**
  * @brief Add a peer connector to the existing server.
@@ -383,7 +401,8 @@ RIST_API int rist_server_encrypt_enable(struct rist_server *ctx, const char *sec
  * @note Return immediately
  */
 RIST_API int rist_server_start(struct rist_server *ctx,
-	void (*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port), void *arg);
+	void (*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port),
+	void *arg);
 
 /**
  * @brief Set RIST retry timeout
@@ -417,6 +436,18 @@ RIST_API int rist_server_set_keepalive_timeout(struct rist_server *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_set_max_jitter(struct rist_server *ctx, int t);
+
+/**
+ * @brief Disconnect a server peer
+ *
+ * Disconnects a connected client peer or a server bound peer
+ *
+ * @param a RIST server context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer);
 
 /**
  * @brief Shutdown RIST server

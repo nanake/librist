@@ -2015,7 +2015,7 @@ protocol_bypass:
 				parent_ip_string = "";
 			}
 			if (incoming_ip_string) {
-				if (!cctx->auth_connect_callback(cctx->auth_connect_callback_argument,
+				if (!cctx->auth_connect_callback(cctx->auth_callback_argument,
 						incoming_ip_string,
 						port,
 						parent_ip_string,
@@ -2404,8 +2404,95 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 	return 0;
 }
 
+void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
+{
+	//intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
+	//intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
+
+	// TODO: finish/test this code for proper cleanup of peer
+	/* work in progress 
+
+	pthread_rwlock_t *peerlist_lock = &ctx->peerlist_lock;
+	struct evsocket_ctx *evctx = ctx->evctx;
+
+	pthread_rwlock_wrlock(peerlist_lock);
+
+	if (!peer->server_mode)
+
+	struct rist_peer *nextpeer = peer->next;
+	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer data received event\n");
+	// data receive event
+	if (peer->event_recv) {
+		evsocket_delevent(evctx, peer->event_recv);
+		peer->event_recv = NULL;
+	}
+
+	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer handshake/ping timer\n");
+	/ rtcp timer
+	peer->send_keepalive = false;
+
+	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Closing peer socket on port %d\n", peer->local_port);
+	if (peer->sd > -1) {
+		udp_Close(peer->sd);
+		peer->sd = -1;
+	}
+
+	struct rist_peer *deleted_peer = peer;
+	peer = nextpeer;
+
+	// Do not free the listening peers here, we do it at the end of the protocol main loop
+	if (!peer->listening)
+		free(deleted_peer);
+	}
+
+	ctx->PEERS = NULL;
+	pthread_rwlock_unlock(peerlist_lock);
+
+	if (ctx->auth_callback_argument) {
+		ctx->auth_disconnect_callback(ctx->auth_callback_argument, peer);
+	}
+
+	*/
+}
+
+int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
+{
+	if (!ctx) {
+		return -1;
+	}
+
+	if (!peer) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Missing peer pointer\n");
+		return -1;
+	}
+
+	peer->dead = true;
+	rist_delete_peer(&ctx->common, peer);
+	msg(0, ctx->id, RIST_LOG_WARN, "[WARNING] rist_client_disconnect_peer not implemented!\n");
+	return 0;
+}
+
+int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer)
+{
+	if (!ctx) {
+		return -1;
+	}
+
+	if (!peer) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Missing peer pointer\n");
+		return -1;
+	}
+
+	peer->dead = true;
+	rist_delete_peer(&ctx->common, peer);
+	msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] rist_server_disconnect_peer not implemented!\n");
+	return 0;
+}
+
 int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer))
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+		void *arg)
 {
 	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] RIST Client Library v%d.%d.%d\n",
 			RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
@@ -2432,6 +2519,9 @@ int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_le
 	}
 
 	ctx->common.auth_connect_callback = auth_connect_callback;
+	ctx->common.auth_disconnect_callback = auth_disconnect_callback;
+	ctx->common.auth_callback_argument = arg;
+
 	ctx->client_initialized = true;
 
 	if (pthread_create(&ctx->client_thread, NULL, client_pthread_protocol, (void *)ctx) != 0) {
@@ -2676,7 +2766,9 @@ int rist_client_add_peer(struct rist_client *ctx,
 }
 
 int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer))
+		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+		void *arg)
 {
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] RIST Server Library v%d.%d.%d\n",
@@ -2689,6 +2781,8 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode: %s\n", default_peer_config->address);
 
 	ctx->common.auth_connect_callback = auth_connect_callback;
+	ctx->common.auth_disconnect_callback = auth_disconnect_callback;
+	ctx->common.auth_callback_argument = arg;
 
 	if (default_peer_config) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing default configuration values\n");
