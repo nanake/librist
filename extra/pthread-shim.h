@@ -11,6 +11,7 @@
 #ifdef _WIN32
 # include <stdbool.h>
 # include <stdint.h>
+#define _WINSOCKAPI_
 # include <windows.h>
 
 typedef CRITICAL_SECTION pthread_mutex_t;

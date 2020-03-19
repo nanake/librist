@@ -197,7 +197,7 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 			fprintf(stderr, "OOM\n");
 			return NULL;
 		}
-		memcpy(b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
+		memcpy((uint8_t*)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
 	}
 
 	uint64_t now = timestampNTP_u64();
@@ -1382,7 +1382,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	uint32_t nack_seq_msb = 0;
 
 	while (processed_bytes < payload->size) {
-		pkt = payload->data + processed_bytes;
+		pkt = (uint8_t*)payload->data + processed_bytes;
 		struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)pkt;
 		/* safety checks */
 		uint16_t bytes_left = payload->size - processed_bytes + 1;

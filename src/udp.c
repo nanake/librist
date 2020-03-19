@@ -140,7 +140,7 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 	//		payload_type);
 
 	// TODO: write directly on the payload to make it faster
-	uint8_t header_buf[RIST_MAX_HEADER_SIZE] = { };
+	uint8_t header_buf[RIST_MAX_HEADER_SIZE] = {0};
 	if (k->key_size) {
 		gre_len = sizeof(struct rist_gre_key_seq);
 	} else {
@@ -582,6 +582,8 @@ uint32_t rist_send_client_rtcp(struct rist_peer *peer)
 	timespec_t ts;
 #ifdef __APPLE__
 	clock_gettime_osx(&ts);
+#elif	defined _WIN32
+	clock_gettime(CLOCK_MONOTONIC, &ts);
 #else
 	clock_gettime(CLOCK_REALTIME, &ts);
 #endif

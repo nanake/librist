@@ -9,6 +9,7 @@
 #ifdef _WIN32
 
 #include <WinSock2.h>
+#define _WINSOCKAPI_
 #include <Windows.h>
 #include <ws2tcpip.h>
 #include <stdlib.h>

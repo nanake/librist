@@ -7,6 +7,7 @@
 #include "time-shim.h"
 
 #ifdef _WIN32
+#define _WINSOCKAPI_
 # include <windows.h>
 # include <errno.h>
 # include <stdlib.h>
