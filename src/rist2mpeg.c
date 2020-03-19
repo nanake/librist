@@ -127,6 +127,11 @@ static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_p
 	return 1;
 }
 
+static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
+{
+	return;
+}
+
 int main(int argc, char *argv[])
 {
 	int option_index;
@@ -299,7 +304,7 @@ int main(int argc, char *argv[])
 		.bufferbloat_hard_limit = buffer_bloat_hard_limit
 	};
 
-	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect) == -1) {
+	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect, cb_auth_disconnect, NULL) == -1) {
 		fprintf(stderr, "Could not init rist server\n");
 		exit(1);
 	}
