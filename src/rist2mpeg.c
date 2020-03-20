@@ -124,11 +124,28 @@ static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const v
 
 static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
+	struct rist_server *ctx = (struct rist_server *)arg;
+	char message[500];
+	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
+	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
+	rist_server_write_oob(ctx, peer, message, ret);
 	return 1;
 }
 
 static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
+	struct rist_server *ctx = (struct rist_server *)arg;
+	(void)ctx;
+	return;
+}
+
+static void cb_recv_oob(void *arg, struct rist_peer *peer, const void *buf, size_t len)
+{
+	struct rist_server *ctx = (struct rist_server *)arg;
+	(void)ctx;
+	if (len > 4 && strncmp(buf, "auth,", 5) == 0) {
+		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)len, (char *)buf);
+	}
 	return;
 }
 
@@ -304,7 +321,7 @@ int main(int argc, char *argv[])
 		.bufferbloat_hard_limit = buffer_bloat_hard_limit
 	};
 
-	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect, cb_auth_disconnect, NULL) == -1) {
+	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
 		fprintf(stderr, "Could not init rist server\n");
 		exit(1);
 	}
@@ -315,6 +332,11 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
+	}
+
+	if (rist_server_oob_enable(ctx, cb_recv_oob, ctx) == -1) {
+		fprintf(stderr, "Could not add enable out-of-band data\n");
+		exit(1);
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
