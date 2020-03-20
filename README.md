@@ -16,6 +16,10 @@ The goal of this project is to provide a rist library for **most platforms**.
 
 It supports all features from the TR-06-1 and most of the features of TR-06-2.
 
+## Dependencies
+
+None. This library has no external runtime dependencies on any OS other than normal core OS libraries.
+
 ## License
 
 **librist** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
@@ -105,3 +109,9 @@ This company can provide support and integration help, should you need it.
 ## Will you care about <my_arch>? <my_os>?
 
 - We do, but we don't have either the time or the knowledge. Therefore, patches and contributions welcome.
+
+## How can I test it?
+
+- You can use the utils project https://code.videolan.org/rist-utils/rist to compile and build statically command line utilities that have everything you need to get up and running quiclky.
+
+- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/rist/-/wikis/home
