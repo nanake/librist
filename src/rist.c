@@ -1900,9 +1900,13 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
 
-	// Finish defining the payload (we assume reduced header for now)
-	// TODO: support full IP header on receive
-	if(proto_hdr->rtp.payload_type == MPEG_II_TRANSPORT_STREAM) {
+	// Finish defining the payload (we assume reduced header)
+	if(proto_hdr->rtp.payload_type < 200) {
+		if(proto_hdr->rtp.payload_type != MPEG_II_TRANSPORT_STREAM) {
+			// TODO: perform proper timestamp conversion as the code expects mpegts time
+			// For now, this hack will keep things working minus network jitter suppresion
+			proto_hdr->rtp.ts = htobe32(timestampRTP_u32(timestampNTP_u64()));
+		}
 		flow_id = be32toh(proto_hdr->rtp.ssrc);
 		// If this is a retry, extract the information and restore correct flow_id
 		if (flow_id & 1UL)
