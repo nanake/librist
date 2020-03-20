@@ -1368,6 +1368,17 @@ static void rist_server_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	}
 }
 
+static void rist_recv_oob_data(struct rist_peer *peer, struct rist_buffer *payload)
+{
+	// TODO: if the calling app locks the thread for long, the protocol management thread will suffer
+	// either use a new thread with a fifo or write warning on documentation
+	struct rist_common_ctx *ctx = get_cctx(peer);
+	if (ctx->oob_data_enabled && ctx->oob_data_callback)
+	{
+		ctx->oob_data_callback(ctx->oob_data_callback_argument, peer, payload->data, payload->size);
+	}
+}
+
 static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, struct rist_buffer *payload)
 {
@@ -1717,7 +1728,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		}
 
 		gre = (void *) recv_buf;
-		if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED)) {
+		if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL)) {
 
 			if (htobe16(gre->prot_type) == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)
 			{
@@ -1851,6 +1862,11 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			gre_size = sizeof(*gre) - !has_checksum * 4;
 			seq = 0;
 		}
+		if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_FULL))
+		{
+			payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
+			goto protocol_bypass;
+		}
 		/* Map the first subheader and rtp payload area to our structure */
 		proto_hdr = (void *)(recv_buf + gre_size);
 		payload.src_port = be16toh(proto_hdr->src_port);
@@ -1934,6 +1950,11 @@ protocol_bypass:
 			switch(payload.type) {
 				case RIST_PAYLOAD_TYPE_UNKNOWN:
 					// Do nothing ...TODO: check for port changes?
+				break;
+				case RIST_PAYLOAD_TYPE_DATA_OOB:
+					payload.size = ret - gre_size;
+					payload.data = (void *)(recv_buf + gre_size);
+					rist_recv_oob_data(p, &payload);
 				break;
 				case RIST_PAYLOAD_TYPE_RTCP:
 				case RIST_PAYLOAD_TYPE_RTCP_NACK:
@@ -2057,7 +2078,7 @@ protocol_bypass:
 	}
 }
 
-int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
+int rist_client_write_timed(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time)
 {
 	// max protocol overhead for data is gre-header plus gre-reduced-mode-header plus rtp-header
 	// 16 + 4 + 12 = 32
@@ -2068,13 +2089,52 @@ int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint
 		return -1;
 	}
 
-	// TODO: add an API where the lib user can give us the timestamp
-	int ret = rist_client_enqueue(ctx, buf, len, timestampNTP_u64(), src_port, dst_port);
+	int ret = rist_client_enqueue(ctx, buf, len, ntp_time, src_port, dst_port);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
 		msg(0, ctx->id, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
 	return ret;
+}
+
+int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
+{
+	return rist_client_write_timed(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
+}
+
+static int rist_write_oob(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
+{
+	// create a buffer of the combined size and copy the data
+	size_t payload_len = len + 16;
+	uint8_t *payload = malloc(payload_len);
+	memcpy(payload + 16, buf, len);
+	payload += 16;
+	bool ret = rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_DATA_OOB, payload, len, 0, 0, 0, false);
+	// TODO: why does this free crash? where am I freeing it? I could not find it ...
+	//free(payload);
+	return ret;
+}
+
+int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len)
+{
+	// max protocol overhead for data is gre-header, 16 max
+	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
+		msg(0, ctx->id, RIST_LOG_ERROR,
+			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
+		return -1;
+	}
+	return rist_write_oob(&ctx->common, peer, buf, len);
+}
+
+int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len)
+{
+	// max protocol overhead for data is gre-header, 16 max
+	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
+		msg(ctx->id, 0, RIST_LOG_ERROR,
+			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
+		return -1;
+	}
+	return rist_write_oob(&ctx->common, peer, buf, len);
 }
 
 static void client_send_nacks(struct rist_client *ctx, int maxcounter)
@@ -2345,7 +2405,7 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
 {
 	struct rist_server *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		fprintf(stderr, "OOM!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not create ctx object, OOM!\n");
 		return -1;
 	}
 
@@ -2372,7 +2432,7 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 {
 	struct rist_client *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
-		fprintf(stderr, "Could not create ctx object, OOM!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not create ctx object, OOM!\n");
 		return -1;
 	}
 
@@ -2384,7 +2444,7 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 	if (!ctx->client_retry_queue) {
 		ctx->client_retry_queue = calloc(RIST_RETRY_QUEUE_BUFFERS, sizeof(*ctx->client_retry_queue));
 		if (RIST_UNLIKELY(!ctx->client_retry_queue)) {
-			fprintf(stderr, "Could not create client retry buffer of size %u MB, OOM\n",
+			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Could not create client retry buffer of size %u MB, OOM\n",
 				(unsigned)(RIST_SERVER_QUEUE_BUFFERS * sizeof(ctx->client_retry_queue[0])) / 1000000);
 			free(ctx);
 			return -1;
@@ -2458,10 +2518,10 @@ void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
 int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
 		return -1;
 	}
-
-	if (!peer) {
+	else if (!peer) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Missing peer pointer\n");
 		return -1;
 	}
@@ -2475,10 +2535,10 @@ int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
 int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
 		return -1;
 	}
-
-	if (!peer) {
+	else if (!peer) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Missing peer pointer\n");
 		return -1;
 	}
@@ -2873,6 +2933,40 @@ int rist_client_encrypt_enable(struct rist_client *ctx, const char *secret,
 int rist_client_compress_enable(struct rist_client *ctx, int compression)
 {
 	ctx->compression = !!compression;
+	return 0;
+}
+
+int rist_client_oob_enable(struct rist_client *ctx, 
+		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void *arg)
+{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
+		return -1;
+	} else if (ctx->common.profile == RIST_SIMPLE) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Out-of-band data is not support for simple profile\n");
+		return -1;
+	}
+	ctx->common.oob_data_enabled = true;
+	ctx->common.oob_data_callback = oob_data_callback;
+	ctx->common.oob_data_callback_argument = arg;
+	return 0;
+}
+
+int rist_server_oob_enable(struct rist_server *ctx, 
+		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void *arg)
+{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
+		return -1;
+	} else if (ctx->common.profile == RIST_SIMPLE) {
+		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Out-of-band data is not support for simple profile\n");
+		return -1;
+	}
+	ctx->common.oob_data_enabled = true;
+	ctx->common.oob_data_callback = oob_data_callback;
+	ctx->common.oob_data_callback_argument = arg;
 	return 0;
 }
 

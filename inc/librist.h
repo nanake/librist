@@ -9,7 +9,7 @@
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (3)
-#define RIST_SUBVERSION (1)
+#define RIST_SUBVERSION (2)
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -188,16 +188,43 @@ RIST_API int rist_client_remove_peer(struct rist_client *ctx,
 RIST_API int rist_client_start(struct rist_client *ctx);
 
 /**
-* @brief Write data into a librist packet.
-*
-* One client can send write data into a librist packet.
-*
-* @param a RIST client context
-* @param buf data to be sent through librist
-* @param len size of buf buffer
-* @return number of written bytes on success, -1 in case of error.
-*/
+ * @brief Write data into a librist packet.
+ *
+ * One client can send write data into a librist packet.
+ *
+ * @param a RIST client context
+ * @param buf data to be sent through librist
+ * @param len size of buf buffer
+ * @return number of written bytes on success, -1 in case of error.
+ */
 RIST_API int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port);
+
+/**
+ * @brief Write data into a librist packet.
+ *
+ * One client can send write data into a librist packet.
+ *
+ * @param a RIST client context
+ * @param buf data to be sent through librist
+ * @param len size of buf buffer
+ * @param ntp_time 64 bit timestamp in NTP format
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_client_write_timed(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time);
+
+/**
+ * @brief Write data directly to a remote server peer.
+ *
+ * This API is used to transmit out-of-band data to a remote server peer
+ *
+ * @param a RIST client context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @param buf data to be sent through a librist peer connection
+ * @param len size of buf buffer (IP header is expected by non-librist counterparts)
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len);
 
 /**
  * @brief Set RIST retry timeout
@@ -244,6 +271,21 @@ RIST_API int rist_client_set_max_jitter(struct rist_client *ctx, int t);
  */
 RIST_API int rist_client_encrypt_enable(struct rist_client *ctx,
 		const char *secret, int key_size);
+
+/**
+ * @brief Enable out-of-band data channel
+ *
+ * Call after server initialization to enable out-of-band data.
+ *
+ * @param a RIST client context
+ * @param oob_data_callback A pointer to the function that will be called when out-of-band data
+ * comes in (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `oob_data_callback`
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_oob_enable(struct rist_client *ctx, 
+		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void *arg);
 
 /**
  * @brief Enable compression
@@ -311,6 +353,20 @@ RIST_API int rist_set_stats_socket(int port);
  * @param a RIST client context
  */
 RIST_API char *rist_client_get_status(struct rist_client *ctx);
+
+/**
+ * @brief Write data directly to a remote client peer.
+ *
+ * This API is used to transmit out-of-band data to a remote client peer
+ *
+ * @param a RIST server context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @param buf data to be sent through a librist peer connection
+ * @param len size of buf buffer (IP header is expected by non-librist counterparts)
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len);
 
 /**
  * @brief Returns information about the handshake state
@@ -388,6 +444,21 @@ RIST_API int rist_server_add_peer(struct rist_server *ctx, const char *listen_ad
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_encrypt_enable(struct rist_server *ctx, const char *secret, int key_size);
+
+/**
+ * @brief Enable out-of-band data channel
+ *
+ * Call after server initialization to enable out-of-band data.
+ *
+ * @param a RIST server context
+ * @param oob_data_callback A pointer to the function that will be called when out-of-band data
+ * comes in (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `oob_data_callback`
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_oob_enable(struct rist_server *ctx, 
+		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void *arg);
 
 /**
  * @brief Setup server start

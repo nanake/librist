@@ -179,7 +179,7 @@ void rist_client_peer_statistics(struct rist_peer *peer)
 		return;
 	}
 
-	if (peer->stats_client_instant.received == 0)
+	if (peer->stats_client_instant.received == 0 && peer->stats_client_total.received > 0)
 	{
 		msg(0, peer->client_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
 			peer->adv_peer_id);

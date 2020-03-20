@@ -28,6 +28,7 @@ __BEGIN_DECLS
 #define RIST_PAYLOAD_TYPE_RTCP_NACK         0x4
 #define RIST_PAYLOAD_TYPE_DATA_RAW          0x5 // Raw
 #define RIST_PAYLOAD_TYPE_DATA_LZ4          0x6 // Compressed with LZ4
+#define RIST_PAYLOAD_TYPE_DATA_OOB          0x7 // Out-of-band data
 
 // RTCP constants
 #define RTCP_FB_HEADER_SIZE 12

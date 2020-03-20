@@ -126,7 +126,8 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 	struct rist_common_ctx *ctx = get_cctx(p);
 	struct rist_key *k = &ctx->SECRET;
 	uint8_t *data;
-	size_t len, gre_len, hdr_len;
+	size_t len, gre_len;
+	size_t hdr_len = 0;
 	size_t ret = 0;
 
 	//if (p->server_mode)
@@ -147,36 +148,42 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 		gre_len = sizeof(struct rist_gre_seq);
 	}
 
-	struct rist_protocol_hdr *hdr = (void *) (header_buf + gre_len);
-	hdr->src_port = htobe16(src_port);
-	hdr->dst_port = htobe16(dst_port);
-	if (payload_type == RIST_PAYLOAD_TYPE_RTCP || payload_type == RIST_PAYLOAD_TYPE_RTCP_NACK)
-	{
-		hdr->dst_port = htobe16(dst_port+1);
-		hdr_len = RIST_GRE_PROTOCOL_REDUCED_SIZE;
-	}
-	else
-	{
-		hdr_len = sizeof(*hdr);
-		// RTP header for data packets
-		hdr->rtp.flags = RTP_MPEGTS_FLAGS;
-		hdr->rtp.ssrc = htobe32(p->adv_flow_id);
-
-		if (seq != ctx->seq)
+	uint16_t proto_type;
+	if (RIST_UNLIKELY(payload_type == RIST_PAYLOAD_TYPE_DATA_OOB)) {
+		proto_type = RIST_GRE_PROTOCOL_TYPE_FULL;
+	} else {
+		proto_type = RIST_GRE_PROTOCOL_TYPE_REDUCED;
+		struct rist_protocol_hdr *hdr = (void *) (header_buf + gre_len);
+		hdr->src_port = htobe16(src_port);
+		hdr->dst_port = htobe16(dst_port);
+		if (payload_type == RIST_PAYLOAD_TYPE_RTCP || payload_type == RIST_PAYLOAD_TYPE_RTCP_NACK)
 		{
-			// This is a retranmission
-			//msg(server_id, client_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"\n", seq, seq_rtp);
-			/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
-			//hdr->rtp.ssrc |= (1 << 31);
-			// TODO: fix this with an OR instead
-			hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
+			hdr->dst_port = htobe16(dst_port+1);
+			hdr_len = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 		}
-		hdr->rtp.payload_type = MPEG_II_TRANSPORT_STREAM;
-		hdr->rtp.ts = htobe32(timestampRTP_u32(source_time));
-		hdr->rtp.seq = htobe16(seq_rtp);
+		else
+		{
+			hdr_len = sizeof(*hdr);
+			// RTP header for data packets
+			hdr->rtp.flags = RTP_MPEGTS_FLAGS;
+			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
+
+			if (seq != ctx->seq)
+			{
+				// This is a retranmission
+				//msg(server_id, client_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"\n", seq, seq_rtp);
+				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
+				//hdr->rtp.ssrc |= (1 << 31);
+				// TODO: fix this with an OR instead
+				hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
+			}
+			hdr->rtp.payload_type = MPEG_II_TRANSPORT_STREAM;
+			hdr->rtp.ts = htobe32(timestampRTP_u32(source_time));
+			hdr->rtp.seq = htobe16(seq_rtp);
+		}
+		// copy the rtp header data (needed for encryption)
+		memcpy(payload - hdr_len, hdr, hdr_len);
 	}
-	// copy the rtp header data (needed for encryption)
-	memcpy(payload - hdr_len, hdr, hdr_len);
 
 	if (ctx->profile > RIST_SIMPLE) {
 		/* Encrypt everything except GRE */
@@ -200,7 +207,7 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 			if (CHECK_BIT(payload_type, 3)) SET_BIT(gre_key_seq->flags2, 4);
 			SET_BIT(gre_key_seq->flags2, 3); // set advanced protocol identifier
 
-			gre_key_seq->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED);
+			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
 			gre_key_seq->nonce = htobe32(k->gre_nonce);
 			gre_key_seq->seq = htobe32(seq);
@@ -242,8 +249,8 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 			if (CHECK_BIT(payload_type, 2)) SET_BIT(gre_seq->flags2, 5);
 			if (CHECK_BIT(payload_type, 3)) SET_BIT(gre_seq->flags2, 4);
 			SET_BIT(gre_seq->flags2, 3); // set advanced protocol identifier
-
-			gre_seq->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED);
+		
+			gre_seq->prot_type = htobe16(proto_type);
 			gre_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
 			gre_seq->seq = htobe32(seq);
 		}
@@ -274,7 +281,7 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 	return ret;
 }
 
-/* This function is used by receiver for all and by sender only for data */
+/* This function is used by receiver for all and by sender only for rist-data and oob-data */
 bool rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate)
 {
 	intptr_t server_id = p->server_ctx ? p->server_ctx->id : 0;
