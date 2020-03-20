@@ -112,6 +112,6 @@ This company can provide support and integration help, should you need it.
 
 ## How can I test it?
 
-- You can use the utils project https://code.videolan.org/rist-utils/rist to compile and build statically command line utilities that have everything you need to get up and running quiclky.
+- You can use the utils project https://code.videolan.org/rist/rist-utils to compile and build statically command line utilities that have everything you need to get up and running quickly.
 
-- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/rist/-/wikis/home
+- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/rist-utils/-/wikis/home
