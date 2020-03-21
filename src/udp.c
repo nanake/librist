@@ -185,7 +185,7 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 		memcpy(payload - hdr_len, hdr, hdr_len);
 	}
 
-	if (ctx->profile > RIST_SIMPLE) {
+	if (ctx->profile > RIST_PROFILE_SIMPLE) {
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
 			_ensure_key_is_valid(k);

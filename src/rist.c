@@ -824,7 +824,7 @@ int rist_server_add_peer(struct rist_server *ctx, const char *url)
 	if (!p)
 		return -1;
 
-	if (ctx->common.profile == RIST_SIMPLE)
+	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
 		if (p->local_port % 2 != 0) {
 			// TODO: remove peer from timer
@@ -1213,7 +1213,7 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 			else {
 				// Only RTCP messages can authenticate a stream ...
 				if (strlen(peer->receiver_name)) {
-					if (ctx->common.profile > RIST_SIMPLE)
+					if (ctx->common.profile > RIST_PROFILE_SIMPLE)
 						peer->peer_rtcp = peer;
 					rist_fsm_recv_connect(peer);
 					peer->flow->authenticated = true;
@@ -1500,7 +1500,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	if (!peer || peer->shutdown) {
 		return;
 	}
-	else { //if (ctx->profile <= RIST_MAIN) {
+	else { //if (ctx->profile <= RIST_PROFILE_MAIN) {
 		//msg(0, 0, RIST_LOG_ERROR, "\tSent rctp message! peer/local (%d/%d)\n", peer->state_peer, peer->state_local);
 		if (peer->server_mode) {
 			rist_send_server_rtcp(peer, NULL, 0);
@@ -1678,7 +1678,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	uint8_t *recv_buf = cctx->buf.recv;
 	size_t buffer_offset = 0;
 
-	if (cctx->profile == RIST_SIMPLE)
+	if (cctx->profile == RIST_PROFILE_SIMPLE)
 		buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
 	if (peer->address_family == AF_INET6) {
@@ -1718,7 +1718,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	size_t gre_size;
 	uint8_t advanced = 0;
 
-	if (cctx->profile > RIST_SIMPLE)
+	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
 
 		// Make sure we have enought bytes
@@ -1945,7 +1945,7 @@ protocol_bypass:
 	while (p) {
 		if (equal_address(family, addr, p)) {
 			payload.peer = p;
-			if (cctx->profile == RIST_SIMPLE)
+			if (cctx->profile == RIST_PROFILE_SIMPLE)
 			{
 				payload.src_port = p->remote_port;
 				payload.dst_port = p->local_port;
@@ -1997,7 +1997,7 @@ protocol_bypass:
 
 	// Create/update peers if necessary
 	if (peer->listening &&
-		 (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_SIMPLE)) {
+		 (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
 		/* No match, new peer creation when on listening mode */
 		uint32_t new_peer_id = 0;
 		if (advanced)
@@ -2121,6 +2121,7 @@ static int rist_write_oob(struct rist_common_ctx *ctx, struct rist_peer *peer, c
 
 int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
+	// TODO: high priority: change this to use a new fifo instead to make it thread safe
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
@@ -2132,6 +2133,7 @@ int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const
 
 int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
+	// TODO: high priority: change this to use a new fifo instead to make it thread safe
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(ctx->id, 0, RIST_LOG_ERROR,
@@ -2392,9 +2394,9 @@ static void init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profi
 	ctx->evctx = evsocket_init();
 	ctx->rist_keepalive_interval = RIST_PING_INTERVAL * RIST_CLOCK;
 	ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
-	if (profile > RIST_MAIN) {
+	if (profile > RIST_PROFILE_MAIN) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Profile not supported (%d), using main profile instead\n", profile);
-		profile = RIST_MAIN;
+		profile = RIST_PROFILE_MAIN;
 	}
 	ctx->profile = profile;
 
@@ -2790,7 +2792,7 @@ int rist_client_add_peer(struct rist_client *ctx,
 	newpeer->is_data = true;
 	peer_append(newpeer);
 
-	if (ctx->common.profile == RIST_SIMPLE)
+	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
 		struct rist_peer *peer_rtcp = rist_client_add_peer_local(ctx, config, true);
 		if (!peer_rtcp)
@@ -2947,7 +2949,7 @@ int rist_client_oob_enable(struct rist_client *ctx,
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
 		return -1;
-	} else if (ctx->common.profile == RIST_SIMPLE) {
+	} else if (ctx->common.profile == RIST_PROFILE_SIMPLE) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Out-of-band data is not support for simple profile\n");
 		return -1;
 	}
@@ -2964,7 +2966,7 @@ int rist_server_oob_enable(struct rist_server *ctx,
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
 		return -1;
-	} else if (ctx->common.profile == RIST_SIMPLE) {
+	} else if (ctx->common.profile == RIST_PROFILE_SIMPLE) {
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Out-of-band data is not support for simple profile\n");
 		return -1;
 	}

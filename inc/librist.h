@@ -60,9 +60,9 @@ enum rist_nack_type {
 };
 
 enum rist_profile {
-	RIST_SIMPLE = 0,
-	RIST_MAIN = 1,
-	RIST_ADVANCED = 2,
+	RIST_PROFILE_SIMPLE = 0,
+	RIST_PROFILE_MAIN = 1,
+	RIST_PROFILE_ADVANCED = 2,
 };
 
 enum rist_log_level {
