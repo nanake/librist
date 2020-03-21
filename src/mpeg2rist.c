@@ -140,7 +140,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	char *address[PEER_COUNT];
 	uint32_t weight[PEER_COUNT];
-	enum rist_profile profile = RIST_MAIN;
+	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint16_t src_port = 1971;
 	uint16_t dst_port = 1968;

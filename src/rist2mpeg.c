@@ -157,7 +157,7 @@ int main(int argc, char *argv[])
 	char *addr[OUTPUT_COUNT];
 	char *shared_secret = NULL;
 	char c;
-	enum rist_profile profile = RIST_MAIN;
+	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint8_t encryption_type = 1;
 	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
