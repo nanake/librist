@@ -74,7 +74,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -B | --bloat-mode MODE                 | Buffer bloat mitigation mode (slow, fast, fixed)       |\n"
 "       -l | --bloat-limit NACK_COUNT          | Buffer bloat min nack count for random discard         |\n"
 "       -L | --bloat-hardlimit NACK_COUNT      | Buffer bloat max nack count for hard limit discard     |\n"
-"       -W | --max-bitrate MBPS                | rist recovery max bitrate (Mbit/s)                     |\n"
+"       -W | --max-bitrate Kbps                | rist recovery max bitrate (Kbit/s)                     |\n"
 "       -e | --encryption-password PWD         | pre-shared encryption password                         |\n"
 "       -t | --encryption-type TYPE            | encryption type (1 = AES-128, 2 = AES-256)             |\n"
 "       -p | --profile number                  | rist profile (0 = simple, 1 = main)                    |\n"
@@ -89,7 +89,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --reorder-buf 25          \\\n"
 "       --min-rtt 50              \\\n"
 "       --max-rtt 500             \\\n"
-"       --max-bitrate 100         \\\n"
+"       --max-bitrate 100000      \\\n"
 "       --encryption-type 1       \\\n"
 "       --profile 1               \\\n"
 "       --gre-src-port 1971       \\\n"
@@ -146,7 +146,7 @@ int main(int argc, char *argv[])
 	uint16_t dst_port = 1968;
 	uint8_t encryption_type = 1;
 	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
-	uint32_t recovery_maxbitrate = 100;
+	uint32_t recovery_maxbitrate = 100000;
 	uint32_t recovery_maxbitrate_return = 0;
 	uint32_t recovery_length_min = 1000;
 	uint32_t recovery_length_max = 1000;
