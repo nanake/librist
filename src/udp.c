@@ -860,7 +860,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 	struct rist_bandwidth_estimation *retry_bw = &retry->peer->retry_bw;
 	struct rist_bandwidth_estimation *cli_bw = &retry->peer->bw;
 	size_t current_bitrate = cli_bw->bitrate + retry_bw->bitrate;
-	size_t max_bitrate = retry->peer->recover_maxbitrate * 1000000;
+	size_t max_bitrate = retry->peer->recover_maxbitrate * 1000;
 
 	if (current_bitrate > max_bitrate) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",

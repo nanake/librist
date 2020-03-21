@@ -9,7 +9,7 @@
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (3)
-#define RIST_SUBVERSION (2)
+#define RIST_SUBVERSION (3)
 
 #include <stdint.h>
 #include <stdlib.h>

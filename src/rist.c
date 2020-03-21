@@ -118,6 +118,7 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 	peer->bufferbloat_mode = settings->bufferbloat_mode;
 	peer->bufferbloat_limit = settings->bufferbloat_limit;
 	peer->bufferbloat_hard_limit = settings->bufferbloat_hard_limit;
+	uint32_t recover_maxbitrate_mbps = peer->recover_maxbitrate < 1000 ? 1 : peer->recover_maxbitrate / 1000;
 
 	// Initial value for some variables
 	peer->recover_buffer_ticks =
@@ -133,7 +134,7 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 	break;
 	case RIST_RECOVERY_MODE_TIME:
 		peer->missing_counter_max =
-			(peer->recover_buffer_ticks / RIST_CLOCK) * peer->recover_maxbitrate /
+			(peer->recover_buffer_ticks / RIST_CLOCK) * recover_maxbitrate_mbps /
 			(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
 		peer->eight_times_rtt = settings->recover_rtt_min * 8;
 	break;
@@ -253,7 +254,7 @@ static int check_valid_seq(struct rist_peer * peer, uint32_t seq)
 	// TODO: Move this calculation to the peer initialization so that it does 
 	// not happen for every packet
 	// I could use RIST_MAX_PACKET_SIZE but the most likely scenario is 1300 bytes (double it)
-	size_t packets_per_second = (peer->recover_maxbitrate * 1000000 / 8) / 1300;
+	size_t packets_per_second = (peer->recover_maxbitrate * 1000 / 8) / 1300;
 	size_t max_packets = packets_per_second * peer->recover_buffer_ticks / RIST_CLOCK;
 
 	// We base the server queue index only in the sequence number so we have to check
@@ -2417,7 +2418,7 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
 
 	// Default values
 	ctx->recovery_mode = RIST_RECOVERY_MODE_TIME;
-	ctx->recovery_maxbitrate = 100;
+	ctx->recovery_maxbitrate = 100000;
 	ctx->recovery_maxbitrate_return = 0;
 	ctx->recovery_length_min = 1000;
 	ctx->recovery_length_max = 1000;
