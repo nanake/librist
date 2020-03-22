@@ -2475,23 +2475,38 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 
 int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len)
 {
-	if (cname_len >= 127)
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_set_cname call!\n");
+		return -1;
+	}
+	else if (!cname) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
+		return -1;
+	}
+	else if (cname_len >= 127)
 	{
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
 		return -1;
 	}
-	strncpy((char * )ctx->common.cname, cname, cname_len);
+	memcpy(&ctx->common.cname, cname, cname_len);
 	return 0;
 }
 
 int rist_server_set_cname(struct rist_server *ctx, const void *cname, size_t cname_len)
 {
-	if (cname_len >= 127)
-	{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_set_cname call!\n");
+		return -1;
+	}
+	else if (!cname) {
+		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
+		return -1;
+	}
+	else if (cname_len >= 127) {
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
 		return -1;
 	}
-	strncpy((char * )ctx->common.cname, cname, cname_len);
+	memcpy(&ctx->common.cname, cname, cname_len);
 	return 0;
 }
 
@@ -3210,6 +3225,11 @@ char *rist_server_get_status(struct rist_server *ctx)
 
 int rist_client_destroy(struct rist_client *ctx)
 {
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_destroy call!\n");
+		return -1;
+	}
+
 	msg(0, ctx->id, RIST_LOG_INFO,
 		"[SHUTDOWN] Starting peers cleanup, count %d\n",
 		(unsigned) ctx->peer_lst_len);
