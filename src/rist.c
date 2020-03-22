@@ -2384,7 +2384,7 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 	}
 	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Freeing up context memory allocations\n");
 	free(ctx->client_retry_queue);
-	free(ctx->client_queue);
+	//free(ctx->client_queue); // TODO: this array does not need to be freed?
 	ctx->client_thread = 0;
 	free(ctx);
 
