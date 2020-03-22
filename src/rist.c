@@ -1124,6 +1124,8 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 {
 	struct rist_server *ctx = peer->server_ctx;
 
+	// TODO: call back for this authentication (pass peer->receiver_name, flow_id)
+
 	if (peer->recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED)
 	{
 		// TODO: get the settings from the flow itself when in basic profile
@@ -2026,7 +2028,7 @@ protocol_bypass:
 		p->parent = peer;
 		p->adv_peer_id = new_peer_id;
 		p->state_local = p->state_peer = RIST_PEER_STATE_PING;
-		rist_populate_cname(p->sd, p->cname);
+		rist_populate_cname(p);
 
 		// Optional validation of connecting client
 		if (cctx->auth_connect_callback) {
@@ -2422,7 +2424,7 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
 	ctx->recovery_maxbitrate_return = 0;
 	ctx->recovery_length_min = 1000;
 	ctx->recovery_length_max = 1000;
-	ctx->recovery_reorder_buffer = 70;
+	ctx->recovery_reorder_buffer = 25;
 	ctx->recovery_rtt_min = 50;
 	ctx->recovery_rtt_max = 500;
 	ctx->bufferbloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
@@ -2468,6 +2470,28 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 	ctx->client_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
 	*_ctx = ctx;
+	return 0;
+}
+
+int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len)
+{
+	if (cname_len >= 127)
+	{
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
+		return -1;
+	}
+	strncpy((char * )ctx->common.cname, cname, cname_len);
+	return 0;
+}
+
+int rist_server_set_cname(struct rist_server *ctx, const void *cname, size_t cname_len)
+{
+	if (cname_len >= 127)
+	{
+		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
+		return -1;
+	}
+	strncpy((char * )ctx->common.cname, cname, cname_len);
 	return 0;
 }
 

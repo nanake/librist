@@ -260,6 +260,7 @@ struct rist_common_ctx {
 	uint64_t nacks_next_time;
 
 	enum rist_profile profile;
+	uint8_t cname[RIST_MAX_HOSTNAME];
 
 	/* seq variables */
 	uint32_t seq;
@@ -515,7 +516,7 @@ RIST_PRIV void rist_fsm_recv_connect(struct rist_peer *peer);
 RIST_PRIV void rist_shutdown_peer(struct rist_peer *peer);
 RIST_PRIV void rist_print_inet_info(char *prefix, struct rist_peer *peer);
 RIST_PRIV void rist_peer_rtcp(struct evsocket_ctx *ctx, void *arg);
-RIST_PRIV void rist_populate_cname(int fd, char *identifier);
+RIST_PRIV void rist_populate_cname(struct rist_peer *peer);
 
 /* Get common context */
 RIST_PRIV struct rist_common_ctx *get_cctx(struct rist_peer *peer);

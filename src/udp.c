@@ -387,8 +387,16 @@ int rist_set_url(struct rist_peer *peer)
 	return 0;
 }
 
-void rist_populate_cname(int fd, char *identifier)
+void rist_populate_cname(struct rist_peer *peer)
 {
+	int fd = peer->sd;
+	char *identifier = peer->cname;
+	struct rist_common_ctx *ctx = get_cctx(peer);
+	if (strlen((char *)ctx->cname) != 0)
+	{
+		strncpy(identifier, (char * )ctx->cname, RIST_MAX_HOSTNAME);
+		return;
+	}
 	/* Set the CNAME Identifier as host@ip:port and fallback to hostname if needed */
 	char hostname[RIST_MAX_HOSTNAME];
 	struct sockaddr_storage peer_sockaddr;
@@ -480,7 +488,7 @@ void rist_create_socket(struct rist_peer *peer)
 		}
 	}
 
-	rist_populate_cname(peer->sd, peer->cname);
+	rist_populate_cname(peer);
 	msg(server_id, client_id, RIST_LOG_INFO, "[INFO] Our cname is %s\n", peer->cname);
 
 }

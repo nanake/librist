@@ -122,6 +122,18 @@ struct rist_peer_config {
 RIST_API int rist_client_create(struct rist_client **ctx, enum rist_profile profile);
 
 /**
+ * @brief Configure the SDES CName
+ *
+ * This allows you to override the auto-generated SDES CName
+ *
+ * @param a RIST client context
+ * @param cname data to be sent through librist
+ * @param cname_len size of cname buffer
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len);
+
+/**
  * @brief Destroy RIST client
  *
  * Destroy a RIST client instance
@@ -400,6 +412,18 @@ RIST_API int rist_server_set_nack_type(struct rist_server *ctx, enum rist_nack_t
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile profile);
+
+/**
+ * @brief Configure the SDES CName
+ *
+ * This allows you to override the auto-generated SDES CName
+ *
+ * @param a RIST server context
+ * @param cname data to be sent through librist
+ * @param cname_len size of cname buffer
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_set_cname(struct rist_server *ctx, const void *cname, size_t cname_len);
 
 /**
  * @brief Initialize server
