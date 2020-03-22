@@ -22,8 +22,6 @@
 #define INPUT_COUNT 2
 #define OUTPUT_COUNT 4
 
-// TODO: add options for flow_id, cname and gre-dst-port
-
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -u | --url ADDRESS:PORT                                          * | Output IP address and port                          |\n"
 "       -f | --miface name/index                                         * | Multicast Interface name (linux) or index (win)     |\n"
@@ -34,10 +32,12 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -b | --server2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of second local rist server                 |\n"
 "       -c | --server3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of third local rist server                  |\n"
 "       -d | --server4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of fourth local rist server                 |\n"
-"       -e | --encryption-password PWD                                     | pre-shared encryption password                      |\n"
-"       -t | --encryption-type TYPE                                        | encryption type (1 = AES-128, 2 = AES-256)          |\n"
-"       -p | --profile number                                              | rist profile (0 = simple, 1 = main)                 |\n"
-"       -n | --gre-src-port port                                           | reduced profile src port to forward                 |\n"
+"       -e | --encryption-password PWD                                     | Pre-shared encryption password                      |\n"
+"       -t | --encryption-type TYPE                                        | Encryption type (1 = AES-128, 2 = AES-256)          |\n"
+"       -p | --profile number                                              | Rist profile (0 = simple, 1 = main)                 |\n"
+"       -n | --gre-src-port port                                           | Reduced profile src port to filter (0 = no filter)  |\n"
+"       -N | --gre-dst-port port                                           | Reduced profile dst port to filter (0 = no filter)  |\n"
+"       -C | --cname identifier                                            | Manually configured identifier                      |\n"
 "       -v | --verbose-level value                                         | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4   |\n"
 "       -h | --help                                                        | Show this help                                      |\n"
 "  ***** Default peer settings in case the sender is not librist:                                                                |\n"
@@ -61,7 +61,8 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --max-bitrate 100000      \\\n"
 "       --encryption-type 1       \\\n"
 "       --profile 1               \\\n"
-"       --gre-src-port 1971       \\\n"
+"       --gre-src-port 0          \\\n"
+"       --gre-dst-port 0          \\\n"
 "       --verbose-level 2         \n";
 
 static struct option long_options[] = {
@@ -87,6 +88,8 @@ static struct option long_options[] = {
 	{ "encryption-type", required_argument, NULL, 't' },
 	{ "profile",         required_argument, NULL, 'p' },
 	{ "gre-src-port",    required_argument, NULL, 'n' },
+	{ "gre-dst-port",    required_argument, NULL, 'N' },
+	{ "cname",           required_argument, NULL, 'C' },
 	{ "verbose-level",   required_argument, NULL, 'v' },
 	{ "help",            no_argument,       NULL, 'h' },
 	{ 0, 0, 0, 0 },
@@ -111,10 +114,17 @@ static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const v
 	struct rist_port_filter *port_filter = (void *) arg;
 	(void) flow_id;
 
-	if (port_filter->src_port != src_port)
+	if (port_filter->src_port && port_filter->src_port != src_port) {
 		fprintf(stderr, "Source port mistmatch %d != %d\n", port_filter->src_port, src_port);
+		return;
+	}
 
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	if (port_filter->dst_port && port_filter->dst_port != dst_port) {
+		fprintf(stderr, "Destination port mistmatch %d != %d\n", port_filter->dst_port, dst_port);
+		return;
+	}
+
+	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (mpeg[i] > 0) {
 			sendto(mpeg[i], buf, len, 0, (struct sockaddr *)&(parsed_url[i].u),
 				sizeof(struct sockaddr_in));
@@ -156,6 +166,7 @@ int main(int argc, char *argv[])
 	char *miface[INPUT_COUNT];
 	char *addr[OUTPUT_COUNT];
 	char *shared_secret = NULL;
+	char *cname = NULL;
 	char c;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
@@ -172,8 +183,8 @@ int main(int argc, char *argv[])
 	uint32_t buffer_bloat_limit = 6;
 	uint32_t buffer_bloat_hard_limit = 20;
 	struct rist_port_filter port_filter;
-	port_filter.src_port = 1971;
-	port_filter.dst_port = 1968;
+	port_filter.src_port = 0;
+	port_filter.dst_port = 0;
 
 	for (size_t i = 0; i < INPUT_COUNT; i++) {
 		url[i] = NULL;
@@ -185,7 +196,7 @@ int main(int argc, char *argv[])
 		addr[i] = NULL;
 	}
 
-	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:h:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url[0] = strdup(optarg);
@@ -255,6 +266,12 @@ int main(int argc, char *argv[])
 		case 'n':
 			port_filter.src_port = atoi(optarg);
 		break;
+		case 'N':
+			port_filter.dst_port = atoi(optarg);
+		break;
+		case 'C':
+			cname = strdup(optarg);
+		break;
 		case 'e':
 			shared_secret = strdup(optarg);
 		break;
@@ -303,6 +320,13 @@ int main(int argc, char *argv[])
 	if (rist_server_create(&ctx, profile) != 0) {
 		fprintf(stderr, "Could not create rist server context\n");
 		exit(1);
+	}
+
+	if (cname) {
+		if (rist_server_set_cname(ctx, cname, strlen(cname)) != 0) {
+			fprintf(stderr, "Could not set the cname\n");
+			exit(1);
+		}
 	}
 
 	const struct rist_peer_config default_peer_config = {
@@ -393,6 +417,11 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "Pause application?\n");
 
 	pause();
+
+	if (shared_secret)
+		free(shared_secret);
+	if (cname)
+		free(cname);
 
 	return 0;
 }

@@ -22,8 +22,6 @@
 #define PEER_COUNT 4
 #define MPEG_BUFFER_SIZE 10000
 
-// TODO: add options for flow_id, cname and gre-dst-port
-
 static struct option long_options[] = {
 { "url",             required_argument, NULL, 'u' },
 { "miface",          required_argument, NULL, 'f' },
@@ -48,6 +46,8 @@ static struct option long_options[] = {
 { "encryption-type", required_argument, NULL, 't' },
 { "profile",         required_argument, NULL, 'p' },
 { "gre-src-port",    required_argument, NULL, 'n' },
+{ "gre-dst-port",    required_argument, NULL, 'N' },
+{ "cname",           required_argument, NULL, 'C' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
 { 0, 0, 0, 0 },
@@ -74,11 +74,13 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -B | --bloat-mode MODE                 | Buffer bloat mitigation mode (slow, fast, fixed)       |\n"
 "       -l | --bloat-limit NACK_COUNT          | Buffer bloat min nack count for random discard         |\n"
 "       -L | --bloat-hardlimit NACK_COUNT      | Buffer bloat max nack count for hard limit discard     |\n"
-"       -W | --max-bitrate Kbps                | rist recovery max bitrate (Kbit/s)                     |\n"
-"       -e | --encryption-password PWD         | pre-shared encryption password                         |\n"
-"       -t | --encryption-type TYPE            | encryption type (1 = AES-128, 2 = AES-256)             |\n"
-"       -p | --profile number                  | rist profile (0 = simple, 1 = main)                    |\n"
-"       -n | --gre-src-port port               | reduced profile src and dst ports                      |\n"
+"       -W | --max-bitrate Kbps                | Rist recovery max bitrate (Kbit/s)                     |\n"
+"       -e | --encryption-password PWD         | Pre-shared encryption password                         |\n"
+"       -t | --encryption-type TYPE            | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)   |\n"
+"       -p | --profile number                  | Rist profile (0 = simple, 1 = main)                    |\n"
+"       -n | --gre-src-port port               | Reduced profile src port to forward                    |\n"
+"       -N | --gre-dst-port port               | Reduced profile dst port to forward                    |\n"
+"       -C | --cname identifier                | Manually configured identifier                         |\n"
 "       -v | --verbose-level value             | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                            | Show this help                                         |\n"
 "   * == mandatory value \n"
@@ -90,9 +92,10 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --min-rtt 50              \\\n"
 "       --max-rtt 500             \\\n"
 "       --max-bitrate 100000      \\\n"
-"       --encryption-type 1       \\\n"
+"       --encryption-type 0       \\\n"
 "       --profile 1               \\\n"
 "       --gre-src-port 1971       \\\n"
+"       --gre-dst-port 1968       \\\n"
 "       --verbose-level 2         \n";
 
 static void usage(char *cmd)
@@ -138,6 +141,7 @@ int main(int argc, char *argv[])
 	char *url = NULL;
 	char *miface = NULL;
 	char *shared_secret = NULL;
+	char *cname = NULL;
 	char *address[PEER_COUNT];
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
@@ -162,7 +166,7 @@ int main(int argc, char *argv[])
 		weight[i] = 0;
 	}
 
-	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:N:C:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url = strdup(optarg);
@@ -249,6 +253,12 @@ int main(int argc, char *argv[])
 		case 'n':
 			src_port = atoi(optarg);
 		break;
+		case 'N':
+			dst_port = atoi(optarg);
+		break;
+		case 'C':
+			cname = strdup(optarg);
+		break;
 		case 'v':
 			loglevel = atoi(optarg);
 		break;
@@ -312,6 +322,13 @@ int main(int argc, char *argv[])
 	if (rist_client_create(&ctx, profile) != 0) {
 		fprintf(stderr, "Could not create rist client context\n");
 		exit(1);
+	}
+
+	if (cname) {
+		if (rist_client_set_cname(ctx, cname, strlen(cname)) != 0) {
+			fprintf(stderr, "Could not set the cname\n");
+			exit(1);
+		}
 	}
 
 	uint64_t now;
@@ -388,5 +405,12 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	if (shared_secret)
+		free(shared_secret);
+	if (cname)
+		free(cname);
+
 	fprintf(stderr, "Recv: %s\n", strerror(errno));
+
+	return 0;
 }
