@@ -2116,7 +2116,7 @@ static int rist_write_oob(struct rist_common_ctx *ctx, struct rist_peer *peer, c
 	uint8_t *payload = malloc(payload_len);
 	memcpy(payload + 16, buf, len);
 	payload += 16;
-	bool ret = rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_DATA_OOB, payload, len, 0, 0, 0, false);
+	int ret = rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_DATA_OOB, payload, len, 0, 0, 0, false);
 	// TODO: why does this free crash? where am I freeing it? I could not find it ...
 	//free(payload);
 	return ret;

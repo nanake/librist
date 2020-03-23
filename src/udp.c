@@ -118,7 +118,7 @@ static void _ensure_key_is_valid(struct rist_key *key)
 	}
 }
 
-uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
+size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	intptr_t server_id = p->server_ctx ? p->server_ctx->id : 0;
 	intptr_t client_id = p->client_ctx ? p->client_ctx->id : 0;
@@ -282,7 +282,7 @@ uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp,
 }
 
 /* This function is used by receiver for all and by sender only for rist-data and oob-data */
-bool rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate)
+int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate)
 {
 	intptr_t server_id = p->server_ctx ? p->server_ctx->id : 0;
 	intptr_t client_id = p->client_ctx ? p->client_ctx->id : 0;
@@ -291,7 +291,7 @@ bool rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *p
 
 	if (p->sd < 0 || !p->address_len) {
 		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] rist_send_common_rtcp failed\n");
-		return false;
+		return -1;
 	}
 
 	if (!duplicate)
@@ -326,7 +326,10 @@ bool rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *p
 		}
 	}
 
-	return (ret > 0);
+	if (ret >= 0)
+		return 0;
+	else
+		return -1;
 }
 
 int rist_set_url(struct rist_peer *peer)
@@ -493,7 +496,7 @@ void rist_create_socket(struct rist_peer *peer)
 
 }
 
-bool rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len)
+int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 
@@ -578,7 +581,7 @@ bool rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int arr
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, 0, 0, false);
 }
 
-uint32_t rist_send_client_rtcp(struct rist_peer *peer)
+void rist_send_client_rtcp(struct rist_peer *peer)
 {
 	uint16_t namelen = strlen(peer->cname) + 3;
 	// It has to be a multiple of 4
@@ -631,7 +634,7 @@ uint32_t rist_send_client_rtcp(struct rist_peer *peer)
 	if (RIST_UNLIKELY(!ctx->client_queue[ctx->client_queue_write_index])) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside client buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
-		return 0;
+		return;
 	}
 	if (peer->listening)
 	{
@@ -647,7 +650,7 @@ uint32_t rist_send_client_rtcp(struct rist_peer *peer)
 	ctx->client_queue_bytesize += payload_len;
 	ctx->client_queue_write_index = (ctx->client_queue_write_index + 1) % ctx->client_queue_max;
 	pthread_rwlock_unlock(&ctx->queue_lock);
-	return 0;
+	return;
 }
 
 static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
@@ -663,7 +666,7 @@ static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 		if (get_cctx(peer)->debug)
 			msg(0, 0, RIST_LOG_DEBUG, "[DEBUG] Sending %d nacks starting with %"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32"\n",
 			peer->nacks.counter, peer->nacks.array[0],peer->nacks.array[1],peer->nacks.array[2],peer->nacks.array[3]);
-		if (rist_send_server_rtcp(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter))
+		if (rist_send_server_rtcp(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
 			peer->nacks.counter = 0;
 		else
 			msg(0, 0, RIST_LOG_ERROR, "\tCould not send nacks, will try again\n");
@@ -933,7 +936,10 @@ int rist_retry_dequeue(struct rist_client *ctx)
 		retry->peer->stats_client_instant.retrans++;
 	}
 
-	return ret;
+	if (ret >= 0)
+		return 0;
+	else
+		return -1;
 }
 
 void rist_retry_enqueue(struct rist_client *ctx, uint32_t seq, struct rist_peer *peer)

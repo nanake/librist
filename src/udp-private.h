@@ -254,10 +254,10 @@ static inline uint32_t timestampRTP_u32( uint64_t i_ntp )
 
 /* shared functions in udp.c */
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
-RIST_PRIV bool rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len);
-RIST_PRIV uint32_t rist_send_client_rtcp(struct rist_peer *peer);
-RIST_PRIV bool rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate);
-RIST_PRIV uint32_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
+RIST_PRIV int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len);
+RIST_PRIV void rist_send_client_rtcp(struct rist_peer *peer);
+RIST_PRIV int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate);
+RIST_PRIV size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer *buffer);
 RIST_PRIV int rist_client_enqueue(struct rist_client *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void rist_clean_client_enqueue(struct rist_client *ctx);
