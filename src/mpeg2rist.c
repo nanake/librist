@@ -354,9 +354,11 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (rist_client_oob_enable(ctx, cb_recv_oob, ctx) == -1) {
-		fprintf(stderr, "Could not add enable out-of-band data\n");
-		exit(1);
+	if (profile != RIST_PROFILE_SIMPLE) {
+		if (rist_client_oob_enable(ctx, cb_recv_oob, ctx) == -1) {
+			fprintf(stderr, "Could not add enable out-of-band data\n");
+			exit(1);
+		}
 	}
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
