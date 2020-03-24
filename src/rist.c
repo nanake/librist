@@ -2797,6 +2797,7 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 	newpeer->cooldown_time = 0;
 	newpeer->is_rtcp = b_rtcp;
 	newpeer->adv_peer_id = ctx->common.peer_counter++;
+	newpeer->adv_flow_id = ctx->adv_flow_id;
 
 	if (b_rtcp)
 	{
@@ -2813,7 +2814,7 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 
 	client_store_settings(ctx, config, newpeer);
 
-	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Advertising flow_id : %" PRIu64 " and peer_id %u\n",
+	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Advertising flow_id  %" PRIu64 " and peer_id %u\n",
 		newpeer->adv_flow_id, newpeer->adv_peer_id);
 
 	return newpeer;
