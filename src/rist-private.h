@@ -29,9 +29,12 @@ __BEGIN_DECLS
 #include "aes.h"
 #include <errno.h>
 
-// These 3 control the memory footprint of the lib
-#define RIST_SERVER_QUEUE_BUFFERS (65536 * 10)
-#define RIST_RETRY_QUEUE_BUFFERS (65536 * 5)
+#define UINT16_SIZE (UINT16_MAX + 1)
+// These 3 control the memory footprint and buffer capacity of the lib
+#define RIST_SERVER_QUEUE_BUFFERS ((UINT16_SIZE) * 10)
+#define RIST_RETRY_QUEUE_BUFFERS ((UINT16_SIZE) * 5)
+#define RIST_OOB_QUEUE_BUFFERS ((UINT16_SIZE) * 1)
+// This will restrict the use of the library to the configured maximum packet size
 #define RIST_MAX_PACKET_SIZE (10000)
 
 #define RIST_RETRY_RATIO (10)
@@ -64,8 +67,6 @@ __BEGIN_DECLS
 	(byte & 0x04 ? '1' : '0'), \
 	(byte & 0x02 ? '1' : '0'), \
 	(byte & 0x01 ? '1' : '0')
-
-#define UINT16_SIZE (UINT16_MAX + 1)
 
 enum rist_peer_state {
 	RIST_PEER_STATE_IDLE = 0,
@@ -278,6 +279,11 @@ struct rist_common_ctx {
 	void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
+	pthread_rwlock_t oob_queue_lock;
+	struct rist_buffer *oob_queue[RIST_OOB_QUEUE_BUFFERS]; /* oob queue */
+	size_t oob_queue_bytesize;
+	uint16_t oob_queue_read_index;
+	uint16_t oob_queue_write_index;
 
 	bool debug;
 };

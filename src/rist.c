@@ -223,11 +223,11 @@ static int server_insert_queue_packet(struct rist_flow *f, struct rist_peer *pee
 			seq, len, source_time, idx);
 	*/
 	f->server_queue[idx] = rist_new_buffer(buf, len, RIST_PAYLOAD_TYPE_DATA_RAW, seq, source_time, src_port, dst_port);
-	f->server_queue[idx]->peer = peer;
 	if (RIST_UNLIKELY(!f->server_queue[idx])) {
 		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside server buffer, OOM, decrease max bitrate or buffer time length\n");
 		return -1;
 	}
+	f->server_queue[idx]->peer = peer;
 	f->server_queue_size += len;
 	return 0;
 }
@@ -2029,41 +2029,90 @@ int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint
 	return rist_client_write_timed(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
 }
 
-static int rist_write_oob(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
+static int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
-	// create a buffer of the combined size and copy the data
-	size_t payload_len = len + 16;
-	uint8_t *payload = malloc(payload_len);
-	memcpy(payload + 16, buf, len);
-	payload += 16;
-	int ret = rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_DATA_OOB, payload, len, 0, 0, 0, false);
-	// TODO: why does this free crash? where am I freeing it? I could not find it ...
-	//free(payload);
-	return ret;
+	if (RIST_UNLIKELY(!ctx->oob_data_enabled)) {
+		msg(0, 0, RIST_LOG_ERROR,
+			"Trying to send oob but oob was not enabled\n");
+		return -1;
+	}
+	else if ((ctx->oob_queue_write_index + 1) == ctx->oob_queue_read_index)
+	{
+		msg(0, 0, RIST_LOG_ERROR,
+			"oob queue is full (%zu bytes), try again later\n", ctx->oob_queue_bytesize);
+		return -1;
+	}
+
+	/* insert into oob fifo queue */
+	pthread_rwlock_wrlock(&ctx->oob_queue_lock);
+	ctx->oob_queue[ctx->oob_queue_write_index] = rist_new_buffer(buf, len, RIST_PAYLOAD_TYPE_DATA_OOB, 0, 0, 0, 0);
+	if (RIST_UNLIKELY(!ctx->oob_queue[ctx->oob_queue_write_index])) {
+		msg(0, 0, RIST_LOG_ERROR, "\t Could not create oob packet buffer, OOM\n");
+		pthread_rwlock_unlock(&ctx->oob_queue_lock);
+		return -1;
+	}
+	ctx->oob_queue[ctx->oob_queue_write_index]->peer = peer;
+	ctx->oob_queue_write_index = (ctx->oob_queue_write_index + 1);
+	ctx->oob_queue_bytesize += len;
+	pthread_rwlock_unlock(&ctx->oob_queue_lock);
+
+	return 0;
+}
+
+static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
+{
+	int counter = 0;
+
+	while (1) {
+		// If we fall behind, only empty 100 every 5ms (master loop)
+		if (counter++ > maxcount) {
+			break;
+		}
+
+		if (ctx->oob_queue_read_index == ctx->oob_queue_write_index) {
+			//msg(0, 0, RIST_LOG_INFO,
+			//	"\t[INFO] We are all up to date, index is %u/%u and bytes = %zu\n",
+			//	ctx->oob_queue_read_index, ctx->oob_queue_write_index, ctx->oob_queue_bytesize);
+			break;
+		}
+
+		struct rist_buffer *oob_buffer = ctx->oob_queue[ctx->oob_queue_read_index];
+		if (!oob_buffer->data) {
+			msg(0, 0, RIST_LOG_ERROR, "\t[ERROR] Null oob buffer, skipping!!!\n");
+			ctx->oob_queue_read_index++;
+			continue;
+		}
+
+		uint8_t *payload = oob_buffer->data;
+		rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
+					oob_buffer->size, 0, 0, 0, false);
+		ctx->oob_queue_bytesize -= oob_buffer->size;
+		ctx->oob_queue_read_index++;
+	}
+
+	return;
 }
 
 int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
-	// TODO: high priority: change this to use a new fifo instead to make it thread safe
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
 		return -1;
 	}
-	return rist_write_oob(&ctx->common, peer, buf, len);
+	return rist_oob_enqueue(&ctx->common, peer, buf, len);
 }
 
 int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
-	// TODO: high priority: change this to use a new fifo instead to make it thread safe
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(ctx->id, 0, RIST_LOG_ERROR,
 			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
 		return -1;
 	}
-	return rist_write_oob(&ctx->common, peer, buf, len);
+	return rist_oob_enqueue(&ctx->common, peer, buf, len);
 }
 
 static void client_send_nacks(struct rist_client *ctx, int maxcounter)
@@ -2222,6 +2271,7 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 	struct rist_client *ctx = (struct rist_client *) arg;
 	// loop behavior parameters
 	int max_dataperloop = 100;
+	int max_oobperloop = 100;
 	int max_nacksperloop = RIST_RETRY_RATIO;
 
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
@@ -2287,6 +2337,9 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 			/* perform queue cleanup */
 			rist_clean_client_enqueue(ctx);
 		}
+		// Send oob data
+		if (ctx->common.oob_queue_bytesize > 0)
+			rist_oob_dequeue(&ctx->common, max_oobperloop);
 
 	}
 	evsocket_loop_finalize(ctx->common.evctx);
@@ -2923,9 +2976,16 @@ int rist_client_oob_enable(struct rist_client *ctx,
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Out-of-band data is not support for simple profile\n");
 		return -1;
 	}
+	if (pthread_rwlock_init(&ctx->common.oob_queue_lock, NULL) != 0) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->common.oob_queue_lock\n");
+		return -1;
+	}
 	ctx->common.oob_data_enabled = true;
 	ctx->common.oob_data_callback = oob_data_callback;
 	ctx->common.oob_data_callback_argument = arg;
+	ctx->common.oob_queue_write_index = 0;
+	ctx->common.oob_queue_read_index = 0;
+
 	return 0;
 }
 
@@ -3028,6 +3088,10 @@ static void rist_server_destroy(struct rist_server *ctx)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing peerlist_lock\n");
 	pthread_rwlock_destroy(&ctx->common.peerlist_lock);
+	if (ctx->common.oob_data_enabled) {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing oob_queue_lock\n");
+		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
+	}
 	ctx->common.shutdown = true;
 	// This last one is not done here but at the exit of server_loop
 	//free(ctx);
@@ -3038,6 +3102,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 	struct rist_server *ctx = (struct rist_server *) arg;
 	uint64_t now = timestampNTP_u64();
 	ctx->common.keepalive_next_time = now;
+	int max_oobperloop = 100;
 
 	uint64_t rist_nack_interval = (uint64_t)ctx->common.rist_max_jitter;
 	uint64_t rist_keepalive_interval = (uint64_t)ctx->common.rist_keepalive_interval;
@@ -3090,6 +3155,11 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 				f = f->next;
 			}
 		}
+
+		// Send oob data
+		if (ctx->common.oob_queue_bytesize > 0)
+			rist_oob_dequeue(&ctx->common, max_oobperloop);
+
 	}
 	rist_server_destroy(ctx);
 	evsocket_loop_finalize(ctx->common.evctx);
@@ -3193,6 +3263,9 @@ int rist_client_destroy(struct rist_client *ctx)
 	}
 
 	pthread_rwlock_unlock(peerlist_lock);
+	pthread_rwlock_destroy(peerlist_lock);
+	if (ctx->common.oob_data_enabled)
+		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
 	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Peers cleanup complete\n");
 
 	ctx->common.shutdown = true;
