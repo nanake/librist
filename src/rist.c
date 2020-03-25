@@ -759,7 +759,6 @@ int rist_server_add_peer(struct rist_server *ctx, const char *url)
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
 		if (p->local_port % 2 != 0) {
-			// TODO: remove peer from timer
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create peer, port must be even!\n");
 			udp_Close(p->sd);
 			free(p);
@@ -771,7 +770,6 @@ int rist_server_add_peer(struct rist_server *ctx, const char *url)
 		p_rtcp = rist_server_add_peer_local(ctx, new_url);
 		if (!p_rtcp)
 		{
-			// TODO: remove peer from timer
 			udp_Close(p->sd);
 			free(p);
 			return -1;
@@ -1344,7 +1342,6 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 			msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Malformed feedback packet, expecting %u bytes in the" \
 				" packet, got a buffer of %u bytes. ptype = %d\n", bytes, 
 				bytes_left, ptype);
-			// TODO: replace the 0 above with rtcp_get_length(pkt)
 			return;
 		}
 
@@ -1357,8 +1354,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					break;
 				}
 				else if (subtype != NACK_FMT_RANGE) {
-					// TODO: this should be debug
-					msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
+					msg(server_id, client_id, RIST_LOG_DEBUG, "[DEBUG] Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
 					break;
 				}
 			case PTYPE_NACK_BITMASK:
@@ -1503,7 +1499,7 @@ static uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, u
 	}
 	else if (peer->flow)
 	{
-		// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues
+		// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
 	}
 	return i_ntp;
 }
@@ -1667,7 +1663,6 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			}
 			else
 			{
-				// Protocol not supported, TODO: support full IP header on receive?
 				msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Protocol %d not supported (wrong profile?)\n", gre->prot_type);
 			}
 			goto protocol_bypass;
@@ -2316,7 +2311,7 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 	return 0;
 }
 
-static void init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
+static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
 {
 	init_socket_subsystem();
 	ctx->evctx = evsocket_init();
@@ -2329,10 +2324,10 @@ static void init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profi
 	ctx->profile = profile;
 
 	if (pthread_rwlock_init(&ctx->peerlist_lock, NULL) != 0) {
-		perror("pthread_rwlock_init()");
-		// TODO: this error cannot be handled with exit!
-		exit(1);
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->peerlist_lock\n");
+		return -1;
 	}
+	return 0;
 }
 
 int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
@@ -2356,7 +2351,13 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
 	ctx->bufferbloat_limit = 6;
 	ctx->bufferbloat_hard_limit = 20;
 
-	init_common_ctx(&ctx->common, profile);
+	if (init_common_ctx(&ctx->common, profile))
+	{
+		free(ctx);
+		ctx = NULL;
+		return -1;
+	}
+
 	ctx->id = (intptr_t)ctx;
 	*_ctx = ctx;
 	return 0;
@@ -2370,7 +2371,13 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 		return -1;
 	}
 
-	init_common_ctx(&ctx->common, profile);
+	if (init_common_ctx(&ctx->common, profile))
+	{
+		free(ctx);
+		ctx = NULL;
+		return -1;
+	}
+
 	ctx->id = (intptr_t)ctx;
 	//ctx->common.seq = 9159579;
 	//ctx->common.seq = RIST_SERVER_QUEUE_BUFFERS - 25000;
