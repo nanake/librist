@@ -240,62 +240,6 @@ static size_t rist_index_dec(struct rist_flow *f,size_t idx)
 	return idx - 1;
 }
 
-static int check_valid_seq(struct rist_peer * peer, uint32_t seq)
-{
-	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
-	intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
-	int ret = 0;
-	return ret;
-	// TODO: Is this entire test really worth it or are we better off letting anything in
-	// and let the buffer reset when something goes wrong ...
-	// What are the chances of an outlier vs a discontinuity? This test is only usefull
-	// for outliers, i.e. perhaps data corruption?
-
-	// TODO: Move this calculation to the peer initialization so that it does 
-	// not happen for every packet
-	// I could use RIST_MAX_PACKET_SIZE but the most likely scenario is 1300 bytes (double it)
-	size_t packets_per_second = (peer->recover_maxbitrate * 1000 / 8) / 1300;
-	size_t max_packets = packets_per_second * peer->recover_buffer_ticks / RIST_CLOCK;
-
-	// We base the server queue index only in the sequence number so we have to check
-	// if the position makes sense (protect against discontinuities)
-	// We still recover from discontinuities because when we reach an empty buffer
-	// the output will reset its state to server_queue_has_items = false
-	// This could be seq_output as well
-	uint32_t max_seq = peer->flow->last_seq_found;
-	uint32_t diff = 0;
-	if (seq >= max_seq) {
-		diff = seq - max_seq;
-		if (diff > (UINT32_MAX / 2)) {
-			diff = (UINT32_MAX - seq) + max_seq;
-			msg(server_id, client_id, RIST_LOG_ERROR,
-				"[ERROR] YELLOW %"PRIu32", %"PRIu32", %"PRIu32"\n", diff, seq, max_seq);
-		}
-
-	} else {
-		diff = max_seq - seq;
-		if (diff > (UINT32_MAX / 2)) {
-			diff = (UINT32_MAX - max_seq) + seq;
-			msg(server_id, client_id, RIST_LOG_ERROR,
-				"[ERROR] GREEN %"PRIu32", %"PRIu32", %"PRIu32"\n", diff, seq, max_seq);
-		}
-	}
-	if (diff > max_packets)
-	{
-		msg(server_id, client_id, RIST_LOG_ERROR,
-				"[ERROR] The received sequence %"PRIu32" does not belong in this buffer, delta = %" PRIu32
-					" > max_packets = %zu, max_seq %"PRIu32", discarding.\n",
-			seq, diff, max_packets, max_seq);
-		ret = -2;
-	}
-	else
-	{
-		//fprintf(stderr,"diff %"PRIu32"\n", diff);
-	}
-	
-	return ret;
-}
-
 static int server_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_flow *f = peer->flow;
@@ -336,13 +280,7 @@ static int server_enqueue(struct rist_peer *peer, uint64_t source_time, const vo
 
 	// Now, get the new position and check what is there
 	size_t idx = seq % f->server_queue_max;
-	int ret = check_valid_seq(peer, seq);
-	if (ret < 0) {
-		// seq too far from where we are in the buffer!
-		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Invalid seq %"PRIu32" sent with DATA packet, discarding ...\n", seq);
-		return 0;
-	}
-	else if (f->server_queue[idx]) {
+	if (f->server_queue[idx]) {
 		// TODO: record stats
 		struct rist_buffer *b = f->server_queue[idx];
 		if (b->seq == seq) {
@@ -477,14 +415,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	uint64_t now = timestampNTP_u64();
 	struct rist_peer *peer = b->peer;
 
-	if (check_valid_seq(peer, b->seq) < 0) {
-		/* too late for this block, drop it */
-		msg(f->server_id, f->client_id, RIST_LOG_ERROR, 
-		"[ERROR] Datagram %"PRIu32" is missing but we cannot send the NACK (%d), age is %"PRIu64"ms\n",
-		b->seq, f->last_seq_output, f->missing_counter,
-		(now - b->insertion_time) / RIST_CLOCK);
-		return 7;
-	} else if (b->nack_count >= peer->bufferbloat_hard_limit) {
+	if (b->nack_count >= peer->bufferbloat_hard_limit) {
 		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
 				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, bufferbloat_hard_limit %d, bufferbloat_mode %d, stats_server_total.recovered_average %d\n",
 					b->seq,
@@ -1347,26 +1278,20 @@ static void rist_server_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 
 	if (peer->flow && peer->advanced) {
 		// We must insert a placeholder into the queue to prevent counting it as a hole during missing packet search
-		if (check_valid_seq(peer, seq) < 0) {
-			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid seq %"PRIu32" sent with RTCP packet, discarding ...\n", seq);
-			return;
+		size_t idx = seq % peer->flow->server_queue_max;
+		struct rist_buffer *b = peer->flow->server_queue[idx];
+		if (b)
+		{
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] RTCP buffer placeholder had data!!! seq=%"PRIu32", buf_seq=%"PRIu32"\n",
+				seq, b->seq);
+			free(b->data);
+			free(b);
+			peer->flow->server_queue[idx] = NULL;
 		}
-		else {
-			size_t idx = seq % peer->flow->server_queue_max;
-			struct rist_buffer *b = peer->flow->server_queue[idx];
-			if (b)
-			{
-				msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] RTCP buffer placeholder had data!!! seq=%"PRIu32", buf_seq=%"PRIu32"\n",
-					seq, b->seq);
-				free(b->data);
-				free(b);
-				peer->flow->server_queue[idx] = NULL;
-			}
-			peer->flow->server_queue[idx] = rist_new_buffer(NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
-			if (RIST_UNLIKELY(!peer->flow->server_queue[idx])) {
-				msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside server buffer, OOM, decrease max bitrate or buffer time length\n");
-				return;
-			}
+		peer->flow->server_queue[idx] = rist_new_buffer(NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
+		if (RIST_UNLIKELY(!peer->flow->server_queue[idx])) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside server buffer, OOM, decrease max bitrate or buffer time length\n");
+			return;
 		}
 	}
 }
@@ -2821,7 +2746,6 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 
 }
 
-// TODO: Remove peer from here and the remove function and just return peer_id (or allow a secific one to be specified)
 int rist_client_add_peer(struct rist_client *ctx,
 		const struct rist_peer_config *config, struct rist_peer **peer)
 {
@@ -2865,8 +2789,6 @@ int rist_client_add_peer(struct rist_client *ctx,
 		rist_fsm_recv_connect(newpeer);
 	}
 
-	// TODO: get rid of this peer object reference and use peer id instead
-	// This reference is used when the calling app wants to remove a peer
 	*peer = newpeer;
 
 	return 0;
