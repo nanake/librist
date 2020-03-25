@@ -290,7 +290,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	struct rist_common_ctx *ctx = get_cctx(p);
 
 	if (p->sd < 0 || !p->address_len) {
-		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] rist_send_common_rtcp failed\n");
+		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] rist_send_common_rtcp failed\n");		
 		return -1;
 	}
 
@@ -523,7 +523,7 @@ int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int arra
 	sdes->cname = 1;
 	sdes->name_len = strlen(peer->cname);
 	strcpy(sdes->udn, peer->cname);
-	// TODO: make sure the padding bytes are zeroes (they are rabdom bytes now)
+	// TODO: make sure the padding bytes are zeroes (they are random bytes now)
 
 	if (array_len > 0)
 	{
@@ -763,11 +763,11 @@ void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer 
 			continue;
 		}
 
-		/**************** TODO *****************/
-		/* * * * * * * * * * * * * * * * * * * */
+		/*************************************/
+		/* * * * * * * * * * * * * * * * * * */
 		/** Heuristics for sender goes here **/
-		/* * * * * * * * * * * * * * * * * * * */
-		/**************** TODO *****************/
+		/* * * * * * * * * * * * * * * * * * */
+		/*************************************/
 
 		if (peer->weight == 0) {
 			uint8_t *payload = buffer->data;
@@ -826,6 +826,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 //			"\tCurrent read/write index are %zu/%zu \n", ctx->client_retry_queue_read_index,
 //			ctx->client_retry_queue_write_index);
 
+	// TODO: Is this logic flawed and we are always one unit behind (look at oob_dequee)
 	size_t client_retry_queue_read_index = (ctx->client_retry_queue_read_index + 1) % ctx->client_retry_queue_size;
 
 	if (client_retry_queue_read_index == ctx->client_retry_queue_write_index) {
