@@ -26,6 +26,16 @@ None. This library has no external runtime dependencies on any OS other than nor
 
 The reasoning behind this decision is the same as for libvorbis, see [RMS on vorbis](https://lwn.net/2001/0301/a/rms-ov-license.php3).
 
+## Library sweet spot (optimal use cases with current defaults)
+
+- Buffer sizes from 50 ms to 30 seconds
+- Networks with round trip times from 0ms to 5000ms
+- Bitrates from 0 to 1 Gbps
+- Packet size should be kept under the path's MTU (typically 1500). The library does not support packet fragmentation.
+- Bi-directional communication available (not one-way systems like satellite)
+
+If you have an application that needs to operate outside the sweet spot described above, you will need to modify some constants in the rist-private.h header and/or use some of the more obscure API calls to fine tune the library for your use case. The library can overcome all the limitations above by fine-tuning with the exception of packet fragmentation which will be addressed as a feature enhancement in the future.
+
 # Roadmap
 
 The plan is the following:
