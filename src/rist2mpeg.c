@@ -329,8 +329,10 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	// TODO: make the 1969 configurable (used for reverse connection gre-dst-port inside main profile)
 	const struct rist_peer_config default_peer_config = {
 		.address = addr[0],
+		.gre_dst_port = 1969,
 		.recovery_mode = recovery_mode,
 		.recovery_maxbitrate = recovery_maxbitrate,
 		.recovery_maxbitrate_return = recovery_maxbitrate_return,
