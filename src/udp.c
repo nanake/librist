@@ -158,7 +158,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		hdr->dst_port = htobe16(dst_port);
 		if (payload_type == RIST_PAYLOAD_TYPE_RTCP || payload_type == RIST_PAYLOAD_TYPE_RTCP_NACK)
 		{
-			hdr->dst_port = htobe16(dst_port+1);
 			hdr_len = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 		}
 		else
@@ -378,6 +377,9 @@ int rist_set_url(struct rist_peer *peer)
 	if (parsed_url.listening) {
 		peer->local_port = parsed_url.port;
 	}
+	else {
+		peer->remote_port = parsed_url.port;
+	}
 
 	if (peer->address_family == AF_INET) {
 		((struct sockaddr_in*)&peer->u.address)->sin_port = htons(parsed_url.port);
@@ -489,6 +491,7 @@ void rist_create_socket(struct rist_peer *peer)
 			msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", msgbuf);
 			free(msgbuf);
 		}
+		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
 	rist_populate_cname(peer);
@@ -578,7 +581,7 @@ int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int arra
 	}
 
 	// We use direct send from server to client (no fifo to keep track of seq/idx)
-	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, 0, 0, false);
+	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, false);
 }
 
 void rist_send_client_rtcp(struct rist_peer *peer)
@@ -630,21 +633,11 @@ void rist_send_client_rtcp(struct rist_peer *peer)
 	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
 	struct rist_client *ctx = peer->client_ctx;
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->client_queue[ctx->client_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, 0, 0);
+	ctx->client_queue[ctx->client_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
 	if (RIST_UNLIKELY(!ctx->client_queue[ctx->client_queue_write_index])) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside client buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
-	}
-	if (peer->listening)
-	{
-		ctx->client_queue[ctx->client_queue_write_index]->src_port = peer->remote_port;
-		ctx->client_queue[ctx->client_queue_write_index]->dst_port = peer->local_port;
-	}
-	else
-	{
-		ctx->client_queue[ctx->client_queue_write_index]->src_port = peer->local_port;
-		ctx->client_queue[ctx->client_queue_write_index]->dst_port = peer->remote_port;
 	}
 	ctx->client_queue[ctx->client_queue_write_index]->peer = peer;
 	ctx->client_queue_bytesize += payload_len;
@@ -1013,6 +1006,7 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 	}
 
 	msg(server_id, client_id, RIST_LOG_INFO,
-		"[INFO] %sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32"\n",
-		prefix, ipstr, port, peer->listening, peer->adv_peer_id);
+		"[INFO] %sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32", ports: %u->%u\n",
+		prefix, ipstr, port, peer->listening, peer->adv_peer_id,
+		peer->local_port, peer->remote_port);
 }

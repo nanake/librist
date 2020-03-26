@@ -300,6 +300,7 @@ struct rist_server {
 	intptr_t id;
 
 	/* Default peer config */
+	uint16_t gre_dst_port;
 	enum rist_recovery_mode recovery_mode;
 	uint32_t recovery_maxbitrate;
 	uint32_t recovery_maxbitrate_return;

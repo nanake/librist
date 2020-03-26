@@ -93,7 +93,7 @@ struct rist_peer;
 
 struct rist_peer_config {
 	const char *address;
-	const char *localport;
+	uint16_t gre_dst_port;
 
 	/* Recovery options */
 	enum rist_recovery_mode recovery_mode;

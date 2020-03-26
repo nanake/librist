@@ -32,8 +32,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol,arg);
 static PTHREAD_START_FUNC(server_pthread_dataout,arg);
 static void rist_fsm_init_comm(struct rist_peer *peer);
 
-static struct rist_peer *peer_initialize(const char *url, const char *localport,
-										struct rist_client *client_ctx,
+static struct rist_peer *peer_initialize(const char *url, struct rist_client *client_ctx,
 										struct rist_server *server_ctx);
 
 struct rist_common_ctx *get_cctx(struct rist_peer *peer)
@@ -730,7 +729,7 @@ nack_loop_continue:
 static struct rist_peer *rist_server_add_peer_local(struct rist_server *ctx, const char *url)
 {
 	/* Initialize peer */
-	struct rist_peer *p = peer_initialize(url, NULL, NULL, ctx);
+	struct rist_peer *p = peer_initialize(url, NULL, ctx);
 	if (!p) {
 		return NULL;
 	}
@@ -741,6 +740,10 @@ static struct rist_peer *rist_server_add_peer_local(struct rist_server *ctx, con
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create socket\n");
 		free(p);
 		return NULL;
+	}
+
+	if (ctx->gre_dst_port != 0) {
+		p->remote_port = ctx->gre_dst_port;
 	}
 
 	if (!p->listening)
@@ -837,7 +840,7 @@ static void rist_fsm_init_comm(struct rist_peer *peer)
 	/* Enable RTCP timer and jump start it */
 	if (!peer->listening && peer->is_rtcp) {
 		if (!peer->send_keepalive) {
-			msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Enabling keepalive\n");
+			msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Enabling keepalive for peer %"PRIu32"\n", peer->adv_peer_id);
 			peer->send_keepalive = true;
 		}
 
@@ -1927,10 +1930,18 @@ protocol_bypass:
 			new_peer_id = peer_id;
 		else
 			new_peer_id = ++cctx->peer_counter;
-		msg(server_id, client_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32"\n", flow_id, new_peer_id);
-		p = peer_initialize(NULL, NULL, peer->client_ctx, peer->server_ctx);
-		p->local_port = peer->local_port;
-		p->remote_port = peer->remote_port;
+		p = peer_initialize(NULL, peer->client_ctx, peer->server_ctx);
+		if (cctx->profile == RIST_PROFILE_SIMPLE) {
+			p->remote_port = peer->remote_port;
+			p->local_port = peer->local_port;
+		}
+		else {
+			// TODO: what happens if the first packet is a keepalive??
+			p->remote_port = payload.src_port;
+			p->local_port = payload.dst_port;
+		}
+		msg(server_id, client_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u<-%u\n", 
+			flow_id, new_peer_id, p->local_port, p->remote_port);
 		if (peer->server_mode)
 			p->adv_flow_id = flow_id;
 		else
@@ -1992,7 +2003,7 @@ protocol_bypass:
 		// Final states happens during settings parsing event on next ping packet
 	} else {
 		if (!p) {
-			if (payload.type != 7) {
+			if (payload.type != RIST_PAYLOAD_TYPE_DATA_RAW) {
 				msg(0, 0, RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d/%d)\n",
 					payload.type, peer->state_peer, peer->state_local);
 				rist_print_inet_info("Orphan ", peer);
@@ -2184,8 +2195,7 @@ static void client_send_data(struct rist_client *ctx, int maxcount)
 	}
 }
 
-static struct rist_peer *peer_initialize(const char *url, const char *localport,
-										struct rist_client *client_ctx,
+static struct rist_peer *peer_initialize(const char *url, struct rist_client *client_ctx,
 										struct rist_server *server_ctx)
 {
 	intptr_t server_id = server_ctx ? server_ctx->id : 0;
@@ -2195,10 +2205,6 @@ static struct rist_peer *peer_initialize(const char *url, const char *localport,
 	if (!p) {
 		msg(server_id, client_id, RIST_LOG_ERROR, "\tNot enough memory creating peer!\n");
 		return NULL;
-	}
-
-	if (localport) {
-		p->local_port = (uint16_t)atoi(localport);
 	}
 
 	if (url) {
@@ -2766,7 +2772,7 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 {
 
 	/* Initialize peer */
-	struct rist_peer *newpeer = peer_initialize(config->address, config->localport, ctx, NULL);
+	struct rist_peer *newpeer = peer_initialize(config->address, ctx, NULL);
 	if (!newpeer) {
 		return NULL;
 	}
@@ -2778,11 +2784,6 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 		free(newpeer);
 		return NULL;
 	}
-
-	newpeer->cooldown_time = 0;
-	newpeer->is_rtcp = b_rtcp;
-	newpeer->adv_peer_id = ctx->common.peer_counter++;
-	newpeer->adv_flow_id = ctx->adv_flow_id;
 
 	if (b_rtcp)
 	{
@@ -2796,11 +2797,23 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 			addrv6->sin6_port = be16toh(newpeer->remote_port);
 		}
 	}
+	else
+	{
+		newpeer->local_port = 32768 + (ctx->common.peer_counter % 28232);
+		// This overrides the physical port populate in rist_create_socket with the gre dst port
+		if (ctx->common.profile != RIST_PROFILE_SIMPLE && config->gre_dst_port != 0)
+			newpeer->remote_port = config->gre_dst_port;
+	}
+
+	newpeer->cooldown_time = 0;
+	newpeer->is_rtcp = b_rtcp;
+	newpeer->adv_peer_id = ctx->common.peer_counter++;
+	newpeer->adv_flow_id = ctx->adv_flow_id;
 
 	client_store_settings(ctx, config, newpeer);
 
-	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Advertising flow_id  %" PRIu64 " and peer_id %u\n",
-		newpeer->adv_flow_id, newpeer->adv_peer_id);
+	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Advertising flow_id  %" PRIu64 " and peer_id %u, %u/%u\n",
+		newpeer->adv_flow_id, newpeer->adv_peer_id, newpeer->local_port, newpeer->remote_port);
 
 	return newpeer;
 
@@ -2832,7 +2845,7 @@ int rist_client_add_peer(struct rist_client *ctx,
 		rist_fsm_init_comm(peer_rtcp);
 		/* Authenticate right away */
 		if (!peer_rtcp->listening) {
-			client_peer_append(ctx, newpeer);
+			client_peer_append(ctx, peer_rtcp);
 			rist_fsm_recv_connect(peer_rtcp);
 		}
 	}
@@ -2876,6 +2889,7 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 	if (default_peer_config) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing default configuration values\n");
 		/* Process default flow/peer configuration */
+		ctx->gre_dst_port = default_peer_config->gre_dst_port;
 		ctx->recovery_mode = default_peer_config->recovery_mode;
 		ctx->recovery_maxbitrate = default_peer_config->recovery_maxbitrate;
 		ctx->recovery_maxbitrate_return = default_peer_config->recovery_maxbitrate_return;
