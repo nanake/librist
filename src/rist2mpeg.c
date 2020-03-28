@@ -109,18 +109,20 @@ struct rist_port_filter {
 	uint16_t dst_port;
 };
 
-static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
+static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 	(void) flow_id;
+	(void) timestamp_ntp;
+	(void) flags;
 
 	if (port_filter->src_port && port_filter->src_port != src_port) {
-		fprintf(stderr, "Source port mistmatch %d != %d\n", port_filter->src_port, src_port);
+		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->src_port, src_port);
 		return;
 	}
 
 	if (port_filter->dst_port && port_filter->dst_port != dst_port) {
-		fprintf(stderr, "Destination port mistmatch %d != %d\n", port_filter->dst_port, dst_port);
+		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->dst_port, dst_port);
 		return;
 	}
 
