@@ -8,7 +8,7 @@
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (3)
+#define RIST_API_VERSION (4)
 #define RIST_SUBVERSION (4)
 
 #include <stdint.h>
@@ -496,7 +496,7 @@ RIST_API int rist_server_oob_enable(struct rist_server *ctx,
  * @note Return immediately
  */
 RIST_API int rist_server_start(struct rist_server *ctx,
-	void (*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port),
+	void (*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
 	void *arg);
 
 /**

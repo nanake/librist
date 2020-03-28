@@ -554,7 +554,10 @@ static void server_output(struct rist_server *ctx, struct rist_flow *f)
 				}
 				if (ctx->server_receive_callback && b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 					uint8_t *payload = b->data;
-					ctx->server_receive_callback(ctx->server_receive_callback_argument, b->peer, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port);
+					// TODO: support passing of discontinuities
+					// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
+					uint32_t flags = 0;
+					ctx->server_receive_callback(ctx->server_receive_callback_argument, b->peer, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port, b->source_time, flags );
 				}
 			}
 			//else
@@ -3197,7 +3200,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 }
 
 int rist_server_start(struct rist_server *ctx,
-	void(*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port),
+	void(*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
 	void *arg)
 {
 	ctx->server_receive_callback = receive_callback;
