@@ -76,11 +76,7 @@ void rist_delete_flow(struct rist_server *ctx, struct rist_flow *f)
 	f->shutdown = 1;
 	while (f->shutdown != 2) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for data output thread to exit\n");
-#ifdef WIN32
-		Sleep(5);
-#else
 		usleep(5000);
-#endif
 	}
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Exiting data output thread\n");
 	f->server_thread = 0;

@@ -9,7 +9,7 @@
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (4)
-#define RIST_SUBVERSION (4)
+#define RIST_SUBVERSION (5)
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -91,6 +91,17 @@ struct rist_server;
 struct rist_client;
 struct rist_peer;
 
+struct rist_output_buffer {
+	struct rist_peer *peer;
+	uint32_t flow_id;
+	void *payload;
+	size_t payload_len;
+	uint16_t src_port;
+	uint16_t dst_port;
+	uint64_t timestamp_ntp;
+	uint32_t flags;
+};
+
 struct rist_peer_config {
 	const char *address;
 	uint16_t gre_dst_port;
@@ -132,15 +143,6 @@ RIST_API int rist_client_create(struct rist_client **ctx, enum rist_profile prof
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len);
-
-/**
- * @brief Destroy RIST client
- *
- * Destroy a RIST client instance
- *
- * @return a context representing the client instance
- */
-RIST_API int rist_client_destroy(struct rist_client *ctx);
 
 /**
  * @brief Initialize Client
@@ -553,6 +555,16 @@ RIST_API int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_pe
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_shutdown(struct rist_server *ctx);
+
+/**
+ * @brief Reads rist data
+ *
+ * Use this API to read data from an internal fifo queue instead of the callback
+ *
+ * @param a RIST server context
+ * @return a pointer to the rist_output_buffer structure
+ */
+RIST_API struct rist_output_buffer *rist_server_receive(struct rist_server *ctx);
 
 __END_DECLS
 

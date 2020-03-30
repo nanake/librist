@@ -467,6 +467,53 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
+struct rist_output_buffer *rist_server_receive(struct rist_server *ctx)
+{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_receive call!\n");
+		return NULL;
+	}
+	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
+	if (ctx->dataout_fifo_queue_read_index == ctx->dataout_fifo_queue_write_index) {
+		pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+		return NULL;
+	}
+	struct rist_output_buffer *output_buffer = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
+	if (output_buffer) {
+		ctx->dataout_fifo_queue_bytesize -= output_buffer->payload_len;
+		ctx->dataout_fifo_queue_read_index = (ctx->dataout_fifo_queue_read_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
+		ctx->dataout_fifo_queue_counter--;
+		//msg(0, 0, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
+		//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
+	}
+	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+	return output_buffer;
+}
+
+static struct rist_output_buffer *new_output_buffer(struct rist_output_buffer *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
+{
+	struct rist_output_buffer *output_buffer;
+	if (output_buffer_current)
+		output_buffer = output_buffer_current;
+	else
+		output_buffer = calloc(1, sizeof(struct rist_output_buffer));
+	output_buffer->peer = b->peer;
+	output_buffer->flow_id = flow_id;
+	uint8_t *newbuffer;
+	if (output_buffer->payload && b->size != output_buffer->payload_len)
+		newbuffer = realloc(output_buffer->payload, b->size);
+	else
+		newbuffer = malloc(b->size);
+	memcpy(newbuffer, payload, b->size);
+	output_buffer->payload = payload;
+	output_buffer->payload_len = b->size;
+	output_buffer->src_port = b->src_port;
+	output_buffer->dst_port = b->dst_port;
+	output_buffer->timestamp_ntp = b->source_time;
+	output_buffer->flags = flags;
+	return output_buffer;
+}
+
 static void server_output(struct rist_server *ctx, struct rist_flow *f)
 {
 
@@ -552,12 +599,24 @@ static void server_output(struct rist_server *ctx, struct rist_flow *f)
 						f->last_seq_output + 1, b->seq);
 					f->stats_instant.lost++;
 				}
+				// TODO: support passing of discontinuities
+				// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
+				uint32_t flags = 0;
 				if (ctx->server_receive_callback && b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 					uint8_t *payload = b->data;
-					// TODO: support passing of discontinuities
-					// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
-					uint32_t flags = 0;
 					ctx->server_receive_callback(ctx->server_receive_callback_argument, b->peer, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port, b->source_time, flags );
+				}
+				else if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
+					/* insert into fifo queue */
+					uint8_t *payload = b->data;
+					pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
+					ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index] = new_output_buffer(
+							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index], b, 
+							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
+					ctx->dataout_fifo_queue_write_index = (ctx->dataout_fifo_queue_write_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
+					ctx->dataout_fifo_queue_bytesize += b->size;
+					ctx->dataout_fifo_queue_counter++;
+					pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
 				}
 			}
 			//else
@@ -2356,20 +2415,9 @@ static PTHREAD_START_FUNC(client_pthread_protocol, arg)
 #ifdef _WIN32
 	WSACleanup();
 #endif
-	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Exiting master client loop\n");
-	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Freeing up peers memory allocations\n");
-	struct rist_peer *peer = ctx->common.PEERS;
-	while (peer) {
-		struct rist_peer *nextpeer = peer->next;
-		free(peer);
-		peer = nextpeer;
-	}
-	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Freeing up context memory allocations\n");
-	free(ctx->client_retry_queue);
-	//free(ctx->client_queue); // TODO: this array does not need to be freed?
-	ctx->client_thread = 0;
-	free(ctx);
-
+	msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Exiting master client loop\n");
+	ctx->common.shutdown = 2;
+	
 	return 0;
 }
 
@@ -2520,18 +2568,18 @@ void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
 	if (!peer->server_mode)
 
 	struct rist_peer *nextpeer = peer->next;
-	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer data received event\n");
+	msg(server_id, client_id, RIST_LOG_INFO, "[CLEANUP] Removing peer data received event\n");
 	// data receive event
 	if (peer->event_recv) {
 		evsocket_delevent(evctx, peer->event_recv);
 		peer->event_recv = NULL;
 	}
 
-	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer handshake/ping timer\n");
+	msg(server_id, client_id, RIST_LOG_INFO, "[CLEANUP] Removing peer handshake/ping timer\n");
 	/ rtcp timer
 	peer->send_keepalive = false;
 
-	msg(server_id, client_id, RIST_LOG_INFO, "[SHUTDOWN] Closing peer socket on port %d\n", peer->local_port);
+	msg(server_id, client_id, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 	if (peer->sd > -1) {
 		udp_Close(peer->sd);
 		peer->sd = -1;
@@ -3053,7 +3101,7 @@ static void rist_server_destroy(struct rist_server *ctx)
 {
 	struct evsocket_ctx *evctx = ctx->common.evctx;
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Starting Flows cleanup\n");
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Starting Flows cleanup\n");
 
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 
@@ -3064,10 +3112,10 @@ static void rist_server_destroy(struct rist_server *ctx)
 		rist_delete_flow(ctx, f);
 		f = nextflow;
 	}
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Flows cleanup complete\n");
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Flows cleanup complete\n");
 	pthread_rwlock_unlock(peerlist_lock);
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Starting peers cleanup\n");
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Starting peers cleanup\n");
 	/* now use the peer list to destroy all peers and timers */
 	struct rist_peer **PEERS = &ctx->common.PEERS;
 	pthread_rwlock_wrlock(peerlist_lock);
@@ -3077,41 +3125,63 @@ static void rist_server_destroy(struct rist_server *ctx)
 	} else {
 		while (peer) {
 			struct rist_peer *nextpeer = peer->next;
-			msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing peer data received event\n");
+			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing peer data received event\n");
 			/* data receive event */
 			if (peer->event_recv) {
 				evsocket_delevent(evctx, peer->event_recv);
 				peer->event_recv = NULL;
 			}
 
-			msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing peer handshake/ping timer\n");
+			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing peer handshake/ping timer\n");
 			/* rtcp timer */
 			peer->send_keepalive = false;
 
-			msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Closing peer socket on port %d\n", peer->local_port);
+			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 			if (peer->sd > -1) {
 				udp_Close(peer->sd);
 				peer->sd = -1;
 			}
 
-			// Do not free the peer here, do it at the end of the protocol main loop
-			//free(peer);
+			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing up peer memory allocation\n");
+			free(peer);
 			peer = nextpeer;
 		}
 		ctx->common.PEERS = NULL;
 		pthread_rwlock_unlock(peerlist_lock);
 	}
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Peers cleanup complete\n");
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Peers cleanup complete\n");
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing peerlist_lock\n");
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing peerlist_lock\n");
 	pthread_rwlock_destroy(&ctx->common.peerlist_lock);
+
 	if (ctx->common.oob_data_enabled) {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Removing oob_queue_lock\n");
+		// TODO: Are we missing more OOB cleanup?
+		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing oob_queue_lock\n");
 		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
 	}
-	ctx->common.shutdown = true;
-	// This last one is not done here but at the exit of server_loop
-	//free(ctx);
+
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing data output fifo\n");
+	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
+	for (int i = 0; i < RIST_DATAOUT_QUEUE_BUFFERS; i++)
+	{
+		if (ctx->dataout_fifo_queue[i])
+		{
+			uint8_t *payload = ctx->dataout_fifo_queue[i]->payload;
+			if (payload) {
+				free(payload);
+				payload = NULL;
+			}
+			free(ctx->dataout_fifo_queue[i]);
+			ctx->dataout_fifo_queue[i] = NULL;
+		}
+	}
+	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing dataout_fifo_queue_lock\n");
+	pthread_rwlock_destroy(&ctx->dataout_fifo_queue_lock);
+
+	free(ctx);
+	ctx = NULL;
 }
 
 static PTHREAD_START_FUNC(server_pthread_protocol, arg)
@@ -3178,23 +3248,12 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 			rist_oob_dequeue(&ctx->common, max_oobperloop);
 
 	}
-	rist_server_destroy(ctx);
 	evsocket_loop_finalize(ctx->common.evctx);
 #ifdef _WIN32
 	WSACleanup();
 #endif
-	msg(ctx->id, 0, RIST_LOG_INFO, "[SHUTDOWN] Exiting master server loop\n");
-
-	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Freeing up peers memory allocations\n");
-	struct rist_peer *peer = ctx->common.PEERS;
-	while (peer) {
-		struct rist_peer *nextpeer = peer->next;
-		free(peer);
-		peer = nextpeer;
-	}
-
-	ctx->server_thread = 0;
-	free(ctx);
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Exiting master server loop\n");
+	ctx->common.shutdown = 2;
 
 	return 0;
 }
@@ -3203,6 +3262,11 @@ int rist_server_start(struct rist_server *ctx,
 	void(*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
 	void *arg)
 {
+	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init dataout_fifo_queue_lock\n");
+		return -1;
+	}
+
 	ctx->server_receive_callback = receive_callback;
 	ctx->server_receive_callback_argument = arg;
 
@@ -3240,7 +3304,7 @@ char *rist_server_get_status(struct rist_server *ctx)
 	return rist_get_status(&ctx->common);
 }
 
-int rist_client_destroy(struct rist_client *ctx)
+static int rist_client_destroy(struct rist_client *ctx)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_destroy call!\n");
@@ -3248,7 +3312,7 @@ int rist_client_destroy(struct rist_client *ctx)
 	}
 
 	msg(0, ctx->id, RIST_LOG_INFO,
-		"[SHUTDOWN] Starting peers cleanup, count %d\n",
+		"[CLEANUP] Starting peers cleanup, count %d\n",
 		(unsigned) ctx->peer_lst_len);
 
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
@@ -3257,37 +3321,42 @@ int rist_client_destroy(struct rist_client *ctx)
 		struct rist_peer *peer = ctx->peer_lst[j];
 		peer->shutdown = true;
 
-		msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer data received event\n");
+		msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Removing peer data received event\n");
 		/* data receive event */
 		if (peer->event_recv) {
 			struct evsocket_ctx *evctx = ctx->common.evctx;
 			evsocket_delevent(evctx, peer->event_recv);
 		}
 
-		msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Removing peer handshake/ping timer\n");
+		msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Removing peer handshake/ping timer\n");
 		/* rtcp timer */
 		if (peer->send_keepalive) {
 			peer->send_keepalive = false;
 		}
 
-		msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Closing peer socket on port %d\n", peer->local_port);
+		msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 		if (peer->sd > -1) {
 			udp_Close(peer->sd);
 			peer->sd = -1;
 		}
-		// Do not free the peer here, do it at the end of the rtcp main loop
-		//free(peer);
+		free(peer);
 	}
 
 	pthread_rwlock_unlock(peerlist_lock);
 	pthread_rwlock_destroy(peerlist_lock);
-	if (ctx->common.oob_data_enabled)
-		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
-	msg(0, ctx->id, RIST_LOG_INFO, "[SHUTDOWN] Peers cleanup complete\n");
+	msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Peers cleanup complete\n");
 
-	ctx->common.shutdown = true;
-	// This last one is not done here but at the exit of client_loop
-	//free(ctx);
+	if (ctx->common.oob_data_enabled) {
+		// TODO: Are we missing more OOB cleanup?
+		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing oob_queue_lock\n");
+		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
+	}
+
+	msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Freeing up context memory allocations\n");
+	free(ctx->client_retry_queue);
+	//free(ctx->client_queue); // TODO: this array does not need to be freed?
+	free(ctx);
+	ctx = NULL;
 
 	return 0;
 }
@@ -3298,7 +3367,14 @@ int rist_client_shutdown(struct rist_client *ctx)
 		return -1;
 	}
 
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
+	ctx->common.shutdown = 1;
+	while (ctx->common.shutdown != 2) {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
+		usleep(5000);
+	}
 	rist_client_destroy(ctx);
+
 	return 0;
 }
 
@@ -3308,6 +3384,13 @@ int rist_server_shutdown(struct rist_server *ctx)
 		return -1;
 	}
 
-	ctx->common.shutdown = true;
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
+	ctx->common.shutdown = 1;
+	while (ctx->common.shutdown != 2) {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
+		usleep(5000);
+	}
+	rist_server_destroy(ctx);
+
 	return 0;
 }

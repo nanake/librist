@@ -30,10 +30,11 @@ __BEGIN_DECLS
 #include <errno.h>
 
 #define UINT16_SIZE (UINT16_MAX + 1)
-// These 3 control the memory footprint and buffer capacity of the lib
+// These 4 control the memory footprint and buffer capacity of the lib
 #define RIST_SERVER_QUEUE_BUFFERS ((UINT16_SIZE) * 10)
 #define RIST_RETRY_QUEUE_BUFFERS ((UINT16_SIZE) * 5)
 #define RIST_OOB_QUEUE_BUFFERS ((UINT16_SIZE) * 1)
+#define RIST_DATAOUT_QUEUE_BUFFERS (1000)
 // This will restrict the use of the library to the configured maximum packet size
 #define RIST_MAX_PACKET_SIZE (10000)
 
@@ -227,7 +228,7 @@ struct rist_retry {
 };
 
 struct rist_common_ctx {
-	volatile bool shutdown;
+	volatile int shutdown;
 	volatile bool startup_complete;
 
 	/* Flows */
@@ -289,9 +290,17 @@ struct rist_common_ctx {
 };
 
 struct rist_server {
-	/* Server Callback */
+	/* Server data callback */
 	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
 	void *server_receive_callback_argument;
+
+	/* Server timed async data output */
+	pthread_rwlock_t dataout_fifo_queue_lock;
+	struct rist_output_buffer *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
+	size_t dataout_fifo_queue_bytesize;
+	uint16_t dataout_fifo_queue_counter;
+	uint16_t dataout_fifo_queue_read_index;
+	uint16_t dataout_fifo_queue_write_index;
 
 	/* Server thread variables */
 	pthread_t server_thread;
