@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <stdbool.h>
+#include <signal.h>
 #include "network.h"
 
 #define INPUT_COUNT 2
@@ -134,6 +135,10 @@ static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const v
 	}
 }
 
+static void intHandler(int signal) {
+	fprintf(stderr, "Signal %d received\n", signal);
+}
+
 static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_server *ctx = (struct rist_server *)arg;
@@ -187,6 +192,9 @@ int main(int argc, char *argv[])
 	struct rist_port_filter port_filter;
 	port_filter.src_port = 0;
 	port_filter.dst_port = 0;
+	struct sigaction act;
+	act.sa_handler = intHandler;
+	sigaction(SIGINT, &act, NULL);
 
 	for (size_t i = 0; i < INPUT_COUNT; i++) {
 		url[i] = NULL;
@@ -420,9 +428,9 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	fprintf(stderr, "Pause application?\n");
-
 	pause();
+
+	rist_server_shutdown(ctx);
 
 	if (shared_secret)
 		free(shared_secret);

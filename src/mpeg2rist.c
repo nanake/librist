@@ -17,6 +17,7 @@
 #include <sys/ioctl.h>
 #include <net/if.h>
 #include <sys/time.h>
+#include <signal.h>
 #include "network.h"
 
 #define PEER_COUNT 4
@@ -131,6 +132,12 @@ static void cb_recv_oob(void *arg, struct rist_peer *peer, const void *buf, size
 	return;
 }
 
+static int signalReceived = 0;
+static void intHandler(int signal) {
+	fprintf(stderr, "Signal %d received\n", signal);
+	signalReceived = signal;
+}
+
 int main(int argc, char *argv[])
 {
 	int rist;
@@ -160,6 +167,9 @@ int main(int argc, char *argv[])
 	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
 	uint32_t buffer_bloat_limit = 6;
 	uint32_t buffer_bloat_hard_limit = 20;
+	struct sigaction act;
+	act.sa_handler = intHandler;
+	sigaction(SIGINT, &act, NULL);
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
 		address[i] = NULL;
@@ -400,7 +410,7 @@ int main(int argc, char *argv[])
 	}
 
 	uint8_t buffer[MPEG_BUFFER_SIZE];
-	while (1) {
+	while (!signalReceived) {
 		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
 		if (r > 0) {
 			w = rist_client_write(ctx, buffer, r, src_port, dst_port);
@@ -408,12 +418,12 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	rist_client_shutdown(ctx);
+
 	if (shared_secret)
 		free(shared_secret);
 	if (cname)
 		free(cname);
-
-	fprintf(stderr, "Recv: %s\n", strerror(errno));
 
 	return 0;
 }
