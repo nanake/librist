@@ -128,29 +128,29 @@ struct rist_peer_config {
  * Create a RIST client instance
  *
  * @param[out] ctx a context representing the client instance
+ * @param flow_id Flow ID
+ * @param profile RIST profile
+ * @param loglevel Level of log messages to display
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_new(struct rist_client **ctx, enum rist_profile profile);
+RIST_API int rist_client_create(struct rist_client **ctx, enum rist_profile profile,
+				uint32_t flow_id, enum rist_log_level log_level);
 
-/**
- * @brief Initialize Client
+ /**
+ * @brief Assign dynamic authentiation handler
  *
- * Client is initialized and waiting to add peers.
+ * Whenever a new peer is connected, @a conn_cb is called.
+ * Whenever a new peer is disconnected, @a disconn_cb is called.
  *
- * @param a RIST client context
- * @param flow_id Flow ID
- * @param loglevel Level of log messages to display
- * @param auth_connect_callback A pointer to the function that will be called when a new peer
+ * @param conn_cb A pointer to the function that will be called when a new peer
  * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
- * @param auth_disconnect_callback A pointer to the function that will be called when a new peer
+ * @param disconn_cb A pointer to the function that will be called when a new peer
  * is marked as dead (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `auth_connect_callback` and `auth_disconnect_callback`
- * @return 0 on success, -1,-2, or -3 in case of error.
+ * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
  */
-RIST_API int rist_client_init(struct rist_client *ctx,
-		uint32_t flow_id, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+RIST_API int rist_client_auth_handler_set(struct rist_client *ctx,
+		int (*connect_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 
 /**
@@ -335,34 +335,35 @@ RIST_API int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_pe
 RIST_API int rist_client_destroy(struct rist_client *ctx);
 
 /**
- * @brief Create RIST Server
- *
  * Create a RIST server instance
  *
  * @param[out] ctx a context representing the server instance
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_new(struct rist_server **ctx, enum rist_profile profile);
-
-/**
- * @brief Initialize server
- *
- * Server is initialized and waiting start.
- *
- * @param a RIST server context
+ * @param profile RIST profile
  * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @param loglevel Level of log messages to display
- * @param auth_connect_callback A pointer to the function that will be called when a new peer
- * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
- * @param auth_disconnect_callback A pointer to the function that will be called when a new peer
- * is marked as dead (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `auth_connect_callback` and `auth_disconnect_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_init(struct rist_server *ctx,
-		const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile profile,
+			const struct rist_peer_config *default_peer_config,
+			enum rist_log_level log_level);
+ 
+/**
+ * @brief Assign dynamic authentiation handler
+ *
+ * Whenever a new peer is connected, @a conn_cb is called.
+ * Whenever a new peer is disconnected, @a disconn_cb is called.
+ *
+ * @param conn_cb A pointer to the function that will be called when a new peer
+ * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
+ * @param disconn_cb A pointer to the function that will be called when a new peer
+ * is marked as dead (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
+ */
+RIST_API int rist_server_auth_handler(struct rist_server *ctx,
+		int (*connect_cb)(void *arg, char* connecting_ip,
+		uint16_t connecting_port, char* local_ip,
+		uint16_t local_port, struct rist_peer *peer),
+		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 
 /**
@@ -518,28 +519,6 @@ RIST_API struct rist_output_buffer *rist_server_data_read(struct rist_server *ct
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_destroy(struct rist_server *ctx);
-
-/**
- * @brief Set custom file descriptor to be used for printing stats
- *
- * Set fd to print librist statistics
- *
- * @param fd file descriptor to be used for
- *        for statistics
- *
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_set_stats_fd(int fd);
-
-/**
- * @brief Set custom udp port to be used for printing stats
- *
- * Set port to print librist statistics
- *
- * @param port port to be used for statistics
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_set_stats_socket(int port);
 
 __END_DECLS
 

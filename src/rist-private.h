@@ -272,9 +272,11 @@ struct rist_common_ctx {
 	uint32_t peer_counter;
 
 	/* Auth callback variables */
-	int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer);
-	void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer);
-	void *auth_callback_argument;
+	struct {
+		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer);
+		void (*disconn_cb)(void *arg, struct rist_peer *peer);
+		void *arg;
+	} auth;
 
 	/* Out-of-band data variables */
 	void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len);

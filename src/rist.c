@@ -2024,7 +2024,7 @@ protocol_bypass:
 		rist_populate_cname(p);
 
 		// Optional validation of connecting client
-		if (cctx->auth_connect_callback) {
+		if (cctx->auth.conn_cb) {
 			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
 			uint16_t port;
@@ -2036,7 +2036,7 @@ protocol_bypass:
 				parent_ip_string = "";
 			}
 			if (incoming_ip_string) {
-				if (!cctx->auth_connect_callback(cctx->auth_callback_argument,
+				if (!cctx->auth.conn_cb(cctx->auth.arg,
 						incoming_ip_string,
 						port,
 						parent_ip_string,
@@ -2440,8 +2440,23 @@ static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profil
 	return 0;
 }
 
-int rist_server_new(struct rist_server **_ctx, enum rist_profile profile)
+int rist_server_create(struct rist_server **_ctx, enum rist_profile profile,
+		const struct rist_peer_config *peer_config,
+		enum rist_log_level log_level)
 {
+	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
+	uint32_t recovery_maxbitrate = 100000;
+	uint32_t recovery_maxbitrate_return = 0;
+	uint32_t recovery_length_min = 1000;
+	uint32_t recovery_length_max = 1000;
+	uint32_t recovery_reorder_buffer = 70;
+	uint32_t recovery_rtt_min = 50;
+	uint32_t recovery_rtt_max = 500;
+	uint32_t weight = 0;
+	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
+	uint32_t buffer_bloat_limit = 6;
+	uint32_t buffer_bloat_hard_limit = 20;
+
 	struct rist_server *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not create ctx object, OOM!\n");
@@ -2449,17 +2464,47 @@ int rist_server_new(struct rist_server **_ctx, enum rist_profile profile)
 	}
 
 	// Default values
-	ctx->recovery_mode = RIST_RECOVERY_MODE_TIME;
-	ctx->recovery_maxbitrate = 100000;
-	ctx->recovery_maxbitrate_return = 0;
-	ctx->recovery_length_min = 1000;
-	ctx->recovery_length_max = 1000;
-	ctx->recovery_reorder_buffer = 25;
-	ctx->recovery_rtt_min = 50;
-	ctx->recovery_rtt_max = 500;
-	ctx->buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
-	ctx->buffer_bloat_limit = 6;
-	ctx->buffer_bloat_hard_limit = 20;
+	if (peer_config) {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing peer configuration values\n");
+		recovery_mode = peer_config->recovery_mode;
+		recovery_maxbitrate = peer_config->recovery_maxbitrate;
+		recovery_maxbitrate_return = peer_config->recovery_maxbitrate_return;
+		recovery_length_min = peer_config->recovery_length_min;
+		recovery_length_max = peer_config->recovery_length_max;
+		recovery_reorder_buffer = peer_config->recovery_reorder_buffer;
+		recovery_rtt_min = peer_config->recovery_rtt_min;
+		recovery_rtt_max = peer_config->recovery_rtt_max;
+		weight = peer_config->weight;
+		/* Set buffer-bloating */
+		buffer_bloat_mode = peer_config->buffer_bloat_mode;
+		if (peer_config->buffer_bloat_limit < 2 || peer_config->buffer_bloat_limit > 100) {
+			msg(ctx->id, 0, RIST_LOG_INFO,
+				"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+				peer_config->buffer_bloat_limit, buffer_bloat_limit);
+		} else {
+			buffer_bloat_limit = peer_config->buffer_bloat_limit;
+		}
+		if (peer_config->buffer_bloat_hard_limit < 2 || peer_config->buffer_bloat_hard_limit > 100) {
+			msg(ctx->id, 0,  RIST_LOG_INFO,
+				"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+				peer_config->buffer_bloat_hard_limit, buffer_bloat_hard_limit);
+		} else {
+			buffer_bloat_hard_limit = peer_config->buffer_bloat_hard_limit;
+		}
+	}
+
+	ctx->recovery_mode = recovery_mode;
+	ctx->recovery_maxbitrate = recovery_maxbitrate;
+	ctx->recovery_maxbitrate_return = recovery_maxbitrate_return;
+	ctx->recovery_length_min = recovery_length_min;
+	ctx->recovery_length_max = recovery_length_max;
+	ctx->recovery_reorder_buffer = recovery_reorder_buffer;
+	ctx->recovery_rtt_min = recovery_rtt_min;
+	ctx->recovery_rtt_max = recovery_rtt_max;
+	ctx->weight = weight;
+	ctx->buffer_bloat_mode = buffer_bloat_mode;
+	ctx->buffer_bloat_limit = buffer_bloat_limit;
+	ctx->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
 
 	if (init_common_ctx(&ctx->common, profile))
 	{
@@ -2469,12 +2514,25 @@ int rist_server_new(struct rist_server **_ctx, enum rist_profile profile)
 	}
 
 	ctx->id = (intptr_t)ctx;
+
+	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] RIST Server Library v%d.%d.%d\n",
+		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
+
+	set_loglevel(log_level);
+	if (log_level >= RIST_LOG_DEBUG)
+		ctx->common.debug = true;
+
+	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode: %s\n", peer_config->address);
+
 	*_ctx = ctx;
 	return 0;
 }
 
-int rist_client_new(struct rist_client **_ctx, enum rist_profile profile)
-{
+int rist_client_create(struct rist_client **_ctx, enum rist_profile profile,
+			uint32_t flow_id, enum rist_log_level log_level)
+ {
+	int ret;
+
 	struct rist_client *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not create ctx object, OOM!\n");
@@ -2497,8 +2555,8 @@ int rist_client_new(struct rist_client **_ctx, enum rist_profile profile)
 		if (RIST_UNLIKELY(!ctx->client_retry_queue)) {
 			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Could not create client retry buffer of size %u MB, OOM\n",
 				(unsigned)(RIST_SERVER_QUEUE_BUFFERS * sizeof(ctx->client_retry_queue[0])) / 1000000);
-			free(ctx);
-			return -1;
+			ret = -1;
+			goto free_ctx_and_ret;
 		}
 
 		ctx->client_retry_queue_write_index = 1;
@@ -2511,8 +2569,48 @@ int rist_client_new(struct rist_client **_ctx, enum rist_profile profile)
 	ctx->client_queue_delete_index = 0;
 	ctx->client_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
+	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] RIST Client Library v%d.%d.%d\n",
+			RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
+
+	set_loglevel(log_level);
+
+	if (log_level == RIST_LOG_SIMULATE) {
+		ctx->simulate_loss = true;
+	}
+
+	if (log_level >= RIST_LOG_DEBUG) {
+		ctx->common.debug = true;
+	}
+
+	ctx->adv_flow_id = flow_id;
+
+	ret = pthread_cond_init(&ctx->condition, NULL);
+	if (ret) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d initializing pthread_condition\n",ret);
+		goto free_ctx_and_ret;
+	}
+
+	ret = pthread_mutex_init(&ctx->mutex, NULL);
+	if (ret) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d initializing pthread_mutex\n",ret);
+		goto free_ctx_and_ret;
+	}
+
+	ctx->client_initialized = true;
+
+	if (pthread_create(&ctx->client_thread, NULL, client_pthread_protocol, (void *)ctx) != 0) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Could not created client thread.\n");
+		ret = -3;
+		goto free_ctx_and_ret;
+	}
+
 	*_ctx = ctx;
 	return 0;
+
+	// Failed!
+free_ctx_and_ret:
+	free(ctx);
+	return ret;
 }
 
 int rist_client_cname_set(struct rist_client *ctx, const void *cname, size_t cname_len)
@@ -2596,8 +2694,8 @@ void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
 	ctx->PEERS = NULL;
 	pthread_rwlock_unlock(peerlist_lock);
 
-	if (ctx->auth_callback_argument) {
-		ctx->auth_disconnect_callback(ctx->auth_callback_argument, peer);
+	if (ctx->auth.arg) {
+		ctx->auth.disconn_cb(ctx->auth.arg, peer);
 	}
 
 	*/
@@ -2637,47 +2735,23 @@ int rist_server_peer_del(struct rist_server *ctx, struct rist_peer *peer)
 	return 0;
 }
 
-int rist_client_init(struct rist_client *ctx, uint32_t flow_id, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+static int rist_auth_handler(struct rist_common_ctx *ctx,
+		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+ 		void *arg)
+{
+	ctx->auth.conn_cb = conn_cb;
+	ctx->auth.disconn_cb = disconn_cb;
+	ctx->auth.arg = arg;
+	return 0;
+}
+
+int rist_client_auth_handler(struct rist_client *ctx,
+		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
-	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] RIST Client Library v%d.%d.%d\n",
-			RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
-
-	set_loglevel(log_level);
-	if (log_level == RIST_LOG_SIMULATE) {
-		ctx->simulate_loss = true;
-	}
-	if (log_level >= RIST_LOG_DEBUG)
-		ctx->common.debug = true;
-
-	ctx->adv_flow_id = flow_id;
-
-	int ret = pthread_cond_init(&ctx->condition, NULL);
-	if (ret) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d initializing pthread_condition\n",ret);
-		return ret;
-	}
-
-	ret = pthread_mutex_init(&ctx->mutex, NULL);
-	if (ret) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d initializing pthread_mutex\n",ret);
-		return ret;
-	}
-
-	ctx->common.auth_connect_callback = auth_connect_callback;
-	ctx->common.auth_disconnect_callback = auth_disconnect_callback;
-	ctx->common.auth_callback_argument = arg;
-
-	ctx->client_initialized = true;
-
-	if (pthread_create(&ctx->client_thread, NULL, client_pthread_protocol, (void *)ctx) != 0) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Could not created client thread.\n");
-		return -3;
-	}
-
-	return 0;
+	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
 }
 
 int rist_client_start(struct rist_client *ctx)
@@ -2918,63 +2992,12 @@ int rist_client_peer_add(struct rist_client *ctx,
 	return 0;
 }
 
-int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *default_peer_config, enum rist_log_level log_level,
-		int (*auth_connect_callback)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*auth_disconnect_callback)(void *arg, struct rist_peer *peer),
+int rist_server_auth_handler(struct rist_server *ctx,
+		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
-
-	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] RIST Server Library v%d.%d.%d\n",
-		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
-
-	set_loglevel(log_level);
-	if (log_level >= RIST_LOG_DEBUG)
-		ctx->common.debug = true;
-
-	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode: %s\n", default_peer_config->address);
-
-	ctx->common.auth_connect_callback = auth_connect_callback;
-	ctx->common.auth_disconnect_callback = auth_disconnect_callback;
-	ctx->common.auth_callback_argument = arg;
-
-	if (default_peer_config) {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing default configuration values\n");
-		/* Process default flow/peer configuration */
-		ctx->gre_dst_port = default_peer_config->gre_dst_port;
-		ctx->recovery_mode = default_peer_config->recovery_mode;
-		ctx->recovery_maxbitrate = default_peer_config->recovery_maxbitrate;
-		ctx->recovery_maxbitrate_return = default_peer_config->recovery_maxbitrate_return;
-		ctx->recovery_length_min = default_peer_config->recovery_length_min;
-		ctx->recovery_length_max = default_peer_config->recovery_length_max;
-		ctx->recovery_reorder_buffer = default_peer_config->recovery_reorder_buffer;
-		ctx->recovery_rtt_min = default_peer_config->recovery_rtt_min;
-		ctx->recovery_rtt_max = default_peer_config->recovery_rtt_max;
-		ctx->weight = default_peer_config->weight;
-		/* Set buffer-bloating */
-		ctx->buffer_bloat_mode = default_peer_config->buffer_bloat_mode;
-		uint32_t buffer_bloat_limit;
-		uint32_t buffer_bloat_hard_limit;
-		if (default_peer_config->buffer_bloat_limit < 2 || default_peer_config->buffer_bloat_limit > 100) {
-			msg(ctx->id, 0, RIST_LOG_INFO,
-				"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				default_peer_config->buffer_bloat_limit, 6);
-			buffer_bloat_limit = 6;
-		} else {
-			buffer_bloat_limit = default_peer_config->buffer_bloat_limit;
-		}
-		if (default_peer_config->buffer_bloat_hard_limit < 2 || default_peer_config->buffer_bloat_hard_limit > 100) {
-			msg(ctx->id, 0,  RIST_LOG_INFO,
-				"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				default_peer_config->buffer_bloat_hard_limit, 20);
-			buffer_bloat_hard_limit = 20;
-		} else {
-			buffer_bloat_hard_limit = default_peer_config->buffer_bloat_hard_limit;
-		}
-		ctx->buffer_bloat_limit = buffer_bloat_limit;
-		ctx->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
-	}
-
-	return 0;
+	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
 }
 
 static int rist_encrypt_enable(struct rist_common_ctx *ctx,
@@ -3097,7 +3120,7 @@ void server_peer_events(struct rist_server *ctx)
 	pthread_rwlock_unlock(peerlist_lock);
 }
 
-static void rist_server_destroy(struct rist_server *ctx)
+static void rist_server_destroy_local(struct rist_server *ctx)
 {
 	struct evsocket_ctx *evctx = ctx->common.evctx;
 
@@ -3281,13 +3304,8 @@ int rist_server_start(struct rist_server *ctx,
 	return 0;
 }
 
-static int rist_client_destroy(struct rist_client *ctx)
+static void rist_client_destroy_local(struct rist_client *ctx)
 {
-	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_destroy call!\n");
-		return -1;
-	}
-
 	msg(0, ctx->id, RIST_LOG_INFO,
 		"[CLEANUP] Starting peers cleanup, count %d\n",
 		(unsigned) ctx->peer_lst_len);
@@ -3334,13 +3352,11 @@ static int rist_client_destroy(struct rist_client *ctx)
 	//free(ctx->client_queue); // TODO: this array does not need to be freed?
 	free(ctx);
 	ctx = NULL;
-
-	return 0;
 }
 
 int rist_client_destroy(struct rist_client *ctx)
 {
-	if (ctx == NULL) {
+	if (!ctx) {
 		return -1;
 	}
 
@@ -3350,14 +3366,14 @@ int rist_client_destroy(struct rist_client *ctx)
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
 	}
-	rist_client_destroy(ctx);
+	rist_client_destroy_local(ctx);
 
 	return 0;
 }
 
 int rist_server_destroy(struct rist_server *ctx)
 {
-	if (ctx == NULL) {
+	if (!ctx) {
 		return -1;
 	}
 
@@ -3367,7 +3383,7 @@ int rist_server_destroy(struct rist_server *ctx)
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
 	}
-	rist_server_destroy(ctx);
+	rist_server_destroy_local(ctx);
 
 	return 0;
 }
