@@ -359,10 +359,8 @@ RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile prof
  * is marked as dead (NULL function pointer is valid)
  * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
  */
-RIST_API int rist_server_auth_handler(struct rist_server *ctx,
-		int (*connect_cb)(void *arg, char* connecting_ip,
-		uint16_t connecting_port, char* local_ip,
-		uint16_t local_port, struct rist_peer *peer),
+RIST_API int rist_server_auth_handler_set(struct rist_server *ctx,
+		int (*connect_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 

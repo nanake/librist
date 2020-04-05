@@ -2746,7 +2746,7 @@ static int rist_auth_handler(struct rist_common_ctx *ctx,
 	return 0;
 }
 
-int rist_client_auth_handler(struct rist_client *ctx,
+int rist_client_auth_handler_set(struct rist_client *ctx,
 		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
@@ -2992,7 +2992,7 @@ int rist_client_peer_add(struct rist_client *ctx,
 	return 0;
 }
 
-int rist_server_auth_handler(struct rist_server *ctx,
+int rist_server_auth_handler_set(struct rist_server *ctx,
 		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
