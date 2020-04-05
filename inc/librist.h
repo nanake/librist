@@ -130,19 +130,7 @@ struct rist_peer_config {
  * @param[out] ctx a context representing the client instance
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_create(struct rist_client **ctx, enum rist_profile profile);
-
-/**
- * @brief Configure the SDES CName
- *
- * This allows you to override the auto-generated SDES CName
- *
- * @param a RIST client context
- * @param cname data to be sent through librist
- * @param cname_len size of cname buffer
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len);
+RIST_API int rist_client_new(struct rist_client **ctx, enum rist_profile profile);
 
 /**
  * @brief Initialize Client
@@ -166,6 +154,18 @@ RIST_API int rist_client_init(struct rist_client *ctx,
 		void *arg);
 
 /**
+ * @brief Configure the SDES CName
+ *
+ * This allows you to override the auto-generated SDES CName
+ *
+ * @param a RIST client context
+ * @param cname data to be sent through librist
+ * @param cname_len size of cname buffer
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_cname_set(struct rist_client *ctx, const void *cname, size_t cname_len);
+
+/**
  * @brief Add a peer connector to the existing client.
  *
  * One client can send data to multiple peers.
@@ -176,7 +176,7 @@ RIST_API int rist_client_init(struct rist_client *ctx,
  * @param[out] peer Store the new peer pointer
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_add_peer(struct rist_client *ctx,
+RIST_API int rist_client_peer_add(struct rist_client *ctx,
 		const struct rist_peer_config *config, struct rist_peer **peer);
 
 /**
@@ -187,8 +187,80 @@ RIST_API int rist_client_add_peer(struct rist_client *ctx,
  *        points to the peer endpoint.
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_remove_peer(struct rist_client *ctx,
+RIST_API int rist_client_peer_del(struct rist_client *ctx,
 		struct rist_peer *peer);
+
+/**
+ * @brief Enable encryption
+ *
+ * Call after client initialization to enable encryption.
+ *
+ * @param a RIST client context
+ * @param secret Pre-shared passphrase
+ * @param key_size size of the key used for the encryption
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_encrypt_aes_set(struct rist_client *ctx,
+		const char *secret, int key_size);
+
+/**
+ * @brief Set RIST retry timeout
+ *
+ * Set time interleaving retries during the protocol handshake
+ *
+ * @param a RIST client context
+ * @param t timeout in ms
+ * @return never
+ */
+RIST_API int rist_client_session_timeout_set(struct rist_client *ctx, int t);
+
+/**
+ * @brief Set RIST keep-alive timeout
+ *
+ * Set keep-alive timeout
+ *
+ * @param a RIST client context
+ * @param t timeout in ms
+ * @return never
+ */
+RIST_API int rist_client_keepalive_timeout_set(struct rist_client *ctx, int t);
+
+/**
+ * @brief Set RIST max jitter
+ *
+ * Set max jitter
+ *
+ * @param a RIST client context
+ * @param t max jitter in ms
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_max_jitter_set(struct rist_client *ctx, int t);
+
+/**
+ * @brief Enable out-of-band data channel
+ *
+ * Call after server initialization to enable out-of-band data.
+ *
+ * @param a RIST client context
+ * @param oob_data_callback A pointer to the function that will be called when out-of-band data
+ * comes in (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `oob_data_callback`
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_oob_set(struct rist_client *ctx, 
+		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void *arg);
+
+/**
+ * @brief Enable compression
+ *
+ * Call after client initialization to enable compression.
+ *
+ * @param a RIST client context
+ * @param compression, 0 for disabled, 1 for enabled
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_client_compression_lz4_set(struct rist_client *ctx, int compression);
 
 /**
  * @brief Kickstart a pre-configured client
@@ -202,6 +274,20 @@ RIST_API int rist_client_remove_peer(struct rist_client *ctx,
 RIST_API int rist_client_start(struct rist_client *ctx);
 
 /**
+ * @brief Write data directly to a remote server peer.
+ *
+ * This API is used to transmit out-of-band data to a remote server peer
+ *
+ * @param a RIST client context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @param buf data to be sent through a librist peer connection
+ * @param len size of buf buffer (IP header is expected by non-librist counterparts)
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_client_oob_write(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len);
+
+/**
  * @brief Write data into a librist packet.
  *
  * One client can send write data into a librist packet.
@@ -211,7 +297,7 @@ RIST_API int rist_client_start(struct rist_client *ctx);
  * @param len size of buf buffer
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port);
+RIST_API int rist_client_data_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port);
 
 /**
  * @brief Write data into a librist packet.
@@ -224,93 +310,7 @@ RIST_API int rist_client_write(struct rist_client *ctx, const void *buf, size_t 
  * @param ntp_time 64 bit timestamp in NTP format
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_client_write_timed(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time);
-
-/**
- * @brief Write data directly to a remote server peer.
- *
- * This API is used to transmit out-of-band data to a remote server peer
- *
- * @param a RIST client context
- * @param peer a pointer to the struct rist_peer, which
- *        points to the peer endpoint.
- * @param buf data to be sent through a librist peer connection
- * @param len size of buf buffer (IP header is expected by non-librist counterparts)
- * @return number of written bytes on success, -1 in case of error.
- */
-RIST_API int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len);
-
-/**
- * @brief Set RIST retry timeout
- *
- * Set time interleaving retries during the protocol handshake
- *
- * @param a RIST client context
- * @param t timeout in ms
- * @return never
- */
-RIST_API int rist_client_set_session_timeout(struct rist_client *ctx, int t);
-
-/**
- * @brief Set RIST keep-alive timeout
- *
- * Set keep-alive timeout
- *
- * @param a RIST client context
- * @param t timeout in ms
- * @return never
- */
-RIST_API int rist_client_set_keepalive_timeout(struct rist_client *ctx, int t);
-
-/**
- * @brief Set RIST max jitter
- *
- * Set max jitter
- *
- * @param a RIST client context
- * @param t max jitter in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_set_max_jitter(struct rist_client *ctx, int t);
-
-/**
- * @brief Enable encryptionrist_client_create
- *
- * Call after client initialization to enable encryption.
- *
- * @param a RIST client context
- * @param secret Pre-shared passphrase
- * @param key_size size of the key used for the encryption
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_encrypt_enable(struct rist_client *ctx,
-		const char *secret, int key_size);
-
-/**
- * @brief Enable out-of-band data channel
- *
- * Call after server initialization to enable out-of-band data.
- *
- * @param a RIST client context
- * @param oob_data_callback A pointer to the function that will be called when out-of-band data
- * comes in (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `oob_data_callback`
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_oob_enable(struct rist_client *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
-		void *arg);
-
-/**
- * @brief Enable compression
- *
- * Call after client initialization to enable encryption.
- *
- * @param a RIST client context
- * @param compression, 0 for disabled, 1 for enabled
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_compress_enable(struct rist_client *ctx, int compression);
+RIST_API int rist_client_data_timed_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time);
 
 /**
  * @brief Disconnect a client peer
@@ -332,78 +332,7 @@ RIST_API int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_pe
  * @param a RIST client context
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_client_shutdown(struct rist_client *ctx);
-
-/**
- * @brief Set custom file descriptor to be used for printing stats
- *
- * Set fd to print librist statistics
- *
- * @param fd file descriptor to be used for
- *        for statistics
- *
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_set_stats_fd(int fd);
-
-/**
- * @brief Set custom udp port to be used for printing stats
- *
- * Set port to print librist statistics
- *
- * @param port port to be used for statistics
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_set_stats_socket(int port);
-
-/**
- * @brief Returns information about the handshake state
- *
- * Get information about the handshake
- * state, the returned string is
- * heap-allocated and must be therefore
- * freed after being used.
- *
- * @param a RIST client context
- */
-RIST_API char *rist_client_get_status(struct rist_client *ctx);
-
-/**
- * @brief Write data directly to a remote client peer.
- *
- * This API is used to transmit out-of-band data to a remote client peer
- *
- * @param a RIST server context
- * @param peer a pointer to the struct rist_peer, which
- *        points to the peer endpoint.
- * @param buf data to be sent through a librist peer connection
- * @param len size of buf buffer (IP header is expected by non-librist counterparts)
- * @return number of written bytes on success, -1 in case of error.
- */
-RIST_API int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len);
-
-/**
- * @brief Returns information about the handshake state
- *
- * Get information about the handshake
- * state, the returned string is
- * heap-allocated and must be therefore
- * freed after being used.
- *
- * @param a RIST server context
- */
-RIST_API char *rist_server_get_status(struct rist_server *ctx);
-
-/**
- * @brief Configure nack type
- *
- * Choose the nack tyoe used by the server. This function returns immediately.
- *
- * @param a RIST server context
- * @param nack_type 0 for range (default), 1 for bitmask
- * @return immediately
- */
-RIST_API int rist_server_set_nack_type(struct rist_server *ctx, enum rist_nack_type nacks_type);
+RIST_API int rist_client_del(struct rist_client *ctx);
 
 /**
  * @brief Create RIST Server
@@ -413,19 +342,7 @@ RIST_API int rist_server_set_nack_type(struct rist_server *ctx, enum rist_nack_t
  * @param[out] ctx a context representing the server instance
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile profile);
-
-/**
- * @brief Configure the SDES CName
- *
- * This allows you to override the auto-generated SDES CName
- *
- * @param a RIST server context
- * @param cname data to be sent through librist
- * @param cname_len size of cname buffer
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_set_cname(struct rist_server *ctx, const void *cname, size_t cname_len);
+RIST_API int rist_server_new(struct rist_server **ctx, enum rist_profile profile);
 
 /**
  * @brief Initialize server
@@ -449,6 +366,18 @@ RIST_API int rist_server_init(struct rist_server *ctx,
 		void *arg);
 
 /**
+ * @brief Configure the SDES CName
+ *
+ * This allows you to override the auto-generated SDES CName
+ *
+ * @param a RIST server context
+ * @param cname data to be sent through librist
+ * @param cname_len size of cname buffer
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_cname_set(struct rist_server *ctx, const void *cname, size_t cname_len);
+
+/**
  * @brief Add a peer connector to the existing server.
  *
  * One server can receive data from multiple peers.
@@ -457,7 +386,18 @@ RIST_API int rist_server_init(struct rist_server *ctx,
  * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_add_peer(struct rist_server *ctx, const char *listen_addr);
+RIST_API int rist_server_peer_add(struct rist_server *ctx, const char *listen_addr);
+
+/**
+ * @brief Remove a peer connector to the existing server.
+ *
+ * @param a RIST server context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_server_peer_del(struct rist_server *ctx,
+		struct rist_peer *peer);
 
 /**
  * @brief Enable encryption
@@ -469,7 +409,40 @@ RIST_API int rist_server_add_peer(struct rist_server *ctx, const char *listen_ad
  * @param key_size size of the key used for the encryption
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_encrypt_enable(struct rist_server *ctx, const char *secret, int key_size);
+RIST_API int rist_server_encrypt_aes_set(struct rist_server *ctx, const char *secret, int key_size);
+
+/**
+ * @brief Set RIST retry timeout
+ *
+ * Set time interleaving retries during the protocol handshake
+ *
+ * @param a RIST server context
+ * @param t timeout in ms
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_session_timeout_set(struct rist_server *ctx, int t);
+
+/**
+ * @brief Set RIST keep-alive timeout
+ *
+ * Set keep-alive timeout
+ *
+ * @param a RIST server context
+ * @param t timeout in ms
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_keepalive_timeout_set(struct rist_server *ctx, int t);
+
+/**
+ * @brief Set RIST max jitter
+ *
+ * Set max jittter
+ *
+ * @param a RIST server context
+ * @param t max jitter in ms
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_max_jitter_set(struct rist_server *ctx, int t);
 
 /**
  * @brief Enable out-of-band data channel
@@ -482,9 +455,20 @@ RIST_API int rist_server_encrypt_enable(struct rist_server *ctx, const char *sec
  * @param arg is an the extra argument passed to the `oob_data_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_oob_enable(struct rist_server *ctx, 
+RIST_API int rist_server_oob_set(struct rist_server *ctx, 
 		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
 		void *arg);
+
+/**
+ * @brief Configure nack type
+ *
+ * Choose the nack tyoe used by the server. This function returns immediately.
+ *
+ * @param a RIST server context
+ * @param nack_type 0 for range (default), 1 for bitmask
+ * @return immediately
+ */
+RIST_API int rist_server_nack_type_set(struct rist_server *ctx, enum rist_nack_type nacks_type);
 
 /**
  * @brief Setup server start
@@ -502,59 +486,18 @@ RIST_API int rist_server_start(struct rist_server *ctx,
 	void *arg);
 
 /**
- * @brief Set RIST retry timeout
+ * @brief Write data directly to a remote client peer.
  *
- * Set time interleaving retries during the protocol handshake
- *
- * @param a RIST server context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_set_session_timeout(struct rist_server *ctx, int t);
-
-/**
- * @brief Set RIST keep-alive timeout
- *
- * Set keep-alive timeout
- *
- * @param a RIST server context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_set_keepalive_timeout(struct rist_server *ctx, int t);
-
-/**
- * @brief Set RIST max jitter
- *
- * Set max jittter
- *
- * @param a RIST server context
- * @param t max jitter in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_set_max_jitter(struct rist_server *ctx, int t);
-
-/**
- * @brief Disconnect a server peer
- *
- * Disconnects a connected client peer or a server bound peer
+ * This API is used to transmit out-of-band data to a remote client peer
  *
  * @param a RIST server context
  * @param peer a pointer to the struct rist_peer, which
  *        points to the peer endpoint.
- * @return 0 on success, -1 on error
+ * @param buf data to be sent through a librist peer connection
+ * @param len size of buf buffer (IP header is expected by non-librist counterparts)
+ * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer);
-
-/**
- * @brief Shutdown RIST server
- *
- * Shutdown RIST server instance
- *
- * @param a RIST server context
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_server_shutdown(struct rist_server *ctx);
+RIST_API int rist_server_oob_write(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len);
 
 /**
  * @brief Reads rist data
@@ -564,7 +507,39 @@ RIST_API int rist_server_shutdown(struct rist_server *ctx);
  * @param a RIST server context
  * @return a pointer to the rist_output_buffer structure
  */
-RIST_API struct rist_output_buffer *rist_server_receive(struct rist_server *ctx);
+RIST_API struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx);
+
+/**
+ * @brief Shutdown RIST server
+ *
+ * Shutdown RIST server instance
+ *
+ * @param a RIST server context
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_server_del(struct rist_server *ctx);
+
+/**
+ * @brief Set custom file descriptor to be used for printing stats
+ *
+ * Set fd to print librist statistics
+ *
+ * @param fd file descriptor to be used for
+ *        for statistics
+ *
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_set_stats_fd(int fd);
+
+/**
+ * @brief Set custom udp port to be used for printing stats
+ *
+ * Set port to print librist statistics
+ *
+ * @param port port to be used for statistics
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_set_stats_socket(int port);
 
 __END_DECLS
 

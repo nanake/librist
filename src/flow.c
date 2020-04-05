@@ -78,8 +78,6 @@ void rist_delete_flow(struct rist_server *ctx, struct rist_flow *f)
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for data output thread to exit\n");
 		usleep(5000);
 	}
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Exiting data output thread\n");
-	f->server_thread = 0;
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing all peers from flow list\n");
 	for (size_t i = 0; i < f->peer_lst_len; i++) {

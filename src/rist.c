@@ -45,7 +45,7 @@ struct rist_common_ctx *get_cctx(struct rist_peer *peer)
 }
 
 /* t is in ms */
-static int rist_set_session_timeout(struct rist_common_ctx *ctx, int t)
+static int rist_session_timeout_set(struct rist_common_ctx *ctx, int t)
 {
 	(void) ctx;
 	(void) t;
@@ -53,17 +53,17 @@ static int rist_set_session_timeout(struct rist_common_ctx *ctx, int t)
 	return 0;
 }
 
-int rist_client_set_session_timeout(struct rist_client *ctx, int t)
+int rist_client_session_timeout_set(struct rist_client *ctx, int t)
 {
-	return rist_set_session_timeout(&ctx->common, t);
+	return rist_session_timeout_set(&ctx->common, t);
 }
 
-int rist_server_set_session_timeout(struct rist_server *ctx, int t)
+int rist_server_session_timeout_set(struct rist_server *ctx, int t)
 {
-	return rist_set_session_timeout(&ctx->common, t);
+	return rist_session_timeout_set(&ctx->common, t);
 }
 
-static int rist_set_keepalive_timeout(struct rist_common_ctx *ctx, int t)
+static int rist_keepalive_timeout_set(struct rist_common_ctx *ctx, int t)
 {
 	if (t > 0) {
 		ctx->rist_keepalive_interval = t * RIST_CLOCK;
@@ -73,17 +73,17 @@ static int rist_set_keepalive_timeout(struct rist_common_ctx *ctx, int t)
 	return -1;
 }
 
-int rist_client_set_keepalive_timeout(struct rist_client *ctx, int t)
+int rist_client_keepalive_timeout_set(struct rist_client *ctx, int t)
 {
-	return rist_set_keepalive_timeout(&ctx->common, t);
+	return rist_keepalive_timeout_set(&ctx->common, t);
 }
 
-int rist_server_set_keepalive_timeout(struct rist_server *ctx, int t)
+int rist_server_keepalive_timeout_set(struct rist_server *ctx, int t)
 {
-	return rist_set_keepalive_timeout(&ctx->common, t);
+	return rist_keepalive_timeout_set(&ctx->common, t);
 }
 
-static int rist_set_max_jitter(struct rist_common_ctx *ctx, int t)
+static int rist_max_jitter_set(struct rist_common_ctx *ctx, int t)
 {
 	if (t > 0) {
 		ctx->rist_max_jitter = t * RIST_CLOCK;
@@ -93,14 +93,14 @@ static int rist_set_max_jitter(struct rist_common_ctx *ctx, int t)
 	return -1;
 }
 
-int rist_client_set_max_jitter(struct rist_client *ctx, int t)
+int rist_client_max_jitter_set(struct rist_client *ctx, int t)
 {
-	return rist_set_max_jitter(&ctx->common, t);
+	return rist_max_jitter_set(&ctx->common, t);
 }
 
-int rist_server_set_max_jitter(struct rist_server *ctx, int t)
+int rist_server_max_jitter_set(struct rist_server *ctx, int t)
 {
-	return rist_set_max_jitter(&ctx->common, t);
+	return rist_max_jitter_set(&ctx->common, t);
 }
 
 static void server_store_settings(struct rist_peer *peer, const struct rist_settings *settings)
@@ -467,10 +467,10 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
-struct rist_output_buffer *rist_server_receive(struct rist_server *ctx)
+struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx)
 {
 	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_receive call!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_data_read call!\n");
 		return NULL;
 	}
 	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
@@ -505,7 +505,7 @@ static struct rist_output_buffer *new_output_buffer(struct rist_output_buffer *o
 	else
 		newbuffer = malloc(b->size);
 	memcpy(newbuffer, payload, b->size);
-	output_buffer->payload = payload;
+	output_buffer->payload = newbuffer;
 	output_buffer->payload_len = b->size;
 	output_buffer->src_port = b->src_port;
 	output_buffer->dst_port = b->dst_port;
@@ -788,7 +788,7 @@ nack_loop_continue:
 
 }
 
-static struct rist_peer *rist_server_add_peer_local(struct rist_server *ctx, const char *url)
+static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, const char *url)
 {
 	/* Initialize peer */
 	struct rist_peer *p = peer_initialize(url, NULL, ctx);
@@ -814,10 +814,10 @@ static struct rist_peer *rist_server_add_peer_local(struct rist_server *ctx, con
 	return p;
 }
 
-int rist_server_add_peer(struct rist_server *ctx, const char *url)
+int rist_server_peer_add(struct rist_server *ctx, const char *url)
 {
 	struct rist_peer *p_rtcp;
-	struct rist_peer *p = rist_server_add_peer_local(ctx, url);
+	struct rist_peer *p = rist_server_peer_add_local(ctx, url);
 	if (!p)
 		return -1;
 
@@ -832,7 +832,7 @@ int rist_server_add_peer(struct rist_server *ctx, const char *url)
 
 		char new_url[500];
 		sprintf(new_url, "%s:%d", p->url, p->local_port + 1); 
-		p_rtcp = rist_server_add_peer_local(ctx, new_url);
+		p_rtcp = rist_server_peer_add_local(ctx, new_url);
 		if (!p_rtcp)
 		{
 			udp_Close(p->sd);
@@ -2078,7 +2078,7 @@ protocol_bypass:
 	}
 }
 
-int rist_client_write_timed(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time)
+int rist_client_data_timed_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time)
 {
 	// max protocol overhead for data is gre-header plus gre-reduced-mode-header plus rtp-header
 	// 16 + 4 + 12 = 32
@@ -2097,9 +2097,9 @@ int rist_client_write_timed(struct rist_client *ctx, const void *buf, size_t len
 	return ret;
 }
 
-int rist_client_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
+int rist_client_data_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
 {
-	return rist_client_write_timed(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
+	return rist_client_data_timed_write(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
 }
 
 static int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
@@ -2166,7 +2166,7 @@ static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
 	return;
 }
 
-int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len)
+int rist_client_oob_write(struct rist_client *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
@@ -2177,7 +2177,7 @@ int rist_client_write_oob(struct rist_client *ctx, struct rist_peer *peer, const
 	return rist_oob_enqueue(&ctx->common, peer, buf, len);
 }
 
-int rist_server_write_oob(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len)
+int rist_server_oob_write(struct rist_server *ctx, struct rist_peer *peer, const void *buf, size_t len)
 {
 	// max protocol overhead for data is gre-header, 16 max
 	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
@@ -2440,7 +2440,7 @@ static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profil
 	return 0;
 }
 
-int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
+int rist_server_new(struct rist_server **_ctx, enum rist_profile profile)
 {
 	struct rist_server *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
@@ -2473,7 +2473,7 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile)
 	return 0;
 }
 
-int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
+int rist_client_new(struct rist_client **_ctx, enum rist_profile profile)
 {
 	struct rist_client *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
@@ -2515,10 +2515,10 @@ int rist_client_create(struct rist_client **_ctx, enum rist_profile profile)
 	return 0;
 }
 
-int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cname_len)
+int rist_client_cname_set(struct rist_client *ctx, const void *cname, size_t cname_len)
 {
 	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_set_cname call!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_client_cname_set call!\n");
 		return -1;
 	}
 	else if (!cname) {
@@ -2534,10 +2534,10 @@ int rist_client_set_cname(struct rist_client *ctx, const void *cname, size_t cna
 	return 0;
 }
 
-int rist_server_set_cname(struct rist_server *ctx, const void *cname, size_t cname_len)
+int rist_server_cname_set(struct rist_server *ctx, const void *cname, size_t cname_len)
 {
 	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_set_cname call!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_cname_set call!\n");
 		return -1;
 	}
 	else if (!cname) {
@@ -2620,7 +2620,7 @@ int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
 	return 0;
 }
 
-int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer)
+int rist_server_peer_del(struct rist_server *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
@@ -2633,7 +2633,7 @@ int rist_server_disconnect_peer(struct rist_server *ctx, struct rist_peer *peer)
 
 	peer->dead = true;
 	rist_delete_peer(&ctx->common, peer);
-	msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] rist_server_disconnect_peer not implemented!\n");
+	msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] rist_server_peer_del not implemented!\n");
 	return 0;
 }
 
@@ -2715,7 +2715,7 @@ int rist_client_unpause(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_client_remove_peer(struct rist_client *ctx, struct rist_peer *d_peer)
+int rist_client_peer_del(struct rist_client *ctx, struct rist_peer *d_peer)
 {
 	pthread_rwlock_wrlock(&ctx->common.peerlist_lock);
 
@@ -2818,7 +2818,7 @@ static void client_store_settings(struct rist_client *ctx,
 
 }
 
-static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
+static struct rist_peer *rist_client_peer_add_local(struct rist_client *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
 
@@ -2870,10 +2870,10 @@ static struct rist_peer *rist_client_add_peer_local(struct rist_client *ctx,
 
 }
 
-int rist_client_add_peer(struct rist_client *ctx,
+int rist_client_peer_add(struct rist_client *ctx,
 		const struct rist_peer_config *config, struct rist_peer **peer)
 {
-	struct rist_peer *newpeer = rist_client_add_peer_local(ctx, config, false);
+	struct rist_peer *newpeer = rist_client_peer_add_local(ctx, config, false);
 
 	if (!newpeer)
 		return -1;
@@ -2883,7 +2883,7 @@ int rist_client_add_peer(struct rist_client *ctx,
 
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
-		struct rist_peer *peer_rtcp = rist_client_add_peer_local(ctx, config, true);
+		struct rist_peer *peer_rtcp = rist_client_peer_add_local(ctx, config, true);
 		if (!peer_rtcp)
 		{
 			// TODO: remove from peerlist (create client_delete peer function)
@@ -3018,19 +3018,19 @@ static int rist_encrypt_enable(struct rist_common_ctx *ctx,
 	return ret;
 }
 
-int rist_client_encrypt_enable(struct rist_client *ctx, const char *secret,
+int rist_client_encrypt_aes_set(struct rist_client *ctx, const char *secret,
 								int key_size)
 {
 	return rist_encrypt_enable(&ctx->common, secret, key_size, 0, ctx->id);
 }
 
-int rist_client_compress_enable(struct rist_client *ctx, int compression)
+int rist_client_compression_lz4_set(struct rist_client *ctx, int compression)
 {
 	ctx->compression = !!compression;
 	return 0;
 }
 
-int rist_client_oob_enable(struct rist_client *ctx, 
+int rist_client_oob_set(struct rist_client *ctx, 
 		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
 		void *arg)
 {
@@ -3054,7 +3054,7 @@ int rist_client_oob_enable(struct rist_client *ctx,
 	return 0;
 }
 
-int rist_server_oob_enable(struct rist_server *ctx, 
+int rist_server_oob_set(struct rist_server *ctx, 
 		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
 		void *arg)
 {
@@ -3071,12 +3071,12 @@ int rist_server_oob_enable(struct rist_server *ctx,
 	return 0;
 }
 
-int rist_server_encrypt_enable(struct rist_server *ctx, const char *secret, int key_size)
+int rist_server_encrypt_aes_set(struct rist_server *ctx, const char *secret, int key_size)
 {
 	return rist_encrypt_enable(&ctx->common, secret, key_size, ctx->id, 0);
 }
 
-int rist_server_set_nack_type(struct rist_server *ctx, enum rist_nack_type nack_type)
+int rist_server_nack_type_set(struct rist_server *ctx, enum rist_nack_type nack_type)
 {
 	ctx->nack_type = nack_type;
 	return 0;
@@ -3168,7 +3168,8 @@ static void rist_server_destroy(struct rist_server *ctx)
 		{
 			uint8_t *payload = ctx->dataout_fifo_queue[i]->payload;
 			if (payload) {
-				free(payload);
+				// TODO: why does this crash
+				//free(payload);
 				payload = NULL;
 			}
 			free(ctx->dataout_fifo_queue[i]);
@@ -3280,30 +3281,6 @@ int rist_server_start(struct rist_server *ctx,
 	return 0;
 }
 
-static char *rist_get_status(struct rist_common_ctx *ctx)
-{
-	char *str;
-
-	for (struct rist_peer *p = ctx->PEERS; p != NULL; p = p->next) {
-		asprintf(&str, "[STATUS] peer flow id : %d\n"
-						"[STATUS] local peer : %d\n"
-						"[STATUS] remote peer : %d",
-				p->adv_flow_id, p->state_local, p->state_peer);
-	}
-
-	return str;
-}
-
-char *rist_client_get_status(struct rist_client *ctx)
-{
-	return rist_get_status(&ctx->common);
-}
-
-char *rist_server_get_status(struct rist_server *ctx)
-{
-	return rist_get_status(&ctx->common);
-}
-
 static int rist_client_destroy(struct rist_client *ctx)
 {
 	if (!ctx) {
@@ -3361,7 +3338,7 @@ static int rist_client_destroy(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_client_shutdown(struct rist_client *ctx)
+int rist_client_del(struct rist_client *ctx)
 {
 	if (ctx == NULL) {
 		return -1;
@@ -3378,7 +3355,7 @@ int rist_client_shutdown(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_server_shutdown(struct rist_server *ctx)
+int rist_server_del(struct rist_server *ctx)
 {
 	if (ctx == NULL) {
 		return -1;
