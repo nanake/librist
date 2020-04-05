@@ -212,7 +212,7 @@ RIST_PACKED_STRUCT(rist_settings,{
 	uint32_t recover_maxbitrate_return;
 	uint32_t recover_buffer_min;
 	uint32_t recover_buffer_max;
-	uint32_t recover_reorder_buffer;
+	uint32_t recovery_reorder_buffer;
 	uint32_t recover_rtt_min;
 	uint32_t recover_rtt_max;
 	uint8_t recovery_mode;
@@ -425,7 +425,7 @@ struct rist_peer {
 	uint32_t recover_buffer_min;
 	uint32_t recover_buffer_max;
 	uint64_t recover_buffer_ticks;
-	uint32_t recover_reorder_buffer;
+	uint32_t recovery_reorder_buffer;
 	uint32_t recover_rtt_min;
 	uint32_t recover_rtt_max;
 	uint32_t weight;

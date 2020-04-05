@@ -111,7 +111,7 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 	peer->recover_maxbitrate_return = settings->recover_maxbitrate_return;
 	peer->recover_buffer_min = settings->recover_buffer_min;
 	peer->recover_buffer_max = settings->recover_buffer_max;
-	peer->recover_reorder_buffer = settings->recover_reorder_buffer;
+	peer->recovery_reorder_buffer = settings->recovery_reorder_buffer;
 	peer->recover_rtt_min = settings->recover_rtt_min;
 	peer->recover_rtt_max = settings->recover_rtt_max;
 	peer->bufferbloat_mode = settings->bufferbloat_mode;
@@ -146,7 +146,7 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 
 	msg(peer->server_ctx->id, 0, RIST_LOG_INFO,
 		"[INFO] Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
-		peer->adv_peer_id, peer->recover_maxbitrate, peer->recover_maxbitrate_return, peer->recover_buffer_min, peer->recover_buffer_max, peer->recover_reorder_buffer,
+		peer->adv_peer_id, peer->recover_maxbitrate, peer->recover_maxbitrate_return, peer->recover_buffer_min, peer->recover_buffer_max, peer->recovery_reorder_buffer,
 		peer->recover_rtt_min, peer->recover_rtt_max, peer->bufferbloat_mode, peer->bufferbloat_limit, peer->bufferbloat_hard_limit);
 
 }
@@ -1130,7 +1130,7 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 			.recover_maxbitrate_return = ctx->recovery_maxbitrate_return,
 			.recover_buffer_min = ctx->recovery_length_min,
 			.recover_buffer_max = ctx->recovery_length_max,
-			.recover_reorder_buffer = ctx->recovery_reorder_buffer,
+			.recovery_reorder_buffer = ctx->recovery_reorder_buffer,
 			.recover_rtt_min = ctx->recovery_rtt_min,
 			.recover_rtt_max = ctx->recovery_rtt_max,
 			.bufferbloat_mode = ctx->bufferbloat_mode,
@@ -1318,9 +1318,9 @@ static void rist_server_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t
 	}
 	// Optimal dynamic time for first retry (reorder bufer) is rtt/2
 	rtt = rtt / 2;
-	if (rtt < peer->recover_reorder_buffer)
+	if (rtt < peer->recovery_reorder_buffer)
 	{
-		rtt = peer->recover_reorder_buffer;
+		rtt = peer->recovery_reorder_buffer;
 	}
 
 	// Wake up output thread when data comes in
@@ -1610,7 +1610,7 @@ static void client_peer_copy_settings(struct rist_peer *peer_src, struct rist_pe
 	peer->recover_maxbitrate_return = peer_src->recover_maxbitrate_return;
 	peer->recover_buffer_min = peer_src->recover_buffer_min;
 	peer->recover_buffer_max = peer_src->recover_buffer_max;
-	peer->recover_reorder_buffer = peer_src->recover_reorder_buffer;
+	peer->recovery_reorder_buffer = peer_src->recovery_reorder_buffer;
 	peer->recover_rtt_min = peer_src->recover_rtt_min;
 	peer->recover_rtt_max = peer_src->recover_rtt_max;
 	peer->bufferbloat_mode = peer_src->bufferbloat_mode;
@@ -2767,7 +2767,7 @@ static void client_store_settings(struct rist_client *ctx,
 	peer->recover_maxbitrate_return = settings->recovery_maxbitrate_return;
 	peer->recover_buffer_min = settings->recovery_length_min;
 	peer->recover_buffer_max = settings->recovery_length_max;
-	peer->recover_reorder_buffer = settings->recover_reorder_buffer;
+	peer->recovery_reorder_buffer = settings->recovery_reorder_buffer;
 	if (settings->recovery_rtt_min < RIST_RTT_MIN) {
 		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] rtt_min is too small (%u), using %dms instead\n",
 			settings->recovery_rtt_min, RIST_RTT_MIN);
@@ -2946,7 +2946,7 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 		ctx->recovery_maxbitrate_return = default_peer_config->recovery_maxbitrate_return;
 		ctx->recovery_length_min = default_peer_config->recovery_length_min;
 		ctx->recovery_length_max = default_peer_config->recovery_length_max;
-		ctx->recovery_reorder_buffer = default_peer_config->recover_reorder_buffer;
+		ctx->recovery_reorder_buffer = default_peer_config->recovery_reorder_buffer;
 		ctx->recovery_rtt_min = default_peer_config->recovery_rtt_min;
 		ctx->recovery_rtt_max = default_peer_config->recovery_rtt_max;
 		ctx->weight = default_peer_config->weight;

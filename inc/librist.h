@@ -112,7 +112,7 @@ struct rist_peer_config {
 	uint32_t recovery_maxbitrate_return;
 	uint32_t recovery_length_min;
 	uint32_t recovery_length_max;
-	uint32_t recover_reorder_buffer;
+	uint32_t recovery_reorder_buffer;
 	uint32_t recovery_rtt_min;
 	uint32_t recovery_rtt_max;
 	uint32_t weight;
