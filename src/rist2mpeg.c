@@ -103,6 +103,7 @@ void usage(char *name)
 }
 
 static int mpeg[INPUT_COUNT];
+static int keep_running = 1;
 static struct network_url parsed_url[INPUT_COUNT];
 
 struct rist_port_filter {
@@ -110,7 +111,7 @@ struct rist_port_filter {
 	uint16_t dst_port;
 };
 
-static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags)
+static void cb_recv(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 	(void) flow_id;
@@ -137,6 +138,7 @@ static void cb_recv(void *arg, struct rist_peer *peer, uint64_t flow_id, const v
 
 static void intHandler(int signal) {
 	fprintf(stderr, "Signal %d received\n", signal);
+	keep_running = 0;
 }
 
 static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
@@ -145,7 +147,7 @@ static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_p
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
-	rist_server_write_oob(ctx, peer, message, ret);
+	rist_server_oob_write(ctx, peer, message, ret);
 	return 1;
 }
 
@@ -175,6 +177,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char c;
+	int enable_data_callback = 1;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint8_t encryption_type = 1;
@@ -183,7 +186,7 @@ int main(int argc, char *argv[])
 	uint32_t recovery_maxbitrate_return = 0;
 	uint32_t recovery_length_min = 1000;
 	uint32_t recovery_length_max = 1000;
-	uint32_t recover_reorder_buffer = 25;
+	uint32_t recovery_reorder_buffer = 25;
 	uint32_t recovery_rtt_min = 50;
 	uint32_t recovery_rtt_max = 500;
 	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
@@ -239,7 +242,7 @@ int main(int argc, char *argv[])
 			recovery_length_max = atoi(optarg);
 		break;
 		case 'o':
-			recover_reorder_buffer = atoi(optarg);
+			recovery_reorder_buffer = atoi(optarg);
 		break;
 		case 'r':
 			recovery_rtt_min = atoi(optarg);
@@ -322,22 +325,10 @@ int main(int argc, char *argv[])
 
 	/* rist side */
 	fprintf(stderr, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
-			recovery_maxbitrate, recovery_length_min, recovery_length_max, recover_reorder_buffer, recovery_rtt_min,
+			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
 	struct rist_server *ctx;
-
-	if (rist_server_create(&ctx, profile) != 0) {
-		fprintf(stderr, "Could not create rist server context\n");
-		exit(1);
-	}
-
-	if (cname) {
-		if (rist_server_set_cname(ctx, cname, strlen(cname)) != 0) {
-			fprintf(stderr, "Could not set the cname\n");
-			exit(1);
-		}
-	}
 
 	// TODO: make the 1969 configurable (used for reverse connection gre-dst-port inside main profile)
 	const struct rist_peer_config default_peer_config = {
@@ -348,30 +339,42 @@ int main(int argc, char *argv[])
 		.recovery_maxbitrate_return = recovery_maxbitrate_return,
 		.recovery_length_min = recovery_length_min,
 		.recovery_length_max = recovery_length_max,
-		.recover_reorder_buffer = recover_reorder_buffer,
+		.recovery_reorder_buffer = recovery_reorder_buffer,
 		.recovery_rtt_min = recovery_rtt_min,
 		.recovery_rtt_max = recovery_rtt_max,
 		.weight = 5,
-		.bufferbloat_mode = buffer_bloat_mode,
-		.bufferbloat_limit = buffer_bloat_limit,
-		.bufferbloat_hard_limit = buffer_bloat_hard_limit
+		.buffer_bloat_mode = buffer_bloat_mode,
+		.buffer_bloat_limit = buffer_bloat_limit,
+		.buffer_bloat_hard_limit = buffer_bloat_hard_limit
 	};
 
-	if (rist_server_init(ctx, &default_peer_config, loglevel, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
-		fprintf(stderr, "Could not init rist server\n");
+	if (rist_server_create(&ctx, profile, &default_peer_config, loglevel) != 0) {
+		fprintf(stderr, "Could not create rist server context\n");
+		exit(1);
+	}
+
+	if (cname) {
+		if (rist_server_cname_set(ctx, cname, strlen(cname)) != 0) {
+			fprintf(stderr, "Could not set the cname\n");
+			exit(1);
+		}
+	}
+
+	if (rist_server_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
+		fprintf(stderr, "Could not init rist auth handler\n");
 		exit(1);
 	}
 
 	if (shared_secret != NULL) {
 		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_server_encrypt_enable(ctx, shared_secret, keysize) == -1) {
+		if (rist_server_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_server_oob_enable(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_server_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
@@ -382,7 +385,7 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		if (rist_server_add_peer(ctx, addr[i]) == -1) {
+		if (rist_server_peer_add(ctx, addr[i]) == -1) {
 			fprintf(stderr, "Could not init rist server%i\n", (int)(i + 1));
 			exit(1);
 		}
@@ -422,15 +425,34 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	// callback is best unless you are using the timestamps passed with the buffer
+	enable_data_callback = 1;
+
 	/* Start the rist protocol thread */
-	if (rist_server_start(ctx, cb_recv, &port_filter)) {
-		fprintf(stderr, "Could not start rist server\n");
-		exit(1);
+	if (enable_data_callback == 1) {
+		if (rist_server_start(ctx, cb_recv, &port_filter)) {
+			fprintf(stderr, "Could not start rist server\n");
+			exit(1);
+		}
+		pause();
+	}
+	else {
+		if (rist_server_start(ctx, NULL, NULL)) {
+			fprintf(stderr, "Could not start rist server\n");
+			exit(1);
+		}
+		// Master loop
+		while (keep_running)
+		{
+			struct rist_output_buffer *b = rist_server_data_read(ctx);
+			if (b && b->payload)
+				cb_recv(&port_filter, b->peer, b->flow_id, b->payload, b->payload_len, b->src_port,
+					b->dst_port, b->timestamp_ntp, b->flow_id);
+			usleep(5000);
+		}
 	}
 
-	pause();
-
-	rist_server_shutdown(ctx);
+	rist_server_destroy(ctx);
 
 	if (shared_secret)
 		free(shared_secret);

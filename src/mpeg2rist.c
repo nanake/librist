@@ -111,7 +111,7 @@ static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_p
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
-	rist_client_write_oob(ctx, peer, message, ret);
+	rist_client_oob_write(ctx, peer, message, ret);
 	return 1;
 }
 
@@ -161,7 +161,7 @@ int main(int argc, char *argv[])
 	uint32_t recovery_maxbitrate_return = 0;
 	uint32_t recovery_length_min = 1000;
 	uint32_t recovery_length_max = 1000;
-	uint32_t recover_reorder_buffer = 25;
+	uint32_t recovery_reorder_buffer = 25;
 	uint32_t recovery_rtt_min = 50;
 	uint32_t recovery_rtt_max = 500;
 	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
@@ -214,7 +214,7 @@ int main(int argc, char *argv[])
 			recovery_length_max = atoi(optarg);
 		break;
 		case 'o':
-			recover_reorder_buffer = atoi(optarg);
+			recovery_reorder_buffer = atoi(optarg);
 		break;
 		case 'r':
 			recovery_rtt_min = atoi(optarg);
@@ -319,7 +319,7 @@ int main(int argc, char *argv[])
 
 	/* rist side */
 	fprintf(stderr, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
-			recovery_maxbitrate, recovery_length_min, recovery_length_max, recover_reorder_buffer, recovery_rtt_min,
+			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
@@ -329,17 +329,6 @@ int main(int argc, char *argv[])
 	}
 
 	struct rist_client *ctx;
-	if (rist_client_create(&ctx, profile) != 0) {
-		fprintf(stderr, "Could not create rist client context\n");
-		exit(1);
-	}
-
-	if (cname) {
-		if (rist_client_set_cname(ctx, cname, strlen(cname)) != 0) {
-			fprintf(stderr, "Could not set the cname\n");
-			exit(1);
-		}
-	}
 
 	uint64_t now;
 	struct timeval time;
@@ -350,22 +339,34 @@ int main(int argc, char *argv[])
 	// It must me an even number
 	adv_flow_id &= ~(1UL << 0);
 
-	rist = rist_client_init(ctx, adv_flow_id, loglevel, cb_auth_connect, cb_auth_disconnect, ctx);
-	if (rist < 0) {
-		fprintf(stderr, "Could not initialize rist client\n");
+	if (rist_client_create(&ctx, profile, adv_flow_id, loglevel) != 0) {
+		fprintf(stderr, "Could not create rist client context\n");
 		exit(1);
+	}
+
+	rist = rist_client_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
+	if (rist < 0) {
+		fprintf(stderr, "Could not initialize rist auth handler\n");
+		exit(1);
+	}
+
+	if (cname) {
+		if (rist_client_cname_set(ctx, cname, strlen(cname)) != 0) {
+			fprintf(stderr, "Could not set the cname\n");
+			exit(1);
+		}
 	}
 
 	if (shared_secret != NULL) {
 		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_client_encrypt_enable(ctx, shared_secret, keysize) == -1) {
+		if (rist_client_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_client_oob_enable(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_client_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
@@ -384,17 +385,17 @@ int main(int argc, char *argv[])
 			.recovery_maxbitrate_return = recovery_maxbitrate_return,
 			.recovery_length_min = recovery_length_min,
 			.recovery_length_max = recovery_length_max,
-			.recover_reorder_buffer = recover_reorder_buffer,
+			.recovery_reorder_buffer = recovery_reorder_buffer,
 			.recovery_rtt_min = recovery_rtt_min,
 			.recovery_rtt_max = recovery_rtt_max,
 			.weight = weight[i],
-			.bufferbloat_mode = buffer_bloat_mode,
-			.bufferbloat_limit = buffer_bloat_limit,
-			.bufferbloat_hard_limit = buffer_bloat_hard_limit
+			.buffer_bloat_mode = buffer_bloat_mode,
+			.buffer_bloat_limit = buffer_bloat_limit,
+			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
 		};
 
 		struct rist_peer *peer;
-		if (rist_client_add_peer(ctx, &peer_config, &peer) == -1) {
+		if (rist_client_peer_add(ctx, &peer_config, &peer) == -1) {
 			fprintf(stderr, "Could not add peer connector to client\n");
 			exit(1);
 		}
@@ -402,7 +403,7 @@ int main(int argc, char *argv[])
 
 	/* Setting rist timeouts (in ms)*/
 	//rist_client_set_retry_timeout(ctx, 10000);
-	//rist_client_set_keepalive_timeout(ctx, 5000);
+	//rist_client_keepalive_timeout_set(ctx, 5000);
 
 	if (rist_client_start(ctx) == -1) {
 		fprintf(stderr, "Could not start rist client\n");
@@ -413,12 +414,12 @@ int main(int argc, char *argv[])
 	while (!signalReceived) {
 		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
 		if (r > 0) {
-			w = rist_client_write(ctx, buffer, r, src_port, dst_port);
+			w = rist_client_data_write(ctx, buffer, r, src_port, dst_port);
 			(void) w;
 		}
 	}
 
-	rist_client_shutdown(ctx);
+	rist_client_destroy(ctx);
 
 	if (shared_secret)
 		free(shared_secret);
