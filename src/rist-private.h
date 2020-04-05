@@ -291,7 +291,7 @@ struct rist_common_ctx {
 
 struct rist_server {
 	/* Server data callback */
-	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
+	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
 	void *server_receive_callback_argument;
 
 	/* Server timed async data output */

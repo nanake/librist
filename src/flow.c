@@ -132,7 +132,7 @@ static void rist_flow_append(struct rist_flow **FLOWS, struct rist_flow *f)
 	last->next = f;
 }
 
-static struct rist_flow *create_flow(struct rist_server *ctx, uint64_t flow_id)
+static struct rist_flow *create_flow(struct rist_server *ctx, uint32_t flow_id)
 {
 	struct rist_flow *f = calloc(1, sizeof(*f));
 	if (!f) {
@@ -553,7 +553,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 	return nextflow;
 }
 
-static bool flow_has_peer(struct rist_flow *f, uint64_t flow_id, uint32_t peer_id)
+static bool flow_has_peer(struct rist_flow *f, uint32_t flow_id, uint32_t peer_id)
 {
 	for (size_t j = 0; j < f->peer_lst_len; j++) {
 		struct rist_peer *p = f->peer_lst[j];

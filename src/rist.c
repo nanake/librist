@@ -3260,7 +3260,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 }
 
 int rist_server_start(struct rist_server *ctx,
-	void(*receive_callback)(void *arg, struct rist_peer *peer, uint64_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
+	void(*receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
 	void *arg)
 {
 	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0) {
