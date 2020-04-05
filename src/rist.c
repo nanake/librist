@@ -3338,7 +3338,7 @@ static int rist_client_destroy(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_client_del(struct rist_client *ctx)
+int rist_client_destroy(struct rist_client *ctx)
 {
 	if (ctx == NULL) {
 		return -1;
@@ -3355,7 +3355,7 @@ int rist_client_del(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_server_del(struct rist_server *ctx)
+int rist_server_destroy(struct rist_server *ctx)
 {
 	if (ctx == NULL) {
 		return -1;

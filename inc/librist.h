@@ -325,14 +325,14 @@ RIST_API int rist_client_data_timed_write(struct rist_client *ctx, const void *b
 RIST_API int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer);
 
 /**
- * @brief Shutdown RIST client
+ * @brief Destroy RIST client
  *
- * Shutdown the RIST instance
+ * Destroy the RIST instance
  *
  * @param a RIST client context
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_client_del(struct rist_client *ctx);
+RIST_API int rist_client_destroy(struct rist_client *ctx);
 
 /**
  * @brief Create RIST Server
@@ -510,14 +510,14 @@ RIST_API int rist_server_oob_write(struct rist_server *ctx, struct rist_peer *pe
 RIST_API struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx);
 
 /**
- * @brief Shutdown RIST server
+ * @brief Destroy RIST server
  *
- * Shutdown RIST server instance
+ * Destroy RIST server instance
  *
  * @param a RIST server context
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_del(struct rist_server *ctx);
+RIST_API int rist_server_destroy(struct rist_server *ctx);
 
 /**
  * @brief Set custom file descriptor to be used for printing stats
