@@ -975,7 +975,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 
 	buffer->transmit_count++;
 	uint32_t ret = 0;
-	if (buffer->transmit_count >= retry->peer->bufferbloat_hard_limit) {
+	if (buffer->transmit_count >= retry->peer->buffer_bloat_hard_limit) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);

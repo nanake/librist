@@ -117,9 +117,9 @@ struct rist_peer_config {
 	uint32_t recovery_rtt_max;
 	uint32_t weight;
 
-	enum rist_buffer_bloat_mode bufferbloat_mode;
-	uint32_t bufferbloat_limit;
-	uint32_t bufferbloat_hard_limit;
+	enum rist_buffer_bloat_mode buffer_bloat_mode;
+	uint32_t buffer_bloat_limit;
+	uint32_t buffer_bloat_hard_limit;
 };
 
 /**

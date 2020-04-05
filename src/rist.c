@@ -114,9 +114,9 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 	peer->recovery_reorder_buffer = settings->recovery_reorder_buffer;
 	peer->recover_rtt_min = settings->recover_rtt_min;
 	peer->recover_rtt_max = settings->recover_rtt_max;
-	peer->bufferbloat_mode = settings->bufferbloat_mode;
-	peer->bufferbloat_limit = settings->bufferbloat_limit;
-	peer->bufferbloat_hard_limit = settings->bufferbloat_hard_limit;
+	peer->buffer_bloat_mode = settings->buffer_bloat_mode;
+	peer->buffer_bloat_limit = settings->buffer_bloat_limit;
+	peer->buffer_bloat_hard_limit = settings->buffer_bloat_hard_limit;
 	uint32_t recover_maxbitrate_mbps = peer->recover_maxbitrate < 1000 ? 1 : peer->recover_maxbitrate / 1000;
 
 	// Initial value for some variables
@@ -147,7 +147,7 @@ static void server_store_settings(struct rist_peer *peer, const struct rist_sett
 	msg(peer->server_ctx->id, 0, RIST_LOG_INFO,
 		"[INFO] Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
 		peer->adv_peer_id, peer->recover_maxbitrate, peer->recover_maxbitrate_return, peer->recover_buffer_min, peer->recover_buffer_max, peer->recovery_reorder_buffer,
-		peer->recover_rtt_min, peer->recover_rtt_max, peer->bufferbloat_mode, peer->bufferbloat_limit, peer->bufferbloat_hard_limit);
+		peer->recover_rtt_min, peer->recover_rtt_max, peer->buffer_bloat_mode, peer->buffer_bloat_limit, peer->buffer_bloat_hard_limit);
 
 }
 
@@ -361,7 +361,7 @@ static int server_enqueue(struct rist_peer *peer, uint64_t source_time, const vo
 					f->missing_counter);
 				break;
 			} else if (!b) {
-				if (!peer->bufferbloat_active) {
+				if (!peer->buffer_bloat_active) {
 					rist_server_missing(f, peer, current_seq, rtt);
 				} else {
 					msg(f->server_id, f->client_id, RIST_LOG_ERROR,
@@ -414,15 +414,15 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	uint64_t now = timestampNTP_u64();
 	struct rist_peer *peer = b->peer;
 
-	if (b->nack_count >= peer->bufferbloat_hard_limit) {
+	if (b->nack_count >= peer->buffer_bloat_hard_limit) {
 		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
-				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, bufferbloat_hard_limit %d, bufferbloat_mode %d, stats_server_total.recovered_average %d\n",
+				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, buffer_bloat_hard_limit %d, buffer_bloat_mode %d, stats_server_total.recovered_average %d\n",
 					b->seq,
 					b->nack_count,
 					(now - b->insertion_time) / RIST_CLOCK,
 					b->nack_count,
-					peer->bufferbloat_hard_limit,
-					peer->bufferbloat_mode,
+					peer->buffer_bloat_hard_limit,
+					peer->buffer_bloat_mode,
 					peer->stats_server_total.recovered_average);
 		return 8;
 	} else {
@@ -444,7 +444,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			// TODO: make this 10% overhead configurable?
 			// retry more when we are running out of time (proportional)
 			/* start with 1.1 * 1000 and go down from there */
-			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->bufferbloat_hard_limit);
+			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->buffer_bloat_hard_limit);
 			//b->next_nack = now + (uint64_t)rtt * (uint64_t)ratio * (uint64_t)RIST_CLOCK;
 			b->next_nack = now + ((uint64_t)rtt * (uint64_t)1100 * (uint64_t)RIST_CLOCK) / 1000;
 			b->nack_count++;
@@ -714,8 +714,8 @@ void server_nack_output(struct rist_server *ctx, struct rist_flow *f)
 				peer->stats_server_instant.missing--;
 				goto nack_loop_continue;
 			}
-		} else if (peer->bufferbloat_active) {
-			if (peer->bufferbloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
+		} else if (peer->buffer_bloat_active) {
+			if (peer->buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
 				if (empty == 0) {
 					msg(ctx->id, 0, RIST_LOG_ERROR,
 						"[ERROR] Retry queue is too large, %d, collapsed link (%u), flushing all nacks ...\n", f->missing_counter,
@@ -723,7 +723,7 @@ void server_nack_output(struct rist_server *ctx, struct rist_flow *f)
 				}
 				remove_from_queue_reason = 5;
 				empty = 1;
-			} else if (peer->bufferbloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+			} else if (peer->buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
 				if (mb->nack_count > 4) {
 					if (empty == 0) {
 						msg(ctx->id, 0, RIST_LOG_ERROR,
@@ -1133,9 +1133,9 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 			.recovery_reorder_buffer = ctx->recovery_reorder_buffer,
 			.recover_rtt_min = ctx->recovery_rtt_min,
 			.recover_rtt_max = ctx->recovery_rtt_max,
-			.bufferbloat_mode = ctx->bufferbloat_mode,
-			.bufferbloat_limit = ctx->bufferbloat_limit,
-			.bufferbloat_hard_limit = ctx->bufferbloat_hard_limit
+			.buffer_bloat_mode = ctx->buffer_bloat_mode,
+			.buffer_bloat_limit = ctx->buffer_bloat_limit,
+			.buffer_bloat_hard_limit = ctx->buffer_bloat_hard_limit
 		};
 		// TODO: copy settings from special rtcp packet if it exists
 		server_store_settings(peer, &peer_config);
@@ -1613,9 +1613,9 @@ static void client_peer_copy_settings(struct rist_peer *peer_src, struct rist_pe
 	peer->recovery_reorder_buffer = peer_src->recovery_reorder_buffer;
 	peer->recover_rtt_min = peer_src->recover_rtt_min;
 	peer->recover_rtt_max = peer_src->recover_rtt_max;
-	peer->bufferbloat_mode = peer_src->bufferbloat_mode;
-	peer->bufferbloat_limit = peer_src->bufferbloat_limit;
-	peer->bufferbloat_hard_limit = peer_src->bufferbloat_hard_limit;
+	peer->buffer_bloat_mode = peer_src->buffer_bloat_mode;
+	peer->buffer_bloat_limit = peer_src->buffer_bloat_limit;
+	peer->buffer_bloat_hard_limit = peer_src->buffer_bloat_hard_limit;
 }
 
 static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
@@ -2457,9 +2457,9 @@ int rist_server_new(struct rist_server **_ctx, enum rist_profile profile)
 	ctx->recovery_reorder_buffer = 25;
 	ctx->recovery_rtt_min = 50;
 	ctx->recovery_rtt_max = 500;
-	ctx->bufferbloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
-	ctx->bufferbloat_limit = 6;
-	ctx->bufferbloat_hard_limit = 20;
+	ctx->buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
+	ctx->buffer_bloat_limit = 6;
+	ctx->buffer_bloat_hard_limit = 20;
 
 	if (init_common_ctx(&ctx->common, profile))
 	{
@@ -2756,8 +2756,8 @@ static void client_store_settings(struct rist_client *ctx,
 		const struct rist_peer_config *settings, struct rist_peer *peer)
 {
 	uint32_t recovery_rtt_min;
-	uint32_t bufferbloat_limit;
-	uint32_t bufferbloat_hard_limit;
+	uint32_t buffer_bloat_limit;
+	uint32_t buffer_bloat_hard_limit;
 
 	// TODO: Consolidate the two settings objects into one
 
@@ -2778,25 +2778,25 @@ static void client_store_settings(struct rist_client *ctx,
 	peer->recover_rtt_min = recovery_rtt_min;
 	peer->recover_rtt_max = settings->recovery_rtt_max;
 	/* Set buffer-bloating */
-	if (settings->bufferbloat_limit < 2 || settings->bufferbloat_limit > 100) {
+	if (settings->buffer_bloat_limit < 2 || settings->buffer_bloat_limit > 100) {
 		msg(0, ctx->id, RIST_LOG_INFO,
-			"[INIT] The configured value for bufferbloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-			settings->bufferbloat_limit, 6);
-		bufferbloat_limit = 6;
+			"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+			settings->buffer_bloat_limit, 6);
+		buffer_bloat_limit = 6;
 	} else {
-		bufferbloat_limit = settings->bufferbloat_limit;
+		buffer_bloat_limit = settings->buffer_bloat_limit;
 	}
-	if (settings->bufferbloat_hard_limit < 2 || settings->bufferbloat_hard_limit > 100) {
+	if (settings->buffer_bloat_hard_limit < 2 || settings->buffer_bloat_hard_limit > 100) {
 		msg(0, ctx->id, RIST_LOG_INFO,
-			"[INIT] The configured value for bufferbloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-			settings->bufferbloat_hard_limit, 20);
-		bufferbloat_hard_limit = 20;
+			"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+			settings->buffer_bloat_hard_limit, 20);
+		buffer_bloat_hard_limit = 20;
 	} else {
-		bufferbloat_hard_limit = settings->bufferbloat_hard_limit;
+		buffer_bloat_hard_limit = settings->buffer_bloat_hard_limit;
 	}
-	peer->bufferbloat_mode = settings->bufferbloat_mode;
-	peer->bufferbloat_limit = bufferbloat_limit;
-	peer->bufferbloat_hard_limit = bufferbloat_hard_limit;
+	peer->buffer_bloat_mode = settings->buffer_bloat_mode;
+	peer->buffer_bloat_limit = buffer_bloat_limit;
+	peer->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
 
 	/* Global context settings */
 
@@ -2951,27 +2951,27 @@ int rist_server_init(struct rist_server *ctx, const struct rist_peer_config *def
 		ctx->recovery_rtt_max = default_peer_config->recovery_rtt_max;
 		ctx->weight = default_peer_config->weight;
 		/* Set buffer-bloating */
-		ctx->bufferbloat_mode = default_peer_config->bufferbloat_mode;
-		uint32_t bufferbloat_limit;
-		uint32_t bufferbloat_hard_limit;
-		if (default_peer_config->bufferbloat_limit < 2 || default_peer_config->bufferbloat_limit > 100) {
+		ctx->buffer_bloat_mode = default_peer_config->buffer_bloat_mode;
+		uint32_t buffer_bloat_limit;
+		uint32_t buffer_bloat_hard_limit;
+		if (default_peer_config->buffer_bloat_limit < 2 || default_peer_config->buffer_bloat_limit > 100) {
 			msg(ctx->id, 0, RIST_LOG_INFO,
-				"[INIT] The configured value for bufferbloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				default_peer_config->bufferbloat_limit, 6);
-			bufferbloat_limit = 6;
+				"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+				default_peer_config->buffer_bloat_limit, 6);
+			buffer_bloat_limit = 6;
 		} else {
-			bufferbloat_limit = default_peer_config->bufferbloat_limit;
+			buffer_bloat_limit = default_peer_config->buffer_bloat_limit;
 		}
-		if (default_peer_config->bufferbloat_hard_limit < 2 || default_peer_config->bufferbloat_hard_limit > 100) {
+		if (default_peer_config->buffer_bloat_hard_limit < 2 || default_peer_config->buffer_bloat_hard_limit > 100) {
 			msg(ctx->id, 0,  RIST_LOG_INFO,
-				"[INIT] The configured value for bufferbloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				default_peer_config->bufferbloat_hard_limit, 20);
-			bufferbloat_hard_limit = 20;
+				"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
+				default_peer_config->buffer_bloat_hard_limit, 20);
+			buffer_bloat_hard_limit = 20;
 		} else {
-			bufferbloat_hard_limit = default_peer_config->bufferbloat_hard_limit;
+			buffer_bloat_hard_limit = default_peer_config->buffer_bloat_hard_limit;
 		}
-		ctx->bufferbloat_limit = bufferbloat_limit;
-		ctx->bufferbloat_hard_limit = bufferbloat_hard_limit;
+		ctx->buffer_bloat_limit = buffer_bloat_limit;
+		ctx->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
 	}
 
 	return 0;

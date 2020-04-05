@@ -450,10 +450,10 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 		flow_recovered_morenack_total += peer->stats_server_total.recovered_morenack;
 		flow_reordered_total += peer->stats_server_total.reordered;
 
-		// bufferbloat protection flags
-		if (peer->bufferbloat_mode != RIST_BUFFER_BLOAT_MODE_OFF) {
+		// buffer_bloat protection flags
+		if (peer->buffer_bloat_mode != RIST_BUFFER_BLOAT_MODE_OFF) {
 			if (peer->stats_server_instant.recovered_slope_inverted >= 3) {
-				if (!peer->bufferbloat_active) {
+				if (!peer->buffer_bloat_active) {
 					msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
 						"\t[INFO] Activating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
@@ -461,11 +461,11 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 						peer->stats_server_instant.recovered_slope_inverted,
 						peer->stats_server_instant.recovered_average,
 						peer->stats_server_total.recovered_average/8);
-					peer->bufferbloat_active = true;
+					peer->buffer_bloat_active = true;
 				}
 			}
 			else if (peer->stats_server_instant.recovered_slope_inverted == 0) {
-				if (peer->bufferbloat_active) {
+				if (peer->buffer_bloat_active) {
 					msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
 						"\t[INFO] Deactivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
@@ -473,7 +473,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 						peer->stats_server_instant.recovered_slope_inverted,
 						peer->stats_server_instant.recovered_average,
 						peer->stats_server_total.recovered_average/8);
-					peer->bufferbloat_active = false;
+					peer->buffer_bloat_active = false;
 				}
 			}
 		}

@@ -216,9 +216,9 @@ RIST_PACKED_STRUCT(rist_settings,{
 	uint32_t recover_rtt_min;
 	uint32_t recover_rtt_max;
 	uint8_t recovery_mode;
-	uint8_t bufferbloat_mode;
-	uint8_t bufferbloat_limit;
-	uint8_t bufferbloat_hard_limit;
+	uint8_t buffer_bloat_mode;
+	uint8_t buffer_bloat_limit;
+	uint8_t buffer_bloat_hard_limit;
 })
 
 struct rist_retry {
@@ -320,9 +320,9 @@ struct rist_server {
 	uint32_t recovery_rtt_min;
 	uint32_t recovery_rtt_max;
 	uint32_t weight;
-	enum rist_buffer_bloat_mode bufferbloat_mode;
-	uint8_t bufferbloat_limit;
-	uint8_t bufferbloat_hard_limit;
+	enum rist_buffer_bloat_mode buffer_bloat_mode;
+	uint8_t buffer_bloat_limit;
+	uint8_t buffer_bloat_hard_limit;
 
 	/* Common stuff */
 	struct rist_common_ctx common;
@@ -429,11 +429,11 @@ struct rist_peer {
 	uint32_t recover_rtt_min;
 	uint32_t recover_rtt_max;
 	uint32_t weight;
-	enum rist_buffer_bloat_mode bufferbloat_mode;
-	uint8_t bufferbloat_limit;
-	uint8_t bufferbloat_hard_limit;
+	enum rist_buffer_bloat_mode buffer_bloat_mode;
+	uint8_t buffer_bloat_limit;
+	uint8_t buffer_bloat_hard_limit;
 
-	bool bufferbloat_active;
+	bool buffer_bloat_active;
 
 	bool server_mode;
 	bool advanced;
