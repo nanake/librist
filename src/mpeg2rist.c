@@ -396,7 +396,7 @@ int main(int argc, char *argv[])
 
 		struct rist_peer *peer;
 		if (rist_client_peer_add(ctx, &peer_config, &peer) == -1) {
-			fprintf(stderr, "Could not add peer connector to client\n");
+			fprintf(stderr, "Could not add peer connector to client #%d\n", (int)(i + 1));
 			exit(1);
 		}
 	}

@@ -330,25 +330,7 @@ int main(int argc, char *argv[])
 
 	struct rist_server *ctx;
 
-	// TODO: make the 1969 configurable (used for reverse connection gre-dst-port inside main profile)
-	const struct rist_peer_config default_peer_config = {
-		.address = addr[0],
-		.gre_dst_port = 1969,
-		.recovery_mode = recovery_mode,
-		.recovery_maxbitrate = recovery_maxbitrate,
-		.recovery_maxbitrate_return = recovery_maxbitrate_return,
-		.recovery_length_min = recovery_length_min,
-		.recovery_length_max = recovery_length_max,
-		.recovery_reorder_buffer = recovery_reorder_buffer,
-		.recovery_rtt_min = recovery_rtt_min,
-		.recovery_rtt_max = recovery_rtt_max,
-		.weight = 5,
-		.buffer_bloat_mode = buffer_bloat_mode,
-		.buffer_bloat_limit = buffer_bloat_limit,
-		.buffer_bloat_hard_limit = buffer_bloat_hard_limit
-	};
-
-	if (rist_server_create(&ctx, profile, &default_peer_config, loglevel) != 0) {
+	if (rist_server_create(&ctx, profile, loglevel) != 0) {
 		fprintf(stderr, "Could not create rist server context\n");
 		exit(1);
 	}
@@ -385,8 +367,27 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		if (rist_server_peer_add(ctx, addr[i]) == -1) {
-			fprintf(stderr, "Could not init rist server%i\n", (int)(i + 1));
+		// TODO: make the 1969 configurable (used for reverse connection gre-dst-port inside main profile)
+		const struct rist_peer_config peer_config = {
+			.address = addr[i],
+			.gre_dst_port = 1969,
+			.recovery_mode = recovery_mode,
+			.recovery_maxbitrate = recovery_maxbitrate,
+			.recovery_maxbitrate_return = recovery_maxbitrate_return,
+			.recovery_length_min = recovery_length_min,
+			.recovery_length_max = recovery_length_max,
+			.recovery_reorder_buffer = recovery_reorder_buffer,
+			.recovery_rtt_min = recovery_rtt_min,
+			.recovery_rtt_max = recovery_rtt_max,
+			.weight = 5,
+			.buffer_bloat_mode = buffer_bloat_mode,
+			.buffer_bloat_limit = buffer_bloat_limit,
+			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
+		};
+
+		struct rist_peer *peer;
+		if (rist_server_peer_add(ctx, &peer_config, &peer) == -1) {
+			fprintf(stderr, "Could not add peer connector to server #%i\n", (int)(i + 1));
 			exit(1);
 		}
 	}
