@@ -8,8 +8,8 @@
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (4)
-#define RIST_SUBVERSION (5)
+#define RIST_API_VERSION (5)
+#define RIST_SUBVERSION (1)
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -339,12 +339,10 @@ RIST_API int rist_client_destroy(struct rist_client *ctx);
  *
  * @param[out] ctx a context representing the server instance
  * @param profile RIST profile
- * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @param loglevel Level of log messages to display
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_server_create(struct rist_server **ctx, enum rist_profile profile,
-			const struct rist_peer_config *default_peer_config,
 			enum rist_log_level log_level);
  
 /**
@@ -385,7 +383,8 @@ RIST_API int rist_server_cname_set(struct rist_server *ctx, const void *cname, s
  * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_peer_add(struct rist_server *ctx, const char *listen_addr);
+RIST_API int rist_server_peer_add(struct rist_server *ctx, 
+		const struct rist_peer_config *config, struct rist_peer **peer);
 
 /**
  * @brief Remove a peer connector to the existing server.

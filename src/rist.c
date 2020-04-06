@@ -31,6 +31,7 @@ static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 static PTHREAD_START_FUNC(server_pthread_protocol,arg);
 static PTHREAD_START_FUNC(server_pthread_dataout,arg);
 static void rist_fsm_init_comm(struct rist_peer *peer);
+static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer);
 
 static struct rist_peer *peer_initialize(const char *url, struct rist_client *client_ctx,
 										struct rist_server *server_ctx);
@@ -103,52 +104,58 @@ int rist_server_max_jitter_set(struct rist_server *ctx, int t)
 	return rist_max_jitter_set(&ctx->common, t);
 }
 
-static void server_store_settings(struct rist_peer *peer, const struct rist_settings *settings)
+static void init_peer_settings(struct rist_peer *peer)
 {
+	if (peer->server_mode) {
+		uint32_t recovery_maxbitrate_mbps = peer->config.recovery_maxbitrate < 1000 ? 1 : peer->config.recovery_maxbitrate / 1000;
+		// Initial value for some variables
+		peer->recovery_buffer_ticks =
+			(peer->config.recovery_length_max - peer->config.recovery_length_min) / 2 + peer->config.recovery_length_min;
 
-	peer->recovery_mode = settings->recovery_mode;
-	peer->recover_maxbitrate = settings->recover_maxbitrate;
-	peer->recover_maxbitrate_return = settings->recover_maxbitrate_return;
-	peer->recover_buffer_min = settings->recover_buffer_min;
-	peer->recover_buffer_max = settings->recover_buffer_max;
-	peer->recovery_reorder_buffer = settings->recovery_reorder_buffer;
-	peer->recover_rtt_min = settings->recover_rtt_min;
-	peer->recover_rtt_max = settings->recover_rtt_max;
-	peer->buffer_bloat_mode = settings->buffer_bloat_mode;
-	peer->buffer_bloat_limit = settings->buffer_bloat_limit;
-	peer->buffer_bloat_hard_limit = settings->buffer_bloat_hard_limit;
-	uint32_t recover_maxbitrate_mbps = peer->recover_maxbitrate < 1000 ? 1 : peer->recover_maxbitrate / 1000;
+		if (peer->config.recovery_mode == RIST_RECOVERY_MODE_TIME)
+			peer->recovery_buffer_ticks = peer->recovery_buffer_ticks * RIST_CLOCK;
 
-	// Initial value for some variables
-	peer->recover_buffer_ticks =
-		(peer->recover_buffer_max - peer->recover_buffer_min) / 2 + peer->recover_buffer_min;
+		switch (peer->config.recovery_mode) {
+		case RIST_RECOVERY_MODE_BYTES:
+			peer->missing_counter_max = peer->recovery_buffer_ticks /
+				(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
+		break;
+		case RIST_RECOVERY_MODE_TIME:
+			peer->missing_counter_max =
+				(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
+				(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
+			peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
+		break;
+		case RIST_RECOVERY_MODE_DISABLED:
+		case RIST_RECOVERY_MODE_UNCONFIGURED:
+			msg(peer->server_ctx->id, 0, RIST_LOG_ERROR,
+				"[ERROR] Client sent wrong recovery setting.\n");
+		break;
+		}
 
-	if (settings->recovery_mode == RIST_RECOVERY_MODE_TIME)
-		peer->recover_buffer_ticks = peer->recover_buffer_ticks * RIST_CLOCK;
-
-	switch (peer->recovery_mode) {
-	case RIST_RECOVERY_MODE_BYTES:
-		peer->missing_counter_max = peer->recover_buffer_ticks /
-			(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
-	break;
-	case RIST_RECOVERY_MODE_TIME:
-		peer->missing_counter_max =
-			(peer->recover_buffer_ticks / RIST_CLOCK) * recover_maxbitrate_mbps /
-			(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
-		peer->eight_times_rtt = settings->recover_rtt_min * 8;
-	break;
-	case RIST_RECOVERY_MODE_DISABLED:
-	case RIST_RECOVERY_MODE_UNCONFIGURED:
-		msg(peer->server_ctx->id, 0, RIST_LOG_ERROR,
-			"[ERROR] Client sent wrong recovery setting.\n");
-	break;
+		msg(peer->server_ctx->id, 0, RIST_LOG_INFO,
+			"[INFO] Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+			peer->adv_peer_id, peer->config.recovery_maxbitrate, peer->config.recovery_maxbitrate_return, peer->config.recovery_length_min, peer->config.recovery_length_max, peer->config.recovery_reorder_buffer,
+			peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.buffer_bloat_mode, peer->config.buffer_bloat_limit, peer->config.buffer_bloat_hard_limit);
 	}
+	else {
+		struct rist_client *ctx = peer->client_ctx;
+		/* Global context settings */
+		if (peer->config.recovery_maxbitrate > ctx->recovery_maxbitrate_max) {
+			ctx->recovery_maxbitrate_max = peer->config.recovery_maxbitrate;
+		}
 
-	msg(peer->server_ctx->id, 0, RIST_LOG_INFO,
-		"[INFO] Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
-		peer->adv_peer_id, peer->recover_maxbitrate, peer->recover_maxbitrate_return, peer->recover_buffer_min, peer->recover_buffer_max, peer->recovery_reorder_buffer,
-		peer->recover_rtt_min, peer->recover_rtt_max, peer->buffer_bloat_mode, peer->buffer_bloat_limit, peer->buffer_bloat_hard_limit);
+		if (peer->config.weight > 0) {
+			ctx->total_weight += peer->config.weight;
+			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Peer weight: %lu\n", peer->config.weight);
+		}
 
+		/* Set target recover size (buffer) */
+		if ((peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max)) > ctx->client_recover_min_time) {
+			ctx->client_recover_min_time = peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max);
+			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Setting buffer size to %zu\n", ctx->client_recover_min_time);
+		}
+	}
 }
 
 uint64_t timestampNTP_u64(void)
@@ -414,37 +421,37 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	uint64_t now = timestampNTP_u64();
 	struct rist_peer *peer = b->peer;
 
-	if (b->nack_count >= peer->buffer_bloat_hard_limit) {
+	if (b->nack_count >= peer->config.buffer_bloat_hard_limit) {
 		msg(f->server_id, f->client_id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
 				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, buffer_bloat_hard_limit %d, buffer_bloat_mode %d, stats_server_total.recovered_average %d\n",
 					b->seq,
 					b->nack_count,
 					(now - b->insertion_time) / RIST_CLOCK,
 					b->nack_count,
-					peer->buffer_bloat_hard_limit,
-					peer->buffer_bloat_mode,
+					peer->config.buffer_bloat_hard_limit,
+					peer->config.buffer_bloat_mode,
 					peer->stats_server_total.recovered_average);
 		return 8;
 	} else {
-		if ((uint64_t)(now - b->insertion_time) > peer->recover_buffer_ticks) {
+		if ((uint64_t)(now - b->insertion_time) > peer->recovery_buffer_ticks) {
 			msg(f->server_id, f->client_id, RIST_LOG_ERROR,
 				"[ERROR] Datagram %" PRIu32 " is missing but it is too late (%" PRIu64
 				"ms) to send NACK!, retry #%lu, retry queue %d, max time %"PRIu64"\n",
 				b->seq, (now - b->insertion_time)/RIST_CLOCK, b->nack_count,
-				f->missing_counter, peer->recover_buffer_ticks / RIST_CLOCK);
+				f->missing_counter, peer->recovery_buffer_ticks / RIST_CLOCK);
 			return 9;
 		} else if (now >= b->next_nack) {
 			uint64_t rtt = (peer->eight_times_rtt / 8);
-			if (rtt < peer->recover_rtt_min) {
-				rtt = peer->recover_rtt_min;
-			} else if (rtt > peer->recover_rtt_max) {
-				rtt = peer->recover_rtt_max;
+			if (rtt < peer->config.recovery_rtt_min) {
+				rtt = peer->config.recovery_rtt_min;
+			} else if (rtt > peer->config.recovery_rtt_max) {
+				rtt = peer->config.recovery_rtt_max;
 			}
 
 			// TODO: make this 10% overhead configurable?
 			// retry more when we are running out of time (proportional)
 			/* start with 1.1 * 1000 and go down from there */
-			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->buffer_bloat_hard_limit);
+			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->config.buffer_bloat_hard_limit);
 			//b->next_nack = now + (uint64_t)rtt * (uint64_t)ratio * (uint64_t)RIST_CLOCK;
 			b->next_nack = now + ((uint64_t)rtt * (uint64_t)1100 * (uint64_t)RIST_CLOCK) / 1000;
 			b->nack_count++;
@@ -455,7 +462,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 					b->seq, (b->next_nack - now) / RIST_CLOCK,
 					(now - b->insertion_time) / RIST_CLOCK,
 					b->nack_count,
-					peer->recover_buffer_ticks / RIST_CLOCK);
+					peer->recovery_buffer_ticks / RIST_CLOCK);
 
 			// update peer information
 			peer->nacks.array[peer->nacks.counter] = b->seq;
@@ -517,7 +524,7 @@ static struct rist_output_buffer *new_output_buffer(struct rist_output_buffer *o
 static void server_output(struct rist_server *ctx, struct rist_flow *f)
 {
 
-	uint64_t recover_buffer_ticks = f->recover_buffer_ticks;
+	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
 	while (f->server_queue_size > 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->server_queue[f->server_queue_output_idx];
@@ -561,31 +568,31 @@ static void server_output(struct rist_server *ctx, struct rist_flow *f)
 				uint64_t delay_rtc = now > (uint64_t)target_time ? (now - (uint64_t)target_time) : 0;
 
 				// Warning for a possible timing bug (the source has an improperly scaled timestamp)
-				if ((delay * 10) < recover_buffer_ticks)
+				if ((delay * 10) < recovery_buffer_ticks)
 				{
 					// TODO: quiet this down based on some other parameter that measures proper behavior,
 					// i.e. buffer filling up after it has been initialized. Perhaps print them
 					// only after one buffer length post flow initialization
 					msg(ctx->id, 0, RIST_LOG_WARN,
 						"**** [WARNING] Packet %"PRIu32" is too young %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", is buffer building up?\n",
-						b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recover_buffer_ticks / RIST_CLOCK);
+						b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
 				}
 				//else
 				//	msg(ctx->id, 0, RIST_LOG_WARN,
 				//		"**** [WARNING] Packet %"PRIu32" is ok %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", is buffer building up?\n",
-				//		b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recover_buffer_ticks / RIST_CLOCK);
+				//		b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
 
-				if (RIST_UNLIKELY(delay > (2 * recover_buffer_ticks))) {
+				if (RIST_UNLIKELY(delay > (2 * recovery_buffer_ticks))) {
 					// Double check the age of the packet within our server queue and empty if necessary
 					// Safety net for discontinuities in source timestamp or sequence numbers
 					msg(ctx->id, 0, RIST_LOG_WARN,
 						"**** [WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, releasing from output queue ...\n",
-						b->seq, b->size, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recover_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
+						b->seq, b->size, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
 				}
-				else if (delay_rtc <= recover_buffer_ticks) {
+				else if (delay_rtc <= recovery_buffer_ticks) {
 					// This is how we keep the buffer at the correct level
 					//msg(ctx->id, 0, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n", 
-					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recover_buffer_ticks / RIST_CLOCK, f->server_queue_size);
+					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->server_queue_size);
 					break;
 				}
 
@@ -632,9 +639,9 @@ static void server_output(struct rist_server *ctx, struct rist_flow *f)
 			if (f->server_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
-				delta / RIST_CLOCK, recover_buffer_ticks / RIST_CLOCK);
+				delta / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
 				// if the entire buffer is empty, something is very wrong, reset the queue ...
-				if (delta > recover_buffer_ticks)
+				if (delta > recovery_buffer_ticks)
 				{
 					msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] stream is dead, re-initializing flow\n");
 					f->server_queue_has_items = false;
@@ -715,7 +722,7 @@ void server_nack_output(struct rist_server *ctx, struct rist_flow *f)
 				goto nack_loop_continue;
 			}
 		} else if (peer->buffer_bloat_active) {
-			if (peer->buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
+			if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
 				if (empty == 0) {
 					msg(ctx->id, 0, RIST_LOG_ERROR,
 						"[ERROR] Retry queue is too large, %d, collapsed link (%u), flushing all nacks ...\n", f->missing_counter,
@@ -723,7 +730,7 @@ void server_nack_output(struct rist_server *ctx, struct rist_flow *f)
 				}
 				remove_from_queue_reason = 5;
 				empty = 1;
-			} else if (peer->buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+			} else if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
 				if (mb->nack_count > 4) {
 					if (empty == 0) {
 						msg(ctx->id, 0, RIST_LOG_ERROR,
@@ -788,10 +795,11 @@ nack_loop_continue:
 
 }
 
-static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, const char *url)
+static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, 
+		const struct rist_peer_config *config)
 {
 	/* Initialize peer */
-	struct rist_peer *p = peer_initialize(url, NULL, ctx);
+	struct rist_peer *p = peer_initialize(config->address, NULL, ctx);
 	if (!p) {
 		return NULL;
 	}
@@ -804,9 +812,11 @@ static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, con
 		return NULL;
 	}
 
-	if (ctx->gre_dst_port != 0) {
-		p->remote_port = ctx->gre_dst_port;
+	if (config->gre_dst_port != 0) {
+		p->remote_port = config->gre_dst_port;
 	}
+
+	store_peer_settings(config, p);
 
 	if (!p->listening)
 		p->adv_peer_id = ++ctx->common.peer_counter;
@@ -814,10 +824,11 @@ static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, con
 	return p;
 }
 
-int rist_server_peer_add(struct rist_server *ctx, const char *url)
+int rist_server_peer_add(struct rist_server *ctx, 
+		const struct rist_peer_config *config, struct rist_peer **peer)
 {
 	struct rist_peer *p_rtcp;
-	struct rist_peer *p = rist_server_peer_add_local(ctx, url);
+	struct rist_peer *p = rist_server_peer_add_local(ctx, config);
 	if (!p)
 		return -1;
 
@@ -832,7 +843,7 @@ int rist_server_peer_add(struct rist_server *ctx, const char *url)
 
 		char new_url[500];
 		sprintf(new_url, "%s:%d", p->url, p->local_port + 1); 
-		p_rtcp = rist_server_peer_add_local(ctx, new_url);
+		p_rtcp = rist_server_peer_add_local(ctx, config);
 		if (!p_rtcp)
 		{
 			udp_Close(p->sd);
@@ -853,6 +864,8 @@ int rist_server_peer_add(struct rist_server *ctx, const char *url)
 	peer_append(p);
 	/* jumpstart communication */
 	rist_fsm_init_comm(p);
+
+	*peer = p;
 
 	return 0;
 }
@@ -1118,27 +1131,8 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 {
 	struct rist_server *ctx = peer->server_ctx;
 
-	// TODO: call back for this authentication (pass peer->receiver_name, flow_id)
-
-	if (peer->recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED)
-	{
-		// TODO: get the settings from the flow itself when in basic profile
-		// Transfer default values into peer
-		const struct rist_settings peer_config = {
-			.recovery_mode = ctx->recovery_mode,
-			.recover_maxbitrate = ctx->recovery_maxbitrate,
-			.recover_maxbitrate_return = ctx->recovery_maxbitrate_return,
-			.recover_buffer_min = ctx->recovery_length_min,
-			.recover_buffer_max = ctx->recovery_length_max,
-			.recovery_reorder_buffer = ctx->recovery_reorder_buffer,
-			.recover_rtt_min = ctx->recovery_rtt_min,
-			.recover_rtt_max = ctx->recovery_rtt_max,
-			.buffer_bloat_mode = ctx->buffer_bloat_mode,
-			.buffer_bloat_limit = ctx->buffer_bloat_limit,
-			.buffer_bloat_hard_limit = ctx->buffer_bloat_hard_limit
-		};
-		// TODO: copy settings from special rtcp packet if it exists
-		server_store_settings(peer, &peer_config);
+	if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
+		// TODO: copy settings from special rtcp packet if it exists instead of peer parent
 	}
 
 	// Check to see if this peer's flowid changed
@@ -1172,7 +1166,7 @@ static bool rist_server_authenticate(struct rist_peer *peer, uint32_t seq,
 		}
 		// Reset the peer parameters
 		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
-		peer->recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
+		peer->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
 		peer->flow = NULL;
 	}
 
@@ -1256,7 +1250,7 @@ static void rist_server_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t
 			"[WARNING] Received data packet but passphrase is wrong for this peer (%d), ignoring ...\n",
 			peer->adv_peer_id);
 		return;
-	} else if (peer->recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
+	} else if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
 		msg(ctx->id, 0, RIST_LOG_WARN,
 			"[WARNING] Received data packet but no settings have been received for this peer (%d), ignoring ...\n",
 			peer->adv_peer_id);
@@ -1310,17 +1304,17 @@ static void rist_server_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t
 
 	uint32_t rtt;
 	rtt = peer->eight_times_rtt / 8;
-	if (rtt < peer->recover_rtt_min) {
-		rtt = peer->recover_rtt_min;
+	if (rtt < peer->config.recovery_rtt_min) {
+		rtt = peer->config.recovery_rtt_min;
 	}
-	else if (rtt > peer->recover_rtt_max) {
-		rtt = peer->recover_rtt_max;
+	else if (rtt > peer->config.recovery_rtt_max) {
+		rtt = peer->config.recovery_rtt_max;
 	}
 	// Optimal dynamic time for first retry (reorder bufer) is rtt/2
 	rtt = rtt / 2;
-	if (rtt < peer->recovery_reorder_buffer)
+	if (rtt < peer->config.recovery_reorder_buffer)
 	{
-		rtt = peer->recovery_reorder_buffer;
+		rtt = peer->config.recovery_reorder_buffer;
 	}
 
 	// Wake up output thread when data comes in
@@ -1603,19 +1597,22 @@ static void client_peer_delete(struct rist_client *ctx, struct rist_peer *peer)
 }
 */
 
-static void client_peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
+static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 {
-	peer->recovery_mode = peer_src->recovery_mode;
-	peer->recover_maxbitrate = peer_src->recover_maxbitrate;
-	peer->recover_maxbitrate_return = peer_src->recover_maxbitrate_return;
-	peer->recover_buffer_min = peer_src->recover_buffer_min;
-	peer->recover_buffer_max = peer_src->recover_buffer_max;
-	peer->recovery_reorder_buffer = peer_src->recovery_reorder_buffer;
-	peer->recover_rtt_min = peer_src->recover_rtt_min;
-	peer->recover_rtt_max = peer_src->recover_rtt_max;
-	peer->buffer_bloat_mode = peer_src->buffer_bloat_mode;
-	peer->buffer_bloat_limit = peer_src->buffer_bloat_limit;
-	peer->buffer_bloat_hard_limit = peer_src->buffer_bloat_hard_limit;
+	peer->config.weight = peer_src->config.weight;
+	peer->config.gre_dst_port = peer_src->config.gre_dst_port;
+	peer->config.recovery_mode = peer_src->config.recovery_mode;
+	peer->config.recovery_maxbitrate = peer_src->config.recovery_maxbitrate;
+	peer->config.recovery_maxbitrate_return = peer_src->config.recovery_maxbitrate_return;
+	peer->config.recovery_length_min = peer_src->config.recovery_length_min;
+	peer->config.recovery_length_max = peer_src->config.recovery_length_max;
+	peer->config.recovery_reorder_buffer = peer_src->config.recovery_reorder_buffer;
+	peer->config.recovery_rtt_min = peer_src->config.recovery_rtt_min;
+	peer->config.recovery_rtt_max = peer_src->config.recovery_rtt_max;
+	peer->config.buffer_bloat_mode = peer_src->config.buffer_bloat_mode;
+	peer->config.buffer_bloat_limit = peer_src->config.buffer_bloat_limit;
+	peer->config.buffer_bloat_hard_limit = peer_src->config.buffer_bloat_hard_limit;
+	init_peer_settings(peer);
 }
 
 static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
@@ -1993,6 +1990,8 @@ protocol_bypass:
 		else
 			new_peer_id = ++cctx->peer_counter;
 		p = peer_initialize(NULL, peer->client_ctx, peer->server_ctx);
+		// Copy settings and init/update global variables that depend on settings
+		peer_copy_settings(peer, p);
 		if (cctx->profile == RIST_PROFILE_SIMPLE) {
 			p->remote_port = peer->remote_port;
 			p->local_port = peer->local_port;
@@ -2053,7 +2052,6 @@ protocol_bypass:
 				msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Enabling keepalive for peer %d\n", p->adv_peer_id);
 			else {
 				// only profile > simple
-				client_peer_copy_settings(peer, p);
 				client_peer_append(peer->client_ctx, p);
 				// authenticate client now that we have an address
 				rist_fsm_recv_connect(p);
@@ -2281,7 +2279,7 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_client *cl
 	p->key_secret.key_size = k->key_size;
 	p->key_secret.password = k->password;
 
-	p->recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
+	p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
 	p->client_ctx = client_ctx;
 	p->server_ctx = server_ctx;
 	p->birthtime_local = timestampNTP_u64();
@@ -2441,70 +2439,13 @@ static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profil
 }
 
 int rist_server_create(struct rist_server **_ctx, enum rist_profile profile,
-		const struct rist_peer_config *peer_config,
 		enum rist_log_level log_level)
 {
-	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
-	uint32_t recovery_maxbitrate = 100000;
-	uint32_t recovery_maxbitrate_return = 0;
-	uint32_t recovery_length_min = 1000;
-	uint32_t recovery_length_max = 1000;
-	uint32_t recovery_reorder_buffer = 70;
-	uint32_t recovery_rtt_min = 50;
-	uint32_t recovery_rtt_max = 500;
-	uint32_t weight = 0;
-	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
-	uint32_t buffer_bloat_limit = 6;
-	uint32_t buffer_bloat_hard_limit = 20;
-
 	struct rist_server *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not create ctx object, OOM!\n");
 		return -1;
 	}
-
-	// Default values
-	if (peer_config) {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Processing peer configuration values\n");
-		recovery_mode = peer_config->recovery_mode;
-		recovery_maxbitrate = peer_config->recovery_maxbitrate;
-		recovery_maxbitrate_return = peer_config->recovery_maxbitrate_return;
-		recovery_length_min = peer_config->recovery_length_min;
-		recovery_length_max = peer_config->recovery_length_max;
-		recovery_reorder_buffer = peer_config->recovery_reorder_buffer;
-		recovery_rtt_min = peer_config->recovery_rtt_min;
-		recovery_rtt_max = peer_config->recovery_rtt_max;
-		weight = peer_config->weight;
-		/* Set buffer-bloating */
-		buffer_bloat_mode = peer_config->buffer_bloat_mode;
-		if (peer_config->buffer_bloat_limit < 2 || peer_config->buffer_bloat_limit > 100) {
-			msg(ctx->id, 0, RIST_LOG_INFO,
-				"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				peer_config->buffer_bloat_limit, buffer_bloat_limit);
-		} else {
-			buffer_bloat_limit = peer_config->buffer_bloat_limit;
-		}
-		if (peer_config->buffer_bloat_hard_limit < 2 || peer_config->buffer_bloat_hard_limit > 100) {
-			msg(ctx->id, 0,  RIST_LOG_INFO,
-				"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				peer_config->buffer_bloat_hard_limit, buffer_bloat_hard_limit);
-		} else {
-			buffer_bloat_hard_limit = peer_config->buffer_bloat_hard_limit;
-		}
-	}
-
-	ctx->recovery_mode = recovery_mode;
-	ctx->recovery_maxbitrate = recovery_maxbitrate;
-	ctx->recovery_maxbitrate_return = recovery_maxbitrate_return;
-	ctx->recovery_length_min = recovery_length_min;
-	ctx->recovery_length_max = recovery_length_max;
-	ctx->recovery_reorder_buffer = recovery_reorder_buffer;
-	ctx->recovery_rtt_min = recovery_rtt_min;
-	ctx->recovery_rtt_max = recovery_rtt_max;
-	ctx->weight = weight;
-	ctx->buffer_bloat_mode = buffer_bloat_mode;
-	ctx->buffer_bloat_limit = buffer_bloat_limit;
-	ctx->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
 
 	if (init_common_ctx(&ctx->common, profile))
 	{
@@ -2522,7 +2463,7 @@ int rist_server_create(struct rist_server **_ctx, enum rist_profile profile,
 	if (log_level >= RIST_LOG_DEBUG)
 		ctx->common.debug = true;
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode: %s\n", peer_config->address);
+	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in server mode\n");
 
 	*_ctx = ctx;
 	return 0;
@@ -2826,9 +2767,11 @@ int rist_client_peer_del(struct rist_client *ctx, struct rist_peer *d_peer)
 	return 0;
 }
 
-static void client_store_settings(struct rist_client *ctx,
-		const struct rist_peer_config *settings, struct rist_peer *peer)
+static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer)
 {
+	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
+	intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
+
 	uint32_t recovery_rtt_min;
 	uint32_t buffer_bloat_limit;
 	uint32_t buffer_bloat_hard_limit;
@@ -2836,24 +2779,24 @@ static void client_store_settings(struct rist_client *ctx,
 	// TODO: Consolidate the two settings objects into one
 
 	/* Set recovery options */
-	peer->recovery_mode = settings->recovery_mode;
-	peer->recover_maxbitrate = settings->recovery_maxbitrate;
-	peer->recover_maxbitrate_return = settings->recovery_maxbitrate_return;
-	peer->recover_buffer_min = settings->recovery_length_min;
-	peer->recover_buffer_max = settings->recovery_length_max;
-	peer->recovery_reorder_buffer = settings->recovery_reorder_buffer;
+	peer->config.recovery_mode = settings->recovery_mode;
+	peer->config.recovery_maxbitrate = settings->recovery_maxbitrate;
+	peer->config.recovery_maxbitrate_return = settings->recovery_maxbitrate_return;
+	peer->config.recovery_length_min = settings->recovery_length_min;
+	peer->config.recovery_length_max = settings->recovery_length_max;
+	peer->config.recovery_reorder_buffer = settings->recovery_reorder_buffer;
 	if (settings->recovery_rtt_min < RIST_RTT_MIN) {
-		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] rtt_min is too small (%u), using %dms instead\n",
+		msg(server_id, client_id, RIST_LOG_INFO, "[INIT] rtt_min is too small (%u), using %dms instead\n",
 			settings->recovery_rtt_min, RIST_RTT_MIN);
 		recovery_rtt_min = RIST_RTT_MIN;
 	} else {
 		recovery_rtt_min = settings->recovery_rtt_min;
 	}
-	peer->recover_rtt_min = recovery_rtt_min;
-	peer->recover_rtt_max = settings->recovery_rtt_max;
+	peer->config.recovery_rtt_min = recovery_rtt_min;
+	peer->config.recovery_rtt_max = settings->recovery_rtt_max;
 	/* Set buffer-bloating */
 	if (settings->buffer_bloat_limit < 2 || settings->buffer_bloat_limit > 100) {
-		msg(0, ctx->id, RIST_LOG_INFO,
+		msg(server_id, client_id, RIST_LOG_INFO,
 			"[INIT] The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
 			settings->buffer_bloat_limit, 6);
 		buffer_bloat_limit = 6;
@@ -2861,35 +2804,18 @@ static void client_store_settings(struct rist_client *ctx,
 		buffer_bloat_limit = settings->buffer_bloat_limit;
 	}
 	if (settings->buffer_bloat_hard_limit < 2 || settings->buffer_bloat_hard_limit > 100) {
-		msg(0, ctx->id, RIST_LOG_INFO,
+		msg(server_id, client_id, RIST_LOG_INFO,
 			"[INIT] The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
 			settings->buffer_bloat_hard_limit, 20);
 		buffer_bloat_hard_limit = 20;
 	} else {
 		buffer_bloat_hard_limit = settings->buffer_bloat_hard_limit;
 	}
-	peer->buffer_bloat_mode = settings->buffer_bloat_mode;
-	peer->buffer_bloat_limit = buffer_bloat_limit;
-	peer->buffer_bloat_hard_limit = buffer_bloat_hard_limit;
+	peer->config.buffer_bloat_mode = settings->buffer_bloat_mode;
+	peer->config.buffer_bloat_limit = buffer_bloat_limit;
+	peer->config.buffer_bloat_hard_limit = buffer_bloat_hard_limit;
 
-	/* Global context settings */
-
-	if (settings->recovery_maxbitrate > ctx->recovery_maxbitrate_max) {
-		ctx->recovery_maxbitrate_max = settings->recovery_maxbitrate;
-	}
-
-	if (settings->weight > 0) {
-		peer->weight = settings->weight;
-		ctx->total_weight += settings->weight;
-		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Peer weight: %lu\n", peer->weight);
-	}
-
-	/* Set target recover size (buffer) */
-	if ((settings->recovery_length_max + (2 * settings->recovery_rtt_max)) > ctx->client_recover_min_time) {
-		ctx->client_recover_min_time = settings->recovery_length_max + (2 * settings->recovery_rtt_max);
-		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Setting buffer size to %zu\n", ctx->client_recover_min_time);
-	}
-
+	init_peer_settings(peer);
 }
 
 static struct rist_peer *rist_client_peer_add_local(struct rist_client *ctx,
@@ -2935,7 +2861,7 @@ static struct rist_peer *rist_client_peer_add_local(struct rist_client *ctx,
 	newpeer->adv_peer_id = ctx->common.peer_counter++;
 	newpeer->adv_flow_id = ctx->adv_flow_id;
 
-	client_store_settings(ctx, config, newpeer);
+	store_peer_settings(config, newpeer);
 
 	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Advertising flow_id  %" PRIu64 " and peer_id %u, %u/%u\n",
 		newpeer->adv_flow_id, newpeer->adv_peer_id, newpeer->local_port, newpeer->remote_port);
@@ -3228,7 +3154,7 @@ static PTHREAD_START_FUNC(server_pthread_protocol, arg)
 		struct rist_flow *f = ctx->common.FLOWS;
 		while (f) {
 			if (now > f->stats_next_time) {
-				f->stats_next_time += f->recover_buffer_ticks; // equal to the buffer size
+				f->stats_next_time += f->recovery_buffer_ticks; // equal to the buffer size
 				// we move the f cursor inside because we can detect and delete stale flows
 				// inside, thus skipping it
 				f = rist_server_flow_statistics(ctx, f);

@@ -165,7 +165,7 @@ struct rist_flow {
 
 	bool server_queue_has_items;
 	size_t server_queue_size;        /* size in bytes */
-	uint64_t recover_buffer_ticks;  /* size in ticks */
+	uint64_t recovery_buffer_ticks;  /* size in ticks */
 	size_t server_queue_output_idx;  /* next packet to output */
 	size_t server_queue_max;
 
@@ -206,20 +206,6 @@ struct rist_flow {
 	uint16_t rtp_msw;
 	bool short_seq;
 };
-
-RIST_PACKED_STRUCT(rist_settings,{
-	uint32_t recover_maxbitrate;
-	uint32_t recover_maxbitrate_return;
-	uint32_t recover_buffer_min;
-	uint32_t recover_buffer_max;
-	uint32_t recovery_reorder_buffer;
-	uint32_t recover_rtt_min;
-	uint32_t recover_rtt_max;
-	uint8_t recovery_mode;
-	uint8_t buffer_bloat_mode;
-	uint8_t buffer_bloat_limit;
-	uint8_t buffer_bloat_hard_limit;
-})
 
 struct rist_retry {
 	uint32_t seq;
@@ -311,6 +297,7 @@ struct rist_server {
 	intptr_t id;
 
 	/* Default peer config */
+/*
 	uint16_t gre_dst_port;
 	enum rist_recovery_mode recovery_mode;
 	uint32_t recovery_maxbitrate;
@@ -325,6 +312,7 @@ struct rist_server {
 	enum rist_buffer_bloat_mode buffer_bloat_mode;
 	uint8_t buffer_bloat_limit;
 	uint8_t buffer_bloat_hard_limit;
+*/
 
 	/* Common stuff */
 	struct rist_common_ctx common;
@@ -421,19 +409,8 @@ struct rist_peer {
 	char receiver_name[RIST_MAX_HOSTNAME];
 
 	/* Config */
-	enum rist_recovery_mode recovery_mode;
-	uint32_t recover_maxbitrate;
-	uint32_t recover_maxbitrate_return;
-	uint32_t recover_buffer_min;
-	uint32_t recover_buffer_max;
-	uint64_t recover_buffer_ticks;
-	uint32_t recovery_reorder_buffer;
-	uint32_t recover_rtt_min;
-	uint32_t recover_rtt_max;
-	uint32_t weight;
-	enum rist_buffer_bloat_mode buffer_bloat_mode;
-	uint8_t buffer_bloat_limit;
-	uint8_t buffer_bloat_hard_limit;
+	struct rist_peer_config config;
+	uint64_t recovery_buffer_ticks;
 
 	bool buffer_bloat_active;
 

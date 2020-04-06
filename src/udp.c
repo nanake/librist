@@ -813,11 +813,11 @@ void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer 
 			continue;
 
 		if (peer->state_local != RIST_PEER_STATE_CONNECT) {
-			ctx->weight_counter -= peer->weight;
+			ctx->weight_counter -= peer->config.weight;
 			if (ctx->weight_counter <= 0) {
 				ctx->weight_counter = ctx->total_weight;
 			}
-			peer->w_count = peer->weight;
+			peer->w_count = peer->config.weight;
 			continue;
 		}
 
@@ -827,7 +827,7 @@ void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer 
 		/* * * * * * * * * * * * * * * * * * */
 		/*************************************/
 
-		if (peer->weight == 0) {
+		if (peer->config.weight == 0) {
 			uint8_t *payload = buffer->data;
 			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate);
 			duplicate = true;
@@ -861,7 +861,7 @@ void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer 
 		for (; peer; peer = peer->next) {
 			if (peer->listening || !peer->is_data)
 				continue;
-			peer->w_count = peer->weight;
+			peer->w_count = peer->config.weight;
 		}
 	}
 }
@@ -930,7 +930,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 	struct rist_bandwidth_estimation *retry_bw = &retry->peer->retry_bw;
 	struct rist_bandwidth_estimation *cli_bw = &retry->peer->bw;
 	size_t current_bitrate = cli_bw->bitrate + retry_bw->bitrate;
-	size_t max_bitrate = retry->peer->recover_maxbitrate * 1000;
+	size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
 
 	if (current_bitrate > max_bitrate) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
@@ -943,11 +943,11 @@ int rist_retry_dequeue(struct rist_client *ctx)
 	uint64_t now = timestampNTP_u64();
 	uint64_t data_age = (now - ctx->client_queue[idx]->time) / RIST_CLOCK;
 	uint64_t retry_age = (now - retry->insert_time) / RIST_CLOCK;
-	if (retry_age > retry->peer->recover_buffer_max) {
+	if (retry_age > retry->peer->config.recovery_length_max) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[ERROR] Retry-request of element %" PRIu32 " (idx %zu) that was sent %" PRIu64
 				"ms ago has been in the queue too long to matter: %"PRIu64"ms > %ums\n",
-			retry->seq, idx, data_age, retry_age, retry->peer->recover_buffer_max);
+			retry->seq, idx, data_age, retry_age, retry->peer->config.recovery_length_max);
 		return -1;
 	}
 
@@ -975,7 +975,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 
 	buffer->transmit_count++;
 	uint32_t ret = 0;
-	if (buffer->transmit_count >= retry->peer->buffer_bloat_hard_limit) {
+	if (buffer->transmit_count >= retry->peer->config.buffer_bloat_hard_limit) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
@@ -1018,12 +1018,12 @@ void rist_retry_enqueue(struct rist_client *ctx, uint32_t seq, struct rist_peer 
 			uint64_t delta = 2 * (now - buffer->last_retry_request) / RIST_CLOCK;
 			//msg(0, ctx->id, RIST_LOG_WARN,
 			//	"[ERROR] Nack request for seq %"PRIu32" with delta %"PRIu64" and rtt_min %"PRIu32"\n", 
-			//	buffer->seq, delta, peer->recover_rtt_min);
-			if (delta < peer->recover_rtt_min)
+			//	buffer->seq, delta, peer->config.recovery_rtt_min);
+			if (delta < peer->config.recovery_rtt_min)
 			{
 				msg(0, ctx->id, RIST_LOG_WARN,
 					"[ERROR] Nack request for seq %"PRIu32"/%"PRIu32" is already queued, %"PRIu64" < %"PRIu32"\n",
-					buffer->seq, idx, delta, peer->recover_rtt_min);
+					buffer->seq, idx, delta, peer->config.recovery_rtt_min);
 				// TODO: stats?
 				return;
 			}

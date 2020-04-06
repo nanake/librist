@@ -369,7 +369,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 			peer->stats_server_instant.reordered,
 			peer->stats_server_instant.dups,
 			peer->stats_server_instant.retries,
-			peer->recover_buffer_ticks / RIST_CLOCK,
+			peer->recovery_buffer_ticks / RIST_CLOCK,
 			peer->flow->missing_counter,
 			peer->missing_counter_max,
 			peer->last_mrtt,
@@ -451,7 +451,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 		flow_reordered_total += peer->stats_server_total.reordered;
 
 		// buffer_bloat protection flags
-		if (peer->buffer_bloat_mode != RIST_BUFFER_BLOAT_MODE_OFF) {
+		if (peer->config.buffer_bloat_mode != RIST_BUFFER_BLOAT_MODE_OFF) {
 			if (peer->stats_server_instant.recovered_slope_inverted >= 3) {
 				if (!peer->buffer_bloat_active) {
 					msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
@@ -609,8 +609,8 @@ int rist_server_associate_flow(struct rist_peer *p, uint32_t flow_id)
 
 	// Transfer variables from peer to flow
 	// Set/update max flow buffer size
-	if (f->recover_buffer_ticks < p->recover_buffer_ticks)
-		f->recover_buffer_ticks = p->recover_buffer_ticks;
+	if (f->recovery_buffer_ticks < p->recovery_buffer_ticks)
+		f->recovery_buffer_ticks = p->recovery_buffer_ticks;
 	// Set/update max missing counter
 	if (f->missing_counter_max < p->missing_counter_max)
 		f->missing_counter_max = p->missing_counter_max;
