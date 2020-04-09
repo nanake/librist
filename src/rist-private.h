@@ -278,6 +278,10 @@ struct rist_common_ctx {
 };
 
 struct rist_receiver {
+	/* data out thread signaling for fifo */
+	pthread_cond_t condition;
+	pthread_mutex_t mutex;
+
 	/* Receiver data callback */
 	void (*receiver_data_callback)(void *arg, struct rist_data_block *data_block);
 	void *receiver_data_callback_argument;

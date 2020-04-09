@@ -520,9 +520,10 @@ RIST_API struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx
  * Use this API to read data from an internal fifo queue instead of the callback
  *
  * @param a RIST receiver context
+ * @param timeout How long to wait for queue data (ms)
  * @return a pointer to the rist_data_block structure
  */
-RIST_API struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx);
+RIST_API struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx, int timeout);
 
 /**
  * @brief Destroy RIST receiver

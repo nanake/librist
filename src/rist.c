@@ -477,33 +477,41 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx)
 {
 	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_data_read call!\n");
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_oob_read call!\n");
 		return NULL;
 	}
 	msg(0, 0, RIST_LOG_ERROR, "[ERROR] rist_receiver_oob_read not implemented!\n");
 	return NULL;
 }
 
-struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx)
+struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx, int timeout)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_data_read call!\n");
 		return NULL;
 	}
+
+	struct rist_data_block *output_buffer = NULL;
+
 	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
-	if (ctx->dataout_fifo_queue_read_index == ctx->dataout_fifo_queue_write_index) {
-		pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
-		return NULL;
-	}
-	struct rist_data_block *output_buffer = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
-	if (output_buffer) {
-		ctx->dataout_fifo_queue_bytesize -= output_buffer->payload_len;
+	if (ctx->dataout_fifo_queue_read_index != ctx->dataout_fifo_queue_write_index) {
+		output_buffer = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
 		ctx->dataout_fifo_queue_read_index = (ctx->dataout_fifo_queue_read_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
-		ctx->dataout_fifo_queue_counter--;
-		//msg(0, 0, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
-		//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
+		if (output_buffer) {
+			//msg(0, 0, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
+			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
+			ctx->dataout_fifo_queue_counter--;
+			ctx->dataout_fifo_queue_bytesize -= output_buffer->payload_len;
+		}
 	}
 	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+
+	if (output_buffer == NULL && timeout > 0) {
+		pthread_mutex_lock(&(ctx->mutex));
+		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
+		pthread_mutex_unlock(&(ctx->mutex));
+	}
+
 	return output_buffer;
 }
 
@@ -633,8 +641,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					}
 					ctx->dataout_fifo_queue_write_index = (ctx->dataout_fifo_queue_write_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
 					ctx->dataout_fifo_queue_bytesize += b->size;
-					ctx->dataout_fifo_queue_counter++;
+					ctx->dataout_fifo_queue_counter = (ctx->dataout_fifo_queue_counter + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
 					pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+					// Wake up the fifo read thread (poll)
+					if (pthread_cond_signal(&(ctx->condition)))
+						msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 				}
 			}
 			//else
@@ -2473,11 +2484,7 @@ int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
 	}
 
 	if (init_common_ctx(&ctx->common, profile))
-	{
-		free(ctx);
-		ctx = NULL;
-		return -1;
-	}
+		goto fail;
 
 	ctx->id = (intptr_t)ctx;
 
@@ -2490,8 +2497,25 @@ int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting in receiver mode\n");
 
+	int ret = pthread_cond_init(&ctx->condition, NULL);
+	if (ret) {
+		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_cond_init\n", ret);
+		goto fail;
+	}
+	ret = pthread_mutex_init(&ctx->mutex, NULL);
+	if (ret){
+		pthread_cond_destroy(&ctx->condition);
+		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_mutex_init\n", ret);
+		goto fail;
+	}
+
 	*_ctx = ctx;
 	return 0;
+
+fail:
+	free(ctx);
+	ctx = NULL;
+	return -1;
 }
 
 int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
@@ -3156,6 +3180,10 @@ static void rist_receiver_destroy_local(struct rist_receiver *ctx)
 		}
 	}
 	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+
+	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing data fifo signaling variables (condition and mutex)\n");
+	pthread_cond_destroy(&ctx->condition);
+	pthread_mutex_destroy(&ctx->mutex);
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing dataout_fifo_queue_lock\n");
 	pthread_rwlock_destroy(&ctx->dataout_fifo_queue_lock);
