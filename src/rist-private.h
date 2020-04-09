@@ -265,7 +265,7 @@ struct rist_common_ctx {
 	} auth;
 
 	/* Out-of-band data variables */
-	void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block);
+	void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
 	pthread_rwlock_t oob_queue_lock;
@@ -283,7 +283,7 @@ struct rist_receiver {
 	pthread_mutex_t mutex;
 
 	/* Receiver data callback */
-	void (*receiver_data_callback)(void *arg, struct rist_data_block *data_block);
+	void (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
 	void *receiver_data_callback_argument;
 
 	/* Receiver timed async data output */

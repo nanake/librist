@@ -526,7 +526,7 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	output_buffer->flow_id = flow_id;
 	uint8_t *newbuffer;
 	if (output_buffer->payload && b->size != output_buffer->payload_len)
-		newbuffer = realloc(output_buffer->payload, b->size);
+		newbuffer = realloc((void *)output_buffer->payload, b->size);
 	else
 		newbuffer = malloc(b->size);
 	memcpy(newbuffer, payload, b->size);
@@ -2102,18 +2102,18 @@ protocol_bypass:
 	}
 }
 
-int rist_sender_data_timed_write(struct rist_sender *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time)
+int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block)
 {
 	// max protocol overhead for data is gre-header plus gre-reduced-mode-header plus rtp-header
 	// 16 + 4 + 12 = 32
 
-	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-32)) {
+	if (data_block->payload_len <= 0 || data_block->payload_len > (RIST_MAX_PACKET_SIZE-32)) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"Dropping pipe packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-32);
+			"Dropping pipe packet of size %d, max is %d.\n", data_block->payload_len, RIST_MAX_PACKET_SIZE-32);
 		return -1;
 	}
 
-	int ret = rist_sender_enqueue(ctx, buf, len, ntp_time, src_port, dst_port);
+	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, data_block->timestamp_ntp, data_block->virt_src_port, data_block->virt_dst_port);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
 		msg(0, ctx->id, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
@@ -2129,11 +2129,6 @@ struct rist_oob_block *rist_sender_oob_read(struct rist_sender *ctx)
 	}
 	msg(0, 0, RIST_LOG_ERROR, "[ERROR] rist_sender_oob_read not implemented!\n");
 	return NULL;
-}
-
-int rist_sender_data_write(struct rist_sender *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
-{
-	return rist_sender_data_timed_write(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
 }
 
 static int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
@@ -2200,7 +2195,7 @@ static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
 	return;
 }
 
-int rist_sender_oob_write(struct rist_sender *ctx, struct rist_oob_block *oob_block)
+int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oob_block *oob_block)
 {
 	// max protocol overhead for data is gre-header, 16 max
 	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE-16)) {
@@ -2211,7 +2206,7 @@ int rist_sender_oob_write(struct rist_sender *ctx, struct rist_oob_block *oob_bl
 	return rist_oob_enqueue(&ctx->common, oob_block->peer, oob_block->payload, oob_block->payload_len);
 }
 
-int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_oob_block *oob_block)
+int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_block *oob_block)
 {
 	// max protocol overhead for data is gre-header, 16 max
 	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE-16)) {
@@ -3034,7 +3029,7 @@ int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
 }
 
 int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
+		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3058,7 +3053,7 @@ int rist_sender_oob_set(struct rist_sender *ctx,
 }
 
 int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
+		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3169,7 +3164,7 @@ static void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	{
 		if (ctx->dataout_fifo_queue[i])
 		{
-			uint8_t *payload = ctx->dataout_fifo_queue[i]->payload;
+			const uint8_t *payload = ctx->dataout_fifo_queue[i]->payload;
 			if (payload) {
 				// TODO: why does this crash
 				//free(payload);
@@ -3267,7 +3262,7 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 }
 
 int rist_receiver_start(struct rist_receiver *ctx,
-	void(*data_callback)(void *arg, struct rist_data_block *data_block),
+	void(*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg)
 {
 	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0) {

@@ -95,17 +95,18 @@ struct rist_peer;
 struct rist_data_block {
 	struct rist_peer *peer;
 	uint32_t flow_id;
-	void *payload;
+	const void *payload;
 	size_t payload_len;
-	uint16_t virt_src_port;
-	uint16_t virt_dst_port;
 	uint64_t timestamp_ntp;
 	uint32_t flags;
+	// These virtual ports are not used for simple profile
+	uint16_t virt_src_port;
+	uint16_t virt_dst_port;
 };
 
 struct rist_oob_block {
 	struct rist_peer *peer;
-	void *payload;
+	const void *payload;
 	size_t payload_len;
 	uint64_t timestamp_ntp;
 };
@@ -257,7 +258,7 @@ RIST_API int rist_sender_max_jitter_set(struct rist_sender *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
+		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -294,7 +295,7 @@ RIST_API int rist_sender_start(struct rist_sender *ctx);
  * @param len size of buf buffer (IP header is expected by non-librist counterparts)
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_sender_oob_write(struct rist_sender *ctx, struct rist_oob_block *oob_block);
+RIST_API int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oob_block *oob_block);
 
 /**
  * @brief Reads out-of-band data
@@ -312,24 +313,11 @@ RIST_API struct rist_oob_block *rist_sender_oob_read(struct rist_sender *ctx);
  * One sender can send write data into a librist packet.
  *
  * @param a RIST sender context
- * @param buf data to be sent through librist
- * @param len size of buf buffer
+ * @param a pointer to the rist_data_block structure
+ * the timestamp_ntp will be populated by the lib when a value of 0 is passed
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_sender_data_write(struct rist_sender *ctx, const void *buf, size_t len, uint16_t virt_src_port, uint16_t virt_dst_port);
-
-/**
- * @brief Write data into a librist packet.
- *
- * One sender can send write data into a librist packet.
- *
- * @param a RIST sender context
- * @param buf data to be sent through librist
- * @param len size of buf buffer
- * @param ntp_time 64 bit timestamp in NTP format
- * @return number of written bytes on success, -1 in case of error.
- */
-RIST_API int rist_sender_data_timed_write(struct rist_sender *ctx, const void *buf, size_t len, uint16_t virt_src_port, uint16_t virt_dst_port, uint64_t ntp_time);
+RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
 
 /**
  * @brief Destroy RIST sender
@@ -461,7 +449,7 @@ RIST_API int rist_receiver_max_jitter_set(struct rist_receiver *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
+		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -487,7 +475,7 @@ RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_na
  * @note Return immediately
  */
 RIST_API int rist_receiver_start(struct rist_receiver *ctx,
-	void (*data_callback)(void *arg, struct rist_data_block *data_block),
+	void (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg);
 
 /**
@@ -502,7 +490,7 @@ RIST_API int rist_receiver_start(struct rist_receiver *ctx,
  * @param len size of buf buffer (IP header is expected by non-librist counterparts)
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_oob_block *oob_block);
+RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_block *oob_block);
 
 /**
  * @brief Reads out-of-band data
