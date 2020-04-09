@@ -497,7 +497,7 @@ struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx)
 	return output_buffer;
 }
 
-static struct rist_data_block *new_output_buffer(struct rist_data_block *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
+static struct rist_data_block *new_data_block(struct rist_data_block *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
 {
 	struct rist_data_block *output_buffer;
 	if (output_buffer_current)
@@ -606,20 +606,21 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 						f->last_seq_output + 1, b->seq);
 					f->stats_instant.lost++;
 				}
-				// TODO: support passing of discontinuities
-				// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
-				uint32_t flags = 0;
-				if (ctx->receiver_receive_callback && b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
-					uint8_t *payload = b->data;
-					ctx->receiver_receive_callback(ctx->receiver_receive_callback_argument, b->peer, f->flow_id, &payload[RIST_MAX_PAYLOAD_OFFSET], b->size, b->src_port, b->dst_port, b->source_time, flags );
-				}
-				else if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
+				if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
+					// TODO: support passing of discontinuities (missing seq)
+					// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
+					uint32_t flags = 0;
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;
 					pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
-					ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index] = new_output_buffer(
+					ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index] = new_data_block(
 							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index], b, 
 							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
+					if (ctx->receiver_data_callback) {
+						// send to callback synchronously
+						ctx->receiver_data_callback(ctx->receiver_data_callback_argument, 
+							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index]);
+					}
 					ctx->dataout_fifo_queue_write_index = (ctx->dataout_fifo_queue_write_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
 					ctx->dataout_fifo_queue_bytesize += b->size;
 					ctx->dataout_fifo_queue_counter++;
@@ -3214,7 +3215,7 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 }
 
 int rist_receiver_start(struct rist_receiver *ctx,
-	void(*receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
+	void(*data_callback)(void *arg, struct rist_data_block *data_block),
 	void *arg)
 {
 	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0) {
@@ -3222,8 +3223,8 @@ int rist_receiver_start(struct rist_receiver *ctx,
 		return -1;
 	}
 
-	ctx->receiver_receive_callback = receive_callback;
-	ctx->receiver_receive_callback_argument = arg;
+	ctx->receiver_data_callback = data_callback;
+	ctx->receiver_data_callback_argument = arg;
 
 	if (!ctx->receiver_thread) {
 		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0) {

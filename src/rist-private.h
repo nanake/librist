@@ -279,8 +279,8 @@ struct rist_common_ctx {
 
 struct rist_receiver {
 	/* Receiver data callback */
-	void (*receiver_receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
-	void *receiver_receive_callback_argument;
+	void (*receiver_data_callback)(void *arg, struct rist_data_block *data_block);
+	void *receiver_data_callback_argument;
 
 	/* Receiver timed async data output */
 	pthread_rwlock_t dataout_fifo_queue_lock;

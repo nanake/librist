@@ -464,13 +464,13 @@ RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_na
  * Start receiver data output thread. This function returns immediately.
  *
  * @param a RIST receiver context
- * @param receive_callback The function that will be called when a data frame is
+ * @param data_callback The function that will be called when a data frame is
  * received from a sender.
- * @param arg the extra argument passed to the `receive_callback`
+ * @param arg the extra argument passed to the `data_callback`
  * @note Return immediately
  */
 RIST_API int rist_receiver_start(struct rist_receiver *ctx,
-	void (*receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags),
+	void (*data_callback)(void *arg, struct rist_data_block *data_block),
 	void *arg);
 
 /**
