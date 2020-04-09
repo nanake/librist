@@ -126,7 +126,7 @@ static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 	return;
 }
 
-static void cb_recv_oob(void *arg, struct rist_oob_block *oob_block)
+static void cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_sender *ctx = (struct rist_sender *)arg;
 	(void)ctx;
@@ -419,7 +419,13 @@ int main(int argc, char *argv[])
 	while (!signalReceived) {
 		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
 		if (r > 0) {
-			w = rist_sender_data_write(ctx, buffer, r, virt_src_port, virt_dst_port);
+			struct rist_data_block data_block;
+			data_block.payload = buffer;
+			data_block.payload_len = r;
+			data_block.virt_src_port = virt_src_port;
+			data_block.virt_dst_port = virt_dst_port;
+			data_block.timestamp_ntp = 0; // delegate this to the library
+			w = rist_sender_data_write(ctx, &data_block);
 			(void) w;
 		}
 	}

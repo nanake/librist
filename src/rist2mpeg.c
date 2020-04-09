@@ -111,7 +111,7 @@ struct rist_port_filter {
 	uint16_t virt_dst_port;
 };
 
-static void cb_recv(void *arg, struct rist_data_block *b)
+static void cb_recv(void *arg, const struct rist_data_block *b)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 
@@ -159,7 +159,7 @@ static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 	return;
 }
 
-static void cb_recv_oob(void *arg, struct rist_oob_block *oob_block)
+static void cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
