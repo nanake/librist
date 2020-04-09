@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
@@ -29,10 +29,10 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -T | --recovery-type TYPE                                        * | Type of recovery (off, bytes, time)                 |\n"
 "       -x | --url2 ADDRESS:PORT                                         * | Second Output IP address and port                   |\n"
 "       -q | --miface2 name/index                                        * | Multicast Interface2 name (linux) or index (win)    |\n"
-"       -s | --server  rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT     * | Address of local rist server                        |\n"
-"       -b | --server2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of second local rist server                 |\n"
-"       -c | --server3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of third local rist server                  |\n"
-"       -d | --server4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of fourth local rist server                 |\n"
+"       -s | --receiver  rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT     * | Address of local rist receiver                        |\n"
+"       -b | --receiver2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of second local rist receiver                 |\n"
+"       -c | --receiver3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of third local rist receiver                  |\n"
+"       -d | --receiver4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT       | Address of fourth local rist receiver                 |\n"
 "       -e | --encryption-password PWD                                     | Pre-shared encryption password                      |\n"
 "       -t | --encryption-type TYPE                                        | Encryption type (1 = AES-128, 2 = AES-256)          |\n"
 "       -p | --profile number                                              | Rist profile (0 = simple, 1 = main)                 |\n"
@@ -71,10 +71,10 @@ static struct option long_options[] = {
 	{ "miface",          required_argument, NULL, 'f' },
 	{ "url2",            required_argument, NULL, 'x' },
 	{ "miface2",         required_argument, NULL, 'q' },
-	{ "server",          required_argument, NULL, 's' },
-	{ "server2",         required_argument, NULL, 'b' },
-	{ "server3",         required_argument, NULL, 'c' },
-	{ "server4",         required_argument, NULL, 'd' },
+	{ "receiver",          required_argument, NULL, 's' },
+	{ "receiver2",         required_argument, NULL, 'b' },
+	{ "receiver3",         required_argument, NULL, 'c' },
+	{ "receiver4",         required_argument, NULL, 'd' },
 	{ "recovery-type",   required_argument, NULL, 'T' },
 	{ "min-buf",         required_argument, NULL, 'm' },
 	{ "max-buf",         required_argument, NULL, 'M' },
@@ -143,24 +143,24 @@ static void intHandler(int signal) {
 
 static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	struct rist_server *ctx = (struct rist_server *)arg;
+	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
-	rist_server_oob_write(ctx, peer, message, ret);
+	rist_receiver_oob_write(ctx, peer, message, ret);
 	return 1;
 }
 
 static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
-	struct rist_server *ctx = (struct rist_server *)arg;
+	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
 	return;
 }
 
 static void cb_recv_oob(void *arg, struct rist_peer *peer, const void *buf, size_t len)
 {
-	struct rist_server *ctx = (struct rist_server *)arg;
+	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
 	if (len > 4 && strncmp(buf, "auth,", 5) == 0) {
 		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)len, (char *)buf);
@@ -328,35 +328,35 @@ int main(int argc, char *argv[])
 			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
-	struct rist_server *ctx;
+	struct rist_receiver *ctx;
 
-	if (rist_server_create(&ctx, profile, loglevel) != 0) {
-		fprintf(stderr, "Could not create rist server context\n");
+	if (rist_receiver_create(&ctx, profile, loglevel) != 0) {
+		fprintf(stderr, "Could not create rist receiver context\n");
 		exit(1);
 	}
 
 	if (cname) {
-		if (rist_server_cname_set(ctx, cname, strlen(cname)) != 0) {
+		if (rist_receiver_cname_set(ctx, cname, strlen(cname)) != 0) {
 			fprintf(stderr, "Could not set the cname\n");
 			exit(1);
 		}
 	}
 
-	if (rist_server_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
+	if (rist_receiver_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
 		fprintf(stderr, "Could not init rist auth handler\n");
 		exit(1);
 	}
 
 	if (shared_secret != NULL) {
 		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_server_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
+		if (rist_receiver_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_server_oob_set(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_receiver_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
@@ -387,8 +387,8 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_server_peer_insert(ctx, &peer_config, &peer) == -1) {
-			fprintf(stderr, "Could not add peer connector to server #%i\n", (int)(i + 1));
+		if (rist_receiver_peer_insert(ctx, &peer_config, &peer) == -1) {
+			fprintf(stderr, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
 	}
@@ -432,21 +432,21 @@ int main(int argc, char *argv[])
 
 	/* Start the rist protocol thread */
 	if (enable_data_callback == 1) {
-		if (rist_server_start(ctx, cb_recv, &port_filter)) {
-			fprintf(stderr, "Could not start rist server\n");
+		if (rist_receiver_start(ctx, cb_recv, &port_filter)) {
+			fprintf(stderr, "Could not start rist receiver\n");
 			exit(1);
 		}
 		pause();
 	}
 	else {
-		if (rist_server_start(ctx, NULL, NULL)) {
-			fprintf(stderr, "Could not start rist server\n");
+		if (rist_receiver_start(ctx, NULL, NULL)) {
+			fprintf(stderr, "Could not start rist receiver\n");
 			exit(1);
 		}
 		// Master loop
 		while (keep_running)
 		{
-			struct rist_data_block *b = rist_server_data_read(ctx);
+			struct rist_data_block *b = rist_receiver_data_read(ctx);
 			if (b && b->payload)
 				cb_recv(&port_filter, b->peer, b->flow_id, b->payload, b->payload_len, b->virt_src_port,
 					b->virt_dst_port, b->timestamp_ntp, b->flow_id);
@@ -454,7 +454,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	rist_server_destroy(ctx);
+	rist_receiver_destroy(ctx);
 
 	if (shared_secret)
 		free(shared_secret);

@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
@@ -27,10 +27,10 @@ static struct option long_options[] = {
 { "url",             required_argument, NULL, 'u' },
 { "miface",          required_argument, NULL, 'f' },
 { "recovery-type",   required_argument, NULL, 'T' },
-{ "server",          required_argument, NULL, 's' },
-{ "server2",         required_argument, NULL, 'b' },
-{ "server3",         required_argument, NULL, 'c' },
-{ "server4",         required_argument, NULL, 'd' },
+{ "receiver",          required_argument, NULL, 's' },
+{ "receiver2",         required_argument, NULL, 'b' },
+{ "receiver3",         required_argument, NULL, 'c' },
+{ "receiver4",         required_argument, NULL, 'd' },
 { "weight2",         required_argument, NULL, 'i' },
 { "weight3",         required_argument, NULL, 'j' },
 { "weight4",         required_argument, NULL, 'k' },
@@ -58,10 +58,10 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -u | --url ADDRESS:PORT              * | Input IP address and port                              |\n"
 "       -f | --miface name/index             * | Input Multicast Interface name (linux) or index (win)  |\n"
 "       -T | --recovery-type TYPE              | Type of recovery (off, bytes, time)                    |\n"
-"       -s | --server  rist://ADDRESS:PORT   * | Address of remote rist server                          |\n"
-"       -b | --server2 rist://ADDRESS:PORT     | Address of second remote rist server                   |\n"
-"       -c | --server3 rist://ADDRESS:PORT     | Address of third remote rist server                    |\n"
-"       -d | --server4 rist://ADDRESS:PORT     | Address of fourth remote rist server                   |\n"
+"       -s | --receiver  rist://ADDRESS:PORT   * | Address of remote rist receiver                          |\n"
+"       -b | --receiver2 rist://ADDRESS:PORT     | Address of second remote rist receiver                   |\n"
+"       -c | --receiver3 rist://ADDRESS:PORT     | Address of third remote rist receiver                    |\n"
+"       -d | --receiver4 rist://ADDRESS:PORT     | Address of fourth remote rist receiver                   |\n"
 "          |  The weight of the primary remote rist is always 5 and the other load balancing outputs    |\n"
 "          |  are relative to it. Use a value of zero for duplicate output.                             |\n"
 "       -i | --weight2 value                   | Load balancing weight of this output                   |\n"
@@ -107,24 +107,24 @@ static void usage(char *cmd)
 
 static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	struct rist_client *ctx = (struct rist_client *)arg;
+	struct rist_sender *ctx = (struct rist_sender *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
-	rist_client_oob_write(ctx, peer, message, ret);
+	rist_sender_oob_write(ctx, peer, message, ret);
 	return 1;
 }
 
 static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
-	struct rist_client *ctx = (struct rist_client *)arg;
+	struct rist_sender *ctx = (struct rist_sender *)arg;
 	(void)ctx;
 	return;
 }
 
 static void cb_recv_oob(void *arg, struct rist_peer *peer, const void *buf, size_t len)
 {
-	struct rist_client *ctx = (struct rist_client *)arg;
+	struct rist_sender *ctx = (struct rist_sender *)arg;
 	(void)ctx;
 	if (len > 4 && strncmp(buf, "auth,", 5) == 0) {
 		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)len, (char *)buf);
@@ -328,7 +328,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	struct rist_client *ctx;
+	struct rist_sender *ctx;
 
 	uint64_t now;
 	struct timeval time;
@@ -339,19 +339,19 @@ int main(int argc, char *argv[])
 	// It must me an even number
 	adv_flow_id &= ~(1UL << 0);
 
-	if (rist_client_create(&ctx, profile, adv_flow_id, loglevel) != 0) {
-		fprintf(stderr, "Could not create rist client context\n");
+	if (rist_sender_create(&ctx, profile, adv_flow_id, loglevel) != 0) {
+		fprintf(stderr, "Could not create rist sender context\n");
 		exit(1);
 	}
 
-	rist = rist_client_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
+	rist = rist_sender_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
 		fprintf(stderr, "Could not initialize rist auth handler\n");
 		exit(1);
 	}
 
 	if (cname) {
-		if (rist_client_cname_set(ctx, cname, strlen(cname)) != 0) {
+		if (rist_sender_cname_set(ctx, cname, strlen(cname)) != 0) {
 			fprintf(stderr, "Could not set the cname\n");
 			exit(1);
 		}
@@ -359,14 +359,14 @@ int main(int argc, char *argv[])
 
 	if (shared_secret != NULL) {
 		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_client_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
+		if (rist_sender_encrypt_aes_set(ctx, shared_secret, keysize) == -1) {
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_client_oob_set(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_sender_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
@@ -396,18 +396,18 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_client_peer_insert(ctx, &peer_config, &peer) == -1) {
-			fprintf(stderr, "Could not add peer connector to client #%d\n", (int)(i + 1));
+		if (rist_sender_peer_insert(ctx, &peer_config, &peer) == -1) {
+			fprintf(stderr, "Could not add peer connector to sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
 	}
 
 	/* Setting rist timeouts (in ms)*/
-	//rist_client_set_retry_timeout(ctx, 10000);
-	//rist_client_keepalive_timeout_set(ctx, 5000);
+	//rist_sender_set_retry_timeout(ctx, 10000);
+	//rist_sender_keepalive_timeout_set(ctx, 5000);
 
-	if (rist_client_start(ctx) == -1) {
-		fprintf(stderr, "Could not start rist client\n");
+	if (rist_sender_start(ctx) == -1) {
+		fprintf(stderr, "Could not start rist sender\n");
 		exit(1);
 	}
 
@@ -415,12 +415,12 @@ int main(int argc, char *argv[])
 	while (!signalReceived) {
 		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
 		if (r > 0) {
-			w = rist_client_data_write(ctx, buffer, r, virt_src_port, virt_dst_port);
+			w = rist_sender_data_write(ctx, buffer, r, virt_src_port, virt_dst_port);
 			(void) w;
 		}
 	}
 
-	rist_client_destroy(ctx);
+	rist_sender_destroy(ctx);
 
 	if (shared_secret)
 		free(shared_secret);
