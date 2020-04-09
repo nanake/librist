@@ -111,26 +111,23 @@ struct rist_port_filter {
 	uint16_t virt_dst_port;
 };
 
-static void cb_recv(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags)
+static void cb_recv(void *arg, struct rist_data_block *b)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
-	(void) flow_id;
-	(void) timestamp_ntp;
-	(void) flags;
 
-	if (port_filter->virt_src_port && port_filter->virt_src_port != src_port) {
-		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, src_port);
+	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
+		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
 		return;
 	}
 
-	if (port_filter->virt_dst_port && port_filter->virt_dst_port != dst_port) {
-		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, dst_port);
+	if (port_filter->virt_dst_port && port_filter->virt_dst_port != b->virt_dst_port) {
+		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, b->virt_dst_port);
 		return;
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (mpeg[i] > 0) {
-			sendto(mpeg[i], buf, len, 0, (struct sockaddr *)&(parsed_url[i].u),
+			sendto(mpeg[i], b->payload, b->payload_len, 0, (struct sockaddr *)&(parsed_url[i].u),
 				sizeof(struct sockaddr_in));
 		}
 	}
@@ -447,9 +444,7 @@ int main(int argc, char *argv[])
 		while (keep_running)
 		{
 			struct rist_data_block *b = rist_receiver_data_read(ctx);
-			if (b && b->payload)
-				cb_recv(&port_filter, b->peer, b->flow_id, b->payload, b->payload_len, b->virt_src_port,
-					b->virt_dst_port, b->timestamp_ntp, b->flow_id);
+			if (b && b->payload) cb_recv(&port_filter, b);
 			usleep(5000);
 		}
 	}
