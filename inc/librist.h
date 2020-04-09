@@ -103,6 +103,13 @@ struct rist_data_block {
 	uint32_t flags;
 };
 
+struct rist_oob_block {
+	struct rist_peer *peer;
+	void *payload;
+	size_t payload_len;
+	uint64_t timestamp_ntp;
+};
+
 struct rist_peer_config {
 	uint8_t version;
 	const char *address;
@@ -250,7 +257,7 @@ RIST_API int rist_sender_max_jitter_set(struct rist_sender *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -287,7 +294,17 @@ RIST_API int rist_sender_start(struct rist_sender *ctx);
  * @param len size of buf buffer (IP header is expected by non-librist counterparts)
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_sender_oob_write(struct rist_sender *ctx, struct rist_peer *peer, const void *buf, size_t len);
+RIST_API int rist_sender_oob_write(struct rist_sender *ctx, struct rist_oob_block *oob_block);
+
+/**
+ * @brief Reads out-of-band data
+ *
+ * Use this API to read out-of-band data from an internal fifo queue instead of the callback
+ *
+ * @param a RIST sender context
+ * @return a pointer to the rist_oob_block structure
+ */
+RIST_API struct rist_oob_block *rist_sender_oob_read(struct rist_sender *ctx);
 
 /**
  * @brief Write data into a librist packet.
@@ -444,7 +461,7 @@ RIST_API int rist_receiver_max_jitter_set(struct rist_receiver *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -485,7 +502,17 @@ RIST_API int rist_receiver_start(struct rist_receiver *ctx,
  * @param len size of buf buffer (IP header is expected by non-librist counterparts)
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_peer *peer, const void *buf, size_t len);
+RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_oob_block *oob_block);
+
+/**
+ * @brief Reads out-of-band data
+ *
+ * Use this API to read out-of-band data from an internal fifo queue instead of the callback
+ *
+ * @param a RIST receiver context
+ * @return a pointer to the rist_oob_block structure
+ */
+RIST_API struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx);
 
 /**
  * @brief Reads rist data

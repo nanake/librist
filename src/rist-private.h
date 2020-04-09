@@ -265,7 +265,7 @@ struct rist_common_ctx {
 	} auth;
 
 	/* Out-of-band data variables */
-	void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len);
+	void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
 	pthread_rwlock_t oob_queue_lock;

@@ -474,6 +474,16 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
+struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx)
+{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_data_read call!\n");
+		return NULL;
+	}
+	msg(0, 0, RIST_LOG_ERROR, "[ERROR] rist_receiver_oob_read not implemented!\n");
+	return NULL;
+}
+
 struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx)
 {
 	if (!ctx) {
@@ -1361,7 +1371,11 @@ static void rist_recv_oob_data(struct rist_peer *peer, struct rist_buffer *paylo
 	struct rist_common_ctx *ctx = get_cctx(peer);
 	if (ctx->oob_data_enabled && ctx->oob_data_callback)
 	{
-		ctx->oob_data_callback(ctx->oob_data_callback_argument, peer, payload->data, payload->size);
+		struct rist_oob_block oob_block;
+		oob_block.peer = peer;
+		oob_block.payload = payload->data;
+		oob_block.payload_len = payload->size;
+		ctx->oob_data_callback(ctx->oob_data_callback_argument, &oob_block);
 	}
 }
 
@@ -2096,6 +2110,16 @@ int rist_sender_data_timed_write(struct rist_sender *ctx, const void *buf, size_
 	return ret;
 }
 
+struct rist_oob_block *rist_sender_oob_read(struct rist_sender *ctx)
+{
+	if (!ctx) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_sender_oob_read call!\n");
+		return NULL;
+	}
+	msg(0, 0, RIST_LOG_ERROR, "[ERROR] rist_sender_oob_read not implemented!\n");
+	return NULL;
+}
+
 int rist_sender_data_write(struct rist_sender *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port)
 {
 	return rist_sender_data_timed_write(ctx, buf, len, src_port, dst_port, timestampNTP_u64());
@@ -2165,26 +2189,26 @@ static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
 	return;
 }
 
-int rist_sender_oob_write(struct rist_sender *ctx, struct rist_peer *peer, const void *buf, size_t len)
+int rist_sender_oob_write(struct rist_sender *ctx, struct rist_oob_block *oob_block)
 {
 	// max protocol overhead for data is gre-header, 16 max
-	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
+	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
+			"Dropping oob packet of size %d, max is %d.\n", oob_block->payload_len, RIST_MAX_PACKET_SIZE-16);
 		return -1;
 	}
-	return rist_oob_enqueue(&ctx->common, peer, buf, len);
+	return rist_oob_enqueue(&ctx->common, oob_block->peer, oob_block->payload, oob_block->payload_len);
 }
 
-int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_peer *peer, const void *buf, size_t len)
+int rist_receiver_oob_write(struct rist_receiver *ctx, struct rist_oob_block *oob_block)
 {
 	// max protocol overhead for data is gre-header, 16 max
-	if (len <= 0 || len > (RIST_MAX_PACKET_SIZE-16)) {
+	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE-16)) {
 		msg(ctx->id, 0, RIST_LOG_ERROR,
-			"Dropping oob packet of size %d, max is %d.\n", len, RIST_MAX_PACKET_SIZE-16);
+			"Dropping oob packet of size %d, max is %d.\n", oob_block->payload_len, RIST_MAX_PACKET_SIZE-16);
 		return -1;
 	}
-	return rist_oob_enqueue(&ctx->common, peer, buf, len);
+	return rist_oob_enqueue(&ctx->common, oob_block->peer, oob_block->payload, oob_block->payload_len);
 }
 
 static void sender_send_nacks(struct rist_sender *ctx, int maxcounter)
@@ -2986,7 +3010,7 @@ int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
 }
 
 int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3010,7 +3034,7 @@ int rist_sender_oob_set(struct rist_sender *ctx,
 }
 
 int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_data_callback)(void *arg, struct rist_peer *peer, const void *buffer, size_t len),
+		void (*oob_data_callback)(void *arg, struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
