@@ -474,7 +474,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
-struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx)
+struct rist_data_block *rist_server_data_read(struct rist_server *ctx)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_server_data_read call!\n");
@@ -485,7 +485,7 @@ struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx)
 		pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
 		return NULL;
 	}
-	struct rist_output_buffer *output_buffer = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
+	struct rist_data_block *output_buffer = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
 	if (output_buffer) {
 		ctx->dataout_fifo_queue_bytesize -= output_buffer->payload_len;
 		ctx->dataout_fifo_queue_read_index = (ctx->dataout_fifo_queue_read_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
@@ -497,13 +497,13 @@ struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx)
 	return output_buffer;
 }
 
-static struct rist_output_buffer *new_output_buffer(struct rist_output_buffer *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
+static struct rist_data_block *new_output_buffer(struct rist_data_block *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
 {
-	struct rist_output_buffer *output_buffer;
+	struct rist_data_block *output_buffer;
 	if (output_buffer_current)
 		output_buffer = output_buffer_current;
 	else
-		output_buffer = calloc(1, sizeof(struct rist_output_buffer));
+		output_buffer = calloc(1, sizeof(struct rist_data_block));
 	output_buffer->peer = b->peer;
 	output_buffer->flow_id = flow_id;
 	uint8_t *newbuffer;
@@ -514,8 +514,8 @@ static struct rist_output_buffer *new_output_buffer(struct rist_output_buffer *o
 	memcpy(newbuffer, payload, b->size);
 	output_buffer->payload = newbuffer;
 	output_buffer->payload_len = b->size;
-	output_buffer->src_port = b->src_port;
-	output_buffer->dst_port = b->dst_port;
+	output_buffer->virt_src_port = b->src_port;
+	output_buffer->virt_dst_port = b->dst_port;
 	output_buffer->timestamp_ntp = b->source_time;
 	output_buffer->flags = flags;
 	return output_buffer;
@@ -795,7 +795,7 @@ nack_loop_continue:
 
 }
 
-static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx, 
+static struct rist_peer *rist_server_peer_insert_local(struct rist_server *ctx, 
 		const struct rist_peer_config *config)
 {
 	/* Initialize peer */
@@ -824,11 +824,11 @@ static struct rist_peer *rist_server_peer_add_local(struct rist_server *ctx,
 	return p;
 }
 
-int rist_server_peer_add(struct rist_server *ctx, 
+int rist_server_peer_insert(struct rist_server *ctx, 
 		const struct rist_peer_config *config, struct rist_peer **peer)
 {
 	struct rist_peer *p_rtcp;
-	struct rist_peer *p = rist_server_peer_add_local(ctx, config);
+	struct rist_peer *p = rist_server_peer_insert_local(ctx, config);
 	if (!p)
 		return -1;
 
@@ -843,7 +843,7 @@ int rist_server_peer_add(struct rist_server *ctx,
 
 		char new_url[500];
 		sprintf(new_url, "%s:%d", p->url, p->local_port + 1); 
-		p_rtcp = rist_server_peer_add_local(ctx, config);
+		p_rtcp = rist_server_peer_insert_local(ctx, config);
 		if (!p_rtcp)
 		{
 			udp_Close(p->sd);
@@ -2591,8 +2591,50 @@ int rist_server_cname_set(struct rist_server *ctx, const void *cname, size_t cna
 	return 0;
 }
 
-void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
+static int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 {
+	// TODO: test remove from client list and peer linked list and
+	// perform proper cleanup
+
+	return 0;
+
+/*
+	pthread_rwlock_wrlock(&ctx->common.peerlist_lock);
+
+	if (d_peer == NULL) {
+		return -1;
+	}
+
+	if (d_peer) {
+		// middle
+		if (d_peer->prev && d_peer->next) {
+			d_peer->prev->next = d_peer->next;
+			d_peer->next->prev = d_peer->prev;
+		} else if (!d_peer->prev) {
+			// head
+			if (d_peer->next) {
+				d_peer->next->prev = NULL;
+			}
+
+			ctx->common.PEERS = d_peer->next;
+		} else if (!d_peer->next) {
+			// tail
+			d_peer->prev->next = NULL;
+		} else {
+			pthread_rwlock_unlock(&ctx->common.peerlist_lock);
+			return -1;
+		}
+	} else {
+		pthread_rwlock_unlock(&ctx->common.peerlist_lock);
+		return -1;
+	}
+
+	free(d_peer);
+	pthread_rwlock_unlock(&ctx->common.peerlist_lock);
+	return 0;
+
+*/
+
 	//intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
 	//intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
 
@@ -2642,7 +2684,7 @@ void rist_delete_peer(struct rist_common_ctx *ctx, struct rist_peer *peer)
 	*/
 }
 
-int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
+int rist_client_peer_remove(struct rist_client *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
@@ -2654,12 +2696,12 @@ int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer)
 	}
 
 	peer->dead = true;
-	rist_delete_peer(&ctx->common, peer);
-	msg(0, ctx->id, RIST_LOG_WARN, "[WARNING] rist_client_disconnect_peer not implemented!\n");
+	rist_peer_remove(&ctx->common, peer);
+	msg(0, ctx->id, RIST_LOG_WARN, "[WARNING] rist_client_peer_remove not fully implemented!\n");
 	return 0;
 }
 
-int rist_server_peer_del(struct rist_server *ctx, struct rist_peer *peer)
+int rist_server_peer_remove(struct rist_server *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
@@ -2671,8 +2713,8 @@ int rist_server_peer_del(struct rist_server *ctx, struct rist_peer *peer)
 	}
 
 	peer->dead = true;
-	rist_delete_peer(&ctx->common, peer);
-	msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] rist_server_peer_del not implemented!\n");
+	rist_peer_remove(&ctx->common, peer);
+	msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] rist_server_peer_remove not fully implemented!\n");
 	return 0;
 }
 
@@ -2730,43 +2772,6 @@ int rist_client_unpause(struct rist_client *ctx)
 	return 0;
 }
 
-int rist_client_peer_del(struct rist_client *ctx, struct rist_peer *d_peer)
-{
-	pthread_rwlock_wrlock(&ctx->common.peerlist_lock);
-
-	if (d_peer == NULL) {
-		return -1;
-	}
-
-	if (d_peer) {
-		/* middle */
-		if (d_peer->prev && d_peer->next) {
-			d_peer->prev->next = d_peer->next;
-			d_peer->next->prev = d_peer->prev;
-		} else if (!d_peer->prev) {
-			/* head */
-			if (d_peer->next) {
-				d_peer->next->prev = NULL;
-			}
-
-			ctx->common.PEERS = d_peer->next;
-		} else if (!d_peer->next) {
-			/* tail */
-			d_peer->prev->next = NULL;
-		} else {
-			pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-			return -1;
-		}
-	} else {
-		pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-		return -1;
-	}
-
-	free(d_peer);
-	pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-	return 0;
-}
-
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer)
 {
 	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
@@ -2818,7 +2823,7 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	init_peer_settings(peer);
 }
 
-static struct rist_peer *rist_client_peer_add_local(struct rist_client *ctx,
+static struct rist_peer *rist_client_peer_insert_local(struct rist_client *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
 
@@ -2870,10 +2875,10 @@ static struct rist_peer *rist_client_peer_add_local(struct rist_client *ctx,
 
 }
 
-int rist_client_peer_add(struct rist_client *ctx,
+int rist_client_peer_insert(struct rist_client *ctx,
 		const struct rist_peer_config *config, struct rist_peer **peer)
 {
-	struct rist_peer *newpeer = rist_client_peer_add_local(ctx, config, false);
+	struct rist_peer *newpeer = rist_client_peer_insert_local(ctx, config, false);
 
 	if (!newpeer)
 		return -1;
@@ -2883,7 +2888,7 @@ int rist_client_peer_add(struct rist_client *ctx,
 
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
-		struct rist_peer *peer_rtcp = rist_client_peer_add_local(ctx, config, true);
+		struct rist_peer *peer_rtcp = rist_client_peer_insert_local(ctx, config, true);
 		if (!peer_rtcp)
 		{
 			// TODO: remove from peerlist (create client_delete peer function)

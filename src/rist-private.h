@@ -284,7 +284,7 @@ struct rist_server {
 
 	/* Server timed async data output */
 	pthread_rwlock_t dataout_fifo_queue_lock;
-	struct rist_output_buffer *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
+	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
 	size_t dataout_fifo_queue_bytesize;
 	uint16_t dataout_fifo_queue_counter;
 	uint16_t dataout_fifo_queue_read_index;

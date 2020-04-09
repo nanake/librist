@@ -91,18 +91,19 @@ struct rist_server;
 struct rist_client;
 struct rist_peer;
 
-struct rist_output_buffer {
+struct rist_data_block {
 	struct rist_peer *peer;
 	uint32_t flow_id;
 	void *payload;
 	size_t payload_len;
-	uint16_t src_port;
-	uint16_t dst_port;
+	uint16_t virt_src_port;
+	uint16_t virt_dst_port;
 	uint64_t timestamp_ntp;
 	uint32_t flags;
 };
 
 struct rist_peer_config {
+	uint8_t config_version;
 	const char *address;
 	uint16_t gre_dst_port;
 
@@ -176,7 +177,7 @@ RIST_API int rist_client_cname_set(struct rist_client *ctx, const void *cname, s
  * @param[out] peer Store the new peer pointer
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_peer_add(struct rist_client *ctx,
+RIST_API int rist_client_peer_insert(struct rist_client *ctx,
 		const struct rist_peer_config *config, struct rist_peer **peer);
 
 /**
@@ -187,7 +188,7 @@ RIST_API int rist_client_peer_add(struct rist_client *ctx,
  *        points to the peer endpoint.
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_client_peer_del(struct rist_client *ctx,
+RIST_API int rist_client_peer_remove(struct rist_client *ctx,
 		struct rist_peer *peer);
 
 /**
@@ -297,7 +298,7 @@ RIST_API int rist_client_oob_write(struct rist_client *ctx, struct rist_peer *pe
  * @param len size of buf buffer
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_client_data_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port);
+RIST_API int rist_client_data_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t virt_src_port, uint16_t virt_dst_port);
 
 /**
  * @brief Write data into a librist packet.
@@ -310,19 +311,7 @@ RIST_API int rist_client_data_write(struct rist_client *ctx, const void *buf, si
  * @param ntp_time 64 bit timestamp in NTP format
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_client_data_timed_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t ntp_time);
-
-/**
- * @brief Disconnect a client peer
- *
- * Disconnects a connected server peer or a client bound peer
- *
- * @param a RIST client context
- * @param peer a pointer to the struct rist_peer, which
- *        points to the peer endpoint.
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_client_disconnect_peer(struct rist_client *ctx, struct rist_peer *peer);
+RIST_API int rist_client_data_timed_write(struct rist_client *ctx, const void *buf, size_t len, uint16_t virt_src_port, uint16_t virt_dst_port, uint64_t ntp_time);
 
 /**
  * @brief Destroy RIST client
@@ -383,7 +372,7 @@ RIST_API int rist_server_cname_set(struct rist_server *ctx, const void *cname, s
  * @param listen_addr Address to listen to, can be NULL to indicate ANY
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_server_peer_add(struct rist_server *ctx, 
+RIST_API int rist_server_peer_insert(struct rist_server *ctx, 
 		const struct rist_peer_config *config, struct rist_peer **peer);
 
 /**
@@ -394,7 +383,7 @@ RIST_API int rist_server_peer_add(struct rist_server *ctx,
  *        points to the peer endpoint.
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_server_peer_del(struct rist_server *ctx,
+RIST_API int rist_server_peer_remove(struct rist_server *ctx,
 		struct rist_peer *peer);
 
 /**
@@ -503,9 +492,9 @@ RIST_API int rist_server_oob_write(struct rist_server *ctx, struct rist_peer *pe
  * Use this API to read data from an internal fifo queue instead of the callback
  *
  * @param a RIST server context
- * @return a pointer to the rist_output_buffer structure
+ * @return a pointer to the rist_data_block structure
  */
-RIST_API struct rist_output_buffer *rist_server_data_read(struct rist_server *ctx);
+RIST_API struct rist_data_block *rist_server_data_read(struct rist_server *ctx);
 
 /**
  * @brief Destroy RIST server
