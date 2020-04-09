@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata <sergio@ammirata.net>
@@ -10,7 +10,7 @@
 
 #define STALE_FLOW_TIME (60L * 1000L * RIST_CLOCK) /* in milliseconds */
 
-void rist_server_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt)
+void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt)
 {
 	uint64_t now = timestampNTP_u64();
 
@@ -22,9 +22,9 @@ void rist_server_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t s
 	m->peer = peer;
 
 	f->missing_counter++;
-	peer->stats_server_instant.missing++;
+	peer->stats_receiver_instant.missing++;
 	if (get_cctx(peer)->debug)
-		msg(f->server_id, 0, RIST_LOG_DEBUG,
+		msg(f->receiver_id, 0, RIST_LOG_DEBUG,
 			"[DEBUG] Datagram %" PRIu32 " is missing, inserting into the missing queue "
 			"with deadline in %" PRIu64 "ms (queue=%d), last_seq_found %"PRIu32"\n",
 		seq, (m->next_nack - now) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
@@ -34,21 +34,21 @@ void rist_server_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t s
 	f->missing = m;
 }
 
-void empty_server_queue(struct rist_flow *f)
+void empty_receiver_queue(struct rist_flow *f)
 {
-	size_t counter = f->server_queue_output_idx;
+	size_t counter = f->receiver_queue_output_idx;
 	pthread_rwlock_wrlock(&f->queue_lock);
-	while (f->server_queue_size > 0) {
-		struct rist_buffer *b = f->server_queue[counter];
+	while (f->receiver_queue_size > 0) {
+		struct rist_buffer *b = f->receiver_queue[counter];
 		if (b)
 		{
 			if (b->size)
 				free(b->data);
-			f->server_queue_size -= b->size;
+			f->receiver_queue_size -= b->size;
 			free(b);
 		}
-		counter = (counter + 1) % f->server_queue_max;
-		if (counter == f->server_queue_output_idx) {
+		counter = (counter + 1) % f->receiver_queue_max;
+		if (counter == f->receiver_queue_output_idx) {
 			// full loop complete
 			break;
 		}
@@ -70,7 +70,7 @@ static void rist_flush_missing_flow_queue(struct rist_flow *flow)
 	flow->missing_counter = 0;
 }
 
-void rist_delete_flow(struct rist_server *ctx, struct rist_flow *f)
+void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering data output thread termination\n");
 	f->shutdown = 1;
@@ -95,7 +95,7 @@ void rist_delete_flow(struct rist_server *ctx, struct rist_flow *f)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting output buffer data\n");
 	/* Delete all buffer data (if any) */
-	empty_server_queue(f);
+	empty_receiver_queue(f);
 
 	// Delete flow
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting flow\n");
@@ -132,17 +132,17 @@ static void rist_flow_append(struct rist_flow **FLOWS, struct rist_flow *f)
 	last->next = f;
 }
 
-static struct rist_flow *create_flow(struct rist_server *ctx, uint32_t flow_id)
+static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id)
 {
 	struct rist_flow *f = calloc(1, sizeof(*f));
 	if (!f) {
 		msg(ctx->id, 0, RIST_LOG_ERROR,
-			"[ERROR] Could not create server buffer of size %d MB, OOM\n", sizeof(*f) / 1000000);
+			"[ERROR] Could not create receiver buffer of size %d MB, OOM\n", sizeof(*f) / 1000000);
 		return NULL;
 	}
 
 	f->flow_id = flow_id;
-	f->server_id = ctx->id;
+	f->receiver_id = ctx->id;
 	f->stats_next_time = timestampNTP_u64();
 	f->max_output_jitter = ctx->common.rist_max_jitter;
 	int ret = pthread_cond_init(&f->condition, NULL);
@@ -166,78 +166,78 @@ static struct rist_flow *create_flow(struct rist_server *ctx, uint32_t flow_id)
 	return f;
 }
 
-void rist_client_peer_statistics(struct rist_peer *peer)
+void rist_sender_peer_statistics(struct rist_peer *peer)
 {
 	// TODO: print warning here?? stale flow?
 	if (peer->state_local != RIST_PEER_STATE_CONNECT) {
 		return;
 	}
 
-	if (peer->stats_client_instant.received == 0 && peer->stats_client_total.received > 0)
+	if (peer->stats_sender_instant.received == 0 && peer->stats_sender_total.received > 0)
 	{
-		msg(0, peer->client_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
+		msg(0, peer->sender_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
 			peer->adv_peer_id);
 		peer->dead = true;
 		return;
 	}
 
-	peer->stats_client_total.sent += peer->stats_client_instant.sent;
-	peer->stats_client_total.retrans += peer->stats_client_instant.retrans;
-	peer->stats_client_total.bloat_skip += peer->stats_client_instant.bloat_skip;
-	peer->stats_client_total.retrans_skip += peer->stats_client_instant.retrans_skip;
-	peer->stats_client_total.received += peer->stats_client_instant.received;
+	peer->stats_sender_total.sent += peer->stats_sender_instant.sent;
+	peer->stats_sender_total.retrans += peer->stats_sender_instant.retrans;
+	peer->stats_sender_total.bloat_skip += peer->stats_sender_instant.bloat_skip;
+	peer->stats_sender_total.retrans_skip += peer->stats_sender_instant.retrans_skip;
+	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
 	size_t retry_buf_size = 0;
-	if (peer->client_ctx->client_retry_queue_write_index > peer->client_ctx->client_retry_queue_read_index) {
-		retry_buf_size = peer->client_ctx->client_retry_queue_write_index -
-							peer->client_ctx->client_retry_queue_read_index - 1;
+	if (peer->sender_ctx->sender_retry_queue_write_index > peer->sender_ctx->sender_retry_queue_read_index) {
+		retry_buf_size = peer->sender_ctx->sender_retry_queue_write_index -
+							peer->sender_ctx->sender_retry_queue_read_index - 1;
 	} else {
-		retry_buf_size = peer->client_ctx->client_retry_queue_size + peer->client_ctx->client_retry_queue_write_index -
-							peer->client_ctx->client_retry_queue_read_index - 1;
+		retry_buf_size = peer->sender_ctx->sender_retry_queue_size + peer->sender_ctx->sender_retry_queue_write_index -
+							peer->sender_ctx->sender_retry_queue_read_index - 1;
 	}
 
 	struct rist_bandwidth_estimation *cli_bw = &peer->bw;
 	struct rist_bandwidth_estimation *retry_bw = &peer->retry_bw;
 	// Refresh stats value just in case
-	rist_calculate_bitrate_client(0, cli_bw);
-	rist_calculate_bitrate_client(0, retry_bw);
+	rist_calculate_bitrate_sender(0, cli_bw);
+	rist_calculate_bitrate_sender(0, retry_bw);
 
 	double Q = 100;
-	if (peer->stats_client_instant.sent > 0) {
-		Q = (double)((peer->stats_client_instant.sent) * 100.0) /
-			(double)(peer->stats_client_instant.sent + peer->stats_client_instant.bloat_skip + peer->stats_client_instant.retrans_skip + peer->stats_client_instant.retrans);
+	if (peer->stats_sender_instant.sent > 0) {
+		Q = (double)((peer->stats_sender_instant.sent) * 100.0) /
+			(double)(peer->stats_sender_instant.sent + peer->stats_sender_instant.bloat_skip + peer->stats_sender_instant.retrans_skip + peer->stats_sender_instant.retrans);
 	}
 
 	uint32_t time_left = 0;
-	if (peer->client_ctx->cooldown_time > 0) {
-		time_left = (timestampNTP_u64() - peer->client_ctx->cooldown_time) / 1000;
+	if (peer->sender_ctx->cooldown_time > 0) {
+		time_left = (timestampNTP_u64() - peer->sender_ctx->cooldown_time) / 1000;
 	}
 
 	uint32_t avg_rtt = (peer->eight_times_rtt / 8);
-	msg(0, peer->client_ctx->id, RIST_LOG_INFO, "\t[STATS]type=instant,id=%u,bitrate=%" PRIu32 ",r_bitrate=%" PRIu32 ",sent=%" PRIu64 ",received=%" PRIu32 ",retransmits=%" PRIu32 ",bloat_skipped=%" PRIu32 ",retrans_skipped=%" PRIu32 ",Q=%.02lf,rtt=%d(us),avg_rtt=%" PRIu32 "(ms),retry_buf_size=%" PRIu32 ",cooldown=%" PRIu32 "(ms)\n",
+	msg(0, peer->sender_ctx->id, RIST_LOG_INFO, "\t[STATS]type=instant,id=%u,bitrate=%" PRIu32 ",r_bitrate=%" PRIu32 ",sent=%" PRIu64 ",received=%" PRIu32 ",retransmits=%" PRIu32 ",bloat_skipped=%" PRIu32 ",retrans_skipped=%" PRIu32 ",Q=%.02lf,rtt=%d(us),avg_rtt=%" PRIu32 "(ms),retry_buf_size=%" PRIu32 ",cooldown=%" PRIu32 "(ms)\n",
 		peer->adv_peer_id,
 		cli_bw->bitrate,
 		retry_bw->bitrate,
-		peer->stats_client_instant.sent,
-		peer->stats_client_instant.received,
-		peer->stats_client_instant.retrans,
-		peer->stats_client_instant.bloat_skip,
-		peer->stats_client_instant.retrans_skip,
+		peer->stats_sender_instant.sent,
+		peer->stats_sender_instant.received,
+		peer->stats_sender_instant.retrans,
+		peer->stats_sender_instant.bloat_skip,
+		peer->stats_sender_instant.retrans_skip,
 		Q,
 		peer->last_mrtt,
 		avg_rtt,
 		retry_buf_size,
 		time_left);
 
-	msg(0, peer->client_ctx->id, RIST_LOG_INFO, "\t[STATS]type=total,id=%u,sent=%" PRIu64 ",received=%" PRIu32 ",retransmits=%" PRIu32 ",bloat_skipped=%" PRIu32 ",retrans_skipped=%" PRIu32 ",seq=%"PRIu32"\n",
-		peer->adv_peer_id, peer->stats_client_total.sent, peer->stats_client_total.received, peer->stats_client_total.retrans,
-		peer->stats_client_total.bloat_skip, peer->stats_client_total.retrans_skip,
-		peer->client_ctx->common.seq);
+	msg(0, peer->sender_ctx->id, RIST_LOG_INFO, "\t[STATS]type=total,id=%u,sent=%" PRIu64 ",received=%" PRIu32 ",retransmits=%" PRIu32 ",bloat_skipped=%" PRIu32 ",retrans_skipped=%" PRIu32 ",seq=%"PRIu32"\n",
+		peer->adv_peer_id, peer->stats_sender_total.sent, peer->stats_sender_total.received, peer->stats_sender_total.retrans,
+		peer->stats_sender_total.bloat_skip, peer->stats_sender_total.retrans_skip,
+		peer->sender_ctx->common.seq);
 
-	memset(&peer->stats_client_instant, 0, sizeof(peer->stats_client_instant));
+	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
 }
 
-struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct rist_flow *flow)
+struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow)
 {
 	if (!flow) {
 		return NULL;
@@ -267,7 +267,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 	if ((flow->stats_total.last_recv_ts != 0) && (timestampNTP_u64() - flow->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME)) {
 		if ((timestampNTP_u64() - flow->stats_total.last_recv_ts) < (1.5*(uint64_t)STALE_FLOW_TIME)) {
 			// Do nothing
-			msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
+			msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO,
 				"\t************** STALE FLOW:%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64", Deleting! ***************\n",
 				timestampNTP_u64(),
 				flow->stats_total.last_recv_ts,
@@ -316,59 +316,59 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 		eight_times_bitrate = peer->bw.eight_times_bitrate;
 
 		double QpeerInstant = 100;
-		if (peer->stats_server_instant.recv > 0) {
-			QpeerInstant = (double)((peer->stats_server_instant.recv) * 100.0) /
-							(double)(peer->stats_server_instant.recv + peer->stats_server_instant.missing);
+		if (peer->stats_receiver_instant.recv > 0) {
+			QpeerInstant = (double)((peer->stats_receiver_instant.recv) * 100.0) /
+							(double)(peer->stats_receiver_instant.recv + peer->stats_receiver_instant.missing);
 		}
 
-		if ((peer->stats_server_instant.recovered - peer->stats_server_instant.reordered) > 0) {
-			peer->stats_server_instant.recovered_average =
-				(peer->stats_server_instant.recovered_sum * 100) /
-					(peer->stats_server_instant.recovered - peer->stats_server_instant.reordered);
+		if ((peer->stats_receiver_instant.recovered - peer->stats_receiver_instant.reordered) > 0) {
+			peer->stats_receiver_instant.recovered_average =
+				(peer->stats_receiver_instant.recovered_sum * 100) /
+					(peer->stats_receiver_instant.recovered - peer->stats_receiver_instant.reordered);
 		} else {
-			peer->stats_server_instant.recovered_average = 100;
+			peer->stats_receiver_instant.recovered_average = 100;
 		}
 
-		peer->stats_server_instant.recovered_slope =
-				peer->stats_server_instant.recovered_3nack -
-				peer->stats_server_instant.recovered_0nack;
+		peer->stats_receiver_instant.recovered_slope =
+				peer->stats_receiver_instant.recovered_3nack -
+				peer->stats_receiver_instant.recovered_0nack;
 
-		if ((int32_t)(peer->stats_server_instant.recovered_1nack - peer->stats_server_instant.recovered_0nack) > 0 &&
-			peer->stats_server_instant.recovered_1nack != 0 && peer->stats_server_instant.recovered_0nack != 0) {
-			peer->stats_server_instant.recovered_slope_inverted++;
+		if ((int32_t)(peer->stats_receiver_instant.recovered_1nack - peer->stats_receiver_instant.recovered_0nack) > 0 &&
+			peer->stats_receiver_instant.recovered_1nack != 0 && peer->stats_receiver_instant.recovered_0nack != 0) {
+			peer->stats_receiver_instant.recovered_slope_inverted++;
 		}
 
-		if ((int32_t)(peer->stats_server_instant.recovered_2nack - peer->stats_server_instant.recovered_1nack) > 0 &&
-			peer->stats_server_instant.recovered_2nack != 0 && peer->stats_server_instant.recovered_1nack != 0){
-			peer->stats_server_instant.recovered_slope_inverted++;
+		if ((int32_t)(peer->stats_receiver_instant.recovered_2nack - peer->stats_receiver_instant.recovered_1nack) > 0 &&
+			peer->stats_receiver_instant.recovered_2nack != 0 && peer->stats_receiver_instant.recovered_1nack != 0){
+			peer->stats_receiver_instant.recovered_slope_inverted++;
 		}
 
-		if ((int32_t)(peer->stats_server_instant.recovered_3nack - peer->stats_server_instant.recovered_2nack) > 0 &&
-			peer->stats_server_instant.recovered_3nack != 0 && peer->stats_server_instant.recovered_2nack != 0) {
-				peer->stats_server_instant.recovered_slope_inverted++;
+		if ((int32_t)(peer->stats_receiver_instant.recovered_3nack - peer->stats_receiver_instant.recovered_2nack) > 0 &&
+			peer->stats_receiver_instant.recovered_3nack != 0 && peer->stats_receiver_instant.recovered_2nack != 0) {
+				peer->stats_receiver_instant.recovered_slope_inverted++;
 		}
 
-		msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS]type=peerinstant,flowid=%" PRIu64 ",dead=%d,peer=%u/%u(%u),received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",n_avg=%" PRIu32 ",n_slope=%" PRId32 ",n_inverted=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",recover_buffer_length=%" PRIu32 "(ms),missing_queue_size=%" PRIu32 "/%" PRIu32 ",rtt=%d(us),avg_rtt=%" PRIu32 "(ms),bitrate=%" PRIu32 "(bps),avg_bitrate=%" PRIu32 "(bps)\n",
+		msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]type=peerinstant,flowid=%" PRIu64 ",dead=%d,peer=%u/%u(%u),received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",n_avg=%" PRIu32 ",n_slope=%" PRId32 ",n_inverted=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",recover_buffer_length=%" PRIu32 "(ms),missing_queue_size=%" PRIu32 "/%" PRIu32 ",rtt=%d(us),avg_rtt=%" PRIu32 "(ms),bitrate=%" PRIu32 "(bps),avg_bitrate=%" PRIu32 "(bps)\n",
 			flow->flow_id,
 			peer->dead,
 			(uint32_t)(i + 1),
 			flow->peer_lst_len,
 			peer->adv_peer_id,
-			peer->stats_server_instant.recv,
-			peer->stats_server_instant.missing,
+			peer->stats_receiver_instant.recv,
+			peer->stats_receiver_instant.missing,
 			QpeerInstant,
-			peer->stats_server_instant.recovered,
-			peer->stats_server_instant.recovered_0nack,
-			peer->stats_server_instant.recovered_1nack,
-			peer->stats_server_instant.recovered_2nack,
-			peer->stats_server_instant.recovered_3nack,
-			peer->stats_server_instant.recovered_morenack,
-			peer->stats_server_instant.recovered_average,
-			peer->stats_server_instant.recovered_slope,
-			peer->stats_server_instant.recovered_slope_inverted,
-			peer->stats_server_instant.reordered,
-			peer->stats_server_instant.dups,
-			peer->stats_server_instant.retries,
+			peer->stats_receiver_instant.recovered,
+			peer->stats_receiver_instant.recovered_0nack,
+			peer->stats_receiver_instant.recovered_1nack,
+			peer->stats_receiver_instant.recovered_2nack,
+			peer->stats_receiver_instant.recovered_3nack,
+			peer->stats_receiver_instant.recovered_morenack,
+			peer->stats_receiver_instant.recovered_average,
+			peer->stats_receiver_instant.recovered_slope,
+			peer->stats_receiver_instant.recovered_slope_inverted,
+			peer->stats_receiver_instant.reordered,
+			peer->stats_receiver_instant.dups,
+			peer->stats_receiver_instant.retries,
 			peer->recovery_buffer_ticks / RIST_CLOCK,
 			peer->flow->missing_counter,
 			peer->missing_counter_max,
@@ -378,108 +378,108 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 			eight_times_bitrate / 8);
 
 		// Calculate peer totals
-		peer->stats_server_total.recv += peer->stats_server_instant.recv;
-		peer->stats_server_total.missing += peer->stats_server_instant.missing;
-		peer->stats_server_total.recovered += peer->stats_server_instant.recovered;
-		peer->stats_server_total.retries += peer->stats_server_instant.retries;
-		peer->stats_server_total.dups += peer->stats_server_instant.dups;
-		peer->stats_server_total.recovered_0nack += peer->stats_server_instant.recovered_0nack;
-		peer->stats_server_total.recovered_1nack += peer->stats_server_instant.recovered_1nack;
-		peer->stats_server_total.recovered_2nack += peer->stats_server_instant.recovered_2nack;
-		peer->stats_server_total.recovered_3nack += peer->stats_server_instant.recovered_3nack;
-		peer->stats_server_total.recovered_morenack += peer->stats_server_instant.recovered_morenack;
-		peer->stats_server_total.reordered += peer->stats_server_instant.reordered;
-		peer->stats_server_total.recovered_sum += peer->stats_server_instant.recovered_sum;
-		peer->stats_server_total.recovered_average = peer->stats_server_instant.recovered_average +
-								peer->stats_server_total.recovered_average -
-								(peer->stats_server_total.recovered_average / 8);
-		peer->stats_server_total.recovered_slope =
-					peer->stats_server_instant.recovered_slope + peer->stats_server_total.recovered_slope -
-					(peer->stats_server_total.recovered_slope / 8);
+		peer->stats_receiver_total.recv += peer->stats_receiver_instant.recv;
+		peer->stats_receiver_total.missing += peer->stats_receiver_instant.missing;
+		peer->stats_receiver_total.recovered += peer->stats_receiver_instant.recovered;
+		peer->stats_receiver_total.retries += peer->stats_receiver_instant.retries;
+		peer->stats_receiver_total.dups += peer->stats_receiver_instant.dups;
+		peer->stats_receiver_total.recovered_0nack += peer->stats_receiver_instant.recovered_0nack;
+		peer->stats_receiver_total.recovered_1nack += peer->stats_receiver_instant.recovered_1nack;
+		peer->stats_receiver_total.recovered_2nack += peer->stats_receiver_instant.recovered_2nack;
+		peer->stats_receiver_total.recovered_3nack += peer->stats_receiver_instant.recovered_3nack;
+		peer->stats_receiver_total.recovered_morenack += peer->stats_receiver_instant.recovered_morenack;
+		peer->stats_receiver_total.reordered += peer->stats_receiver_instant.reordered;
+		peer->stats_receiver_total.recovered_sum += peer->stats_receiver_instant.recovered_sum;
+		peer->stats_receiver_total.recovered_average = peer->stats_receiver_instant.recovered_average +
+								peer->stats_receiver_total.recovered_average -
+								(peer->stats_receiver_total.recovered_average / 8);
+		peer->stats_receiver_total.recovered_slope =
+					peer->stats_receiver_instant.recovered_slope + peer->stats_receiver_total.recovered_slope -
+					(peer->stats_receiver_total.recovered_slope / 8);
 
 		double QpeerTotal = 100;
-		if (peer->stats_server_total.recv > 0) {
-			QpeerTotal = (double)((peer->stats_server_total.recv) * 100.0) /
-							(double)(peer->stats_server_total.recv + peer->stats_server_total.missing);
+		if (peer->stats_receiver_total.recv > 0) {
+			QpeerTotal = (double)((peer->stats_receiver_total.recv) * 100.0) /
+							(double)(peer->stats_receiver_total.recv + peer->stats_receiver_total.missing);
 		}
 
-		msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS]type=peertotal,flowid=%" PRIu64 ",dead=%d,peer=%u/%u(%u),received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",n_avg=%" PRIu32 ",n_slope=%" PRId32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 "\n",
+		msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]type=peertotal,flowid=%" PRIu64 ",dead=%d,peer=%u/%u(%u),received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",n_avg=%" PRIu32 ",n_slope=%" PRId32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 "\n",
 			flow->flow_id,
 			peer->dead,
 			(uint32_t)(i + 1),
 			flow->peer_lst_len,
 			peer->adv_peer_id,
-			peer->stats_server_total.recv,
-			peer->stats_server_total.missing,
+			peer->stats_receiver_total.recv,
+			peer->stats_receiver_total.missing,
 			QpeerTotal,
-			peer->stats_server_total.recovered,
-			peer->stats_server_total.recovered_0nack,
-			peer->stats_server_total.recovered_1nack,
-			peer->stats_server_total.recovered_2nack,
-			peer->stats_server_total.recovered_3nack,
-			peer->stats_server_total.recovered_morenack,
-			peer->stats_server_total.recovered_average / 8,
-			peer->stats_server_total.recovered_slope / 8,
-			peer->stats_server_total.reordered,
-			peer->stats_server_total.dups,
-			peer->stats_server_total.retries);
+			peer->stats_receiver_total.recovered,
+			peer->stats_receiver_total.recovered_0nack,
+			peer->stats_receiver_total.recovered_1nack,
+			peer->stats_receiver_total.recovered_2nack,
+			peer->stats_receiver_total.recovered_3nack,
+			peer->stats_receiver_total.recovered_morenack,
+			peer->stats_receiver_total.recovered_average / 8,
+			peer->stats_receiver_total.recovered_slope / 8,
+			peer->stats_receiver_total.reordered,
+			peer->stats_receiver_total.dups,
+			peer->stats_receiver_total.retries);
 
 		// Calculate flow instant stats
-		flow_recv_instant += peer->stats_server_instant.recv;
-		flow_missing_instant += peer->stats_server_instant.missing;
-		flow_recovered_instant += peer->stats_server_instant.recovered;
-		flow_retries_instant += peer->stats_server_instant.retries;
-		flow_dups_instant += peer->stats_server_instant.dups;
-		flow_recovered_0nack_instant += peer->stats_server_instant.recovered_0nack;
-		flow_recovered_1nack_instant += peer->stats_server_instant.recovered_1nack;
-		flow_recovered_2nack_instant += peer->stats_server_instant.recovered_2nack;
-		flow_recovered_3nack_instant += peer->stats_server_instant.recovered_3nack;
-		flow_recovered_morenack_instant += peer->stats_server_instant.recovered_morenack;
-		flow_reordered_instant += peer->stats_server_instant.reordered;
+		flow_recv_instant += peer->stats_receiver_instant.recv;
+		flow_missing_instant += peer->stats_receiver_instant.missing;
+		flow_recovered_instant += peer->stats_receiver_instant.recovered;
+		flow_retries_instant += peer->stats_receiver_instant.retries;
+		flow_dups_instant += peer->stats_receiver_instant.dups;
+		flow_recovered_0nack_instant += peer->stats_receiver_instant.recovered_0nack;
+		flow_recovered_1nack_instant += peer->stats_receiver_instant.recovered_1nack;
+		flow_recovered_2nack_instant += peer->stats_receiver_instant.recovered_2nack;
+		flow_recovered_3nack_instant += peer->stats_receiver_instant.recovered_3nack;
+		flow_recovered_morenack_instant += peer->stats_receiver_instant.recovered_morenack;
+		flow_reordered_instant += peer->stats_receiver_instant.reordered;
 
 		// Calculate flow total stats
-		flow_recv_total += peer->stats_server_total.recv;
-		flow_missing_total += peer->stats_server_total.missing;
-		flow_recovered_total += peer->stats_server_total.recovered;
-		flow_retries_total += peer->stats_server_total.retries;
-		flow_dups_total += peer->stats_server_total.dups;
-		flow_recovered_0nack_total += peer->stats_server_total.recovered_0nack;
-		flow_recovered_1nack_total += peer->stats_server_total.recovered_1nack;
-		flow_recovered_2nack_total += peer->stats_server_total.recovered_2nack;
-		flow_recovered_3nack_total += peer->stats_server_total.recovered_3nack;
-		flow_recovered_morenack_total += peer->stats_server_total.recovered_morenack;
-		flow_reordered_total += peer->stats_server_total.reordered;
+		flow_recv_total += peer->stats_receiver_total.recv;
+		flow_missing_total += peer->stats_receiver_total.missing;
+		flow_recovered_total += peer->stats_receiver_total.recovered;
+		flow_retries_total += peer->stats_receiver_total.retries;
+		flow_dups_total += peer->stats_receiver_total.dups;
+		flow_recovered_0nack_total += peer->stats_receiver_total.recovered_0nack;
+		flow_recovered_1nack_total += peer->stats_receiver_total.recovered_1nack;
+		flow_recovered_2nack_total += peer->stats_receiver_total.recovered_2nack;
+		flow_recovered_3nack_total += peer->stats_receiver_total.recovered_3nack;
+		flow_recovered_morenack_total += peer->stats_receiver_total.recovered_morenack;
+		flow_reordered_total += peer->stats_receiver_total.reordered;
 
 		// buffer_bloat protection flags
 		if (peer->config.buffer_bloat_mode != RIST_BUFFER_BLOAT_MODE_OFF) {
-			if (peer->stats_server_instant.recovered_slope_inverted >= 3) {
+			if (peer->stats_receiver_instant.recovered_slope_inverted >= 3) {
 				if (!peer->buffer_bloat_active) {
-					msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
+					msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO,
 						"\t[INFO] Activating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
-						peer->stats_server_instant.recovered_slope,
-						peer->stats_server_instant.recovered_slope_inverted,
-						peer->stats_server_instant.recovered_average,
-						peer->stats_server_total.recovered_average/8);
+						peer->stats_receiver_instant.recovered_slope,
+						peer->stats_receiver_instant.recovered_slope_inverted,
+						peer->stats_receiver_instant.recovered_average,
+						peer->stats_receiver_total.recovered_average/8);
 					peer->buffer_bloat_active = true;
 				}
 			}
-			else if (peer->stats_server_instant.recovered_slope_inverted == 0) {
+			else if (peer->stats_receiver_instant.recovered_slope_inverted == 0) {
 				if (peer->buffer_bloat_active) {
-					msg(flow->server_id, flow->client_id, RIST_LOG_INFO,
+					msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO,
 						"\t[INFO] Deactivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
-						peer->stats_server_instant.recovered_slope,
-						peer->stats_server_instant.recovered_slope_inverted,
-						peer->stats_server_instant.recovered_average,
-						peer->stats_server_total.recovered_average/8);
+						peer->stats_receiver_instant.recovered_slope,
+						peer->stats_receiver_instant.recovered_slope_inverted,
+						peer->stats_receiver_instant.recovered_average,
+						peer->stats_receiver_total.recovered_average/8);
 					peer->buffer_bloat_active = false;
 				}
 			}
 		}
 
 		// Clear peer instant stats
-		memset(&peer->stats_server_instant, 0, sizeof(peer->stats_server_instant));
+		memset(&peer->stats_receiver_instant, 0, sizeof(peer->stats_receiver_instant));
 	}
 
 	double Q = 100;
@@ -493,13 +493,13 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 	(flow_recovered_instant * 10) < flow_missing_instant) && flow_recv_instant > 10 &&
 		flow_recv_instant < flow_missing_instant)
 	{
-		msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS]The flow link is dead %"PRIu32" > %"PRIu64", deleting all missing queue elements!\n",
+		msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]The flow link is dead %"PRIu32" > %"PRIu64", deleting all missing queue elements!\n",
 		flow_missing_instant, flow_recv_instant);
 		/* Delete all missing queue elements (if any) */
 		rist_flush_missing_flow_queue(flow);
 	}
 
-	msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS]type=flowinstant,flowid=%" PRIu64 ",received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",lost=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",min_ips=%" PRIu64 ",cur_ips=%" PRIu64 ",max_ips=%" PRIu64 "\n",
+	msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]type=flowinstant,flowid=%" PRIu64 ",received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n=%" PRIu32 ",lost=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",min_ips=%" PRIu64 ",cur_ips=%" PRIu64 ",max_ips=%" PRIu64 "\n",
 		flow->flow_id,
 		flow_recv_instant,
 		flow_missing_instant,
@@ -523,7 +523,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 		Q = (double)((flow_recv_total)*100.0) / (double)(flow_recv_total + flow_missing_total);
 	}
 
-	msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS]type=flowtotal,flowid=%" PRIu64 ",received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n+=%" PRIu32 ",lost=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",min_ips=%" PRIu64 ",cur_ips=%" PRIu64 ",max_ips=%" PRIu64 "\n",
+	msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]type=flowtotal,flowid=%" PRIu64 ",received=%" PRIu64 ",missing=%" PRIu32 ",Q=%.02lf,recovered=%" PRIu32 ",n0=%" PRIu32 ",n1=%" PRIu32 ",n2=%" PRIu32 ",n3=%" PRIu32 ",n+=%" PRIu32 ",lost=%" PRIu32 ",reordered=%" PRIu32 ",dups=%" PRIu32 ",retries=%" PRIu32 ",min_ips=%" PRIu64 ",cur_ips=%" PRIu64 ",max_ips=%" PRIu64 "\n",
 		flow->flow_id,
 		flow_recv_total,
 		flow_missing_total,
@@ -547,7 +547,7 @@ struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct ri
 
 	printf("\n"); // just for GUI log
 
-//	msg(flow->server_id, flow->client_id, RIST_LOG_INFO, "\t[STATS] last_seq_found %"PRIu32", last_seq_output %"PRIu32", missing_counter %"PRIu32"\n", 
+//	msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS] last_seq_found %"PRIu32", last_seq_output %"PRIu32", missing_counter %"PRIu32"\n", 
 //		flow->last_seq_found, flow->last_seq_output, flow->missing_counter, flow->missing_counter);
 
 	return nextflow;
@@ -565,9 +565,9 @@ static bool flow_has_peer(struct rist_flow *f, uint32_t flow_id, uint32_t peer_i
 	return false;
 }
 
-int rist_server_associate_flow(struct rist_peer *p, uint32_t flow_id)
+int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 {
-	struct rist_server *ctx = p->server_ctx;
+	struct rist_receiver *ctx = p->receiver_ctx;
 	int ret = 0;
 
 	// Find the flow based on the flow_id
@@ -588,10 +588,10 @@ int rist_server_associate_flow(struct rist_peer *p, uint32_t flow_id)
 
 		if (p->short_seq) {
 			f->short_seq = true;
-			f->server_queue_max = UINT16_SIZE;
+			f->receiver_queue_max = UINT16_SIZE;
 		}
 		else
-			f->server_queue_max = RIST_SERVER_QUEUE_BUFFERS;
+			f->receiver_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
 		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32" created\n", flow_id);
 	} else {

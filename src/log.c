@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
@@ -53,7 +53,7 @@ int rist_set_stats_socket(int port)
 	return 0;
 }
 
-void msg(intptr_t server_ctx, intptr_t client_ctx, int level, const char *format, ...)
+void msg(intptr_t receiver_ctx, intptr_t sender_ctx, int level, const char *format, ...)
 {
 	struct timeval tv;
 	char *str_content;
@@ -75,7 +75,7 @@ void msg(intptr_t server_ctx, intptr_t client_ctx, int level, const char *format
 	vasprintf(&str_content, format, args);
 	va_end(args);
 	int udplen = asprintf(&str_udp, "%d.%6.6d|%ld.%ld|%d|%s", (int)tv.tv_sec,
-		(int)tv.tv_usec, server_ctx, client_ctx, level, str_content);
+		(int)tv.tv_usec, receiver_ctx, sender_ctx, level, str_content);
 
 	write(stats_fd, str_udp, udplen + 1);
 	if (stats_socket > 0) {

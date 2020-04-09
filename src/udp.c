@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
@@ -83,47 +83,47 @@ bool url_params_parse(char* url, srt_params_t* params)
 }
 */
 
-void rist_clean_client_enqueue(struct rist_client *ctx)
+void rist_clean_sender_enqueue(struct rist_sender *ctx)
 {
 	int delete_count = 1;
 
 	// Delete old packets (max 10 entries per function call)
 	while (delete_count++ < 10) {
-		struct rist_buffer *b = ctx->client_queue[ctx->client_queue_delete_index];
+		struct rist_buffer *b = ctx->sender_queue[ctx->sender_queue_delete_index];
 
 		size_t safety_counter = 0;
 		while (!b) {
-			ctx->client_queue_delete_index = (ctx->client_queue_delete_index + 1) % ctx->client_queue_max;
+			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 			// This should never happen!
 			msg(0, ctx->id, RIST_LOG_ERROR,
 				"[ERROR] Moving delete index to %zu\n",
-				ctx->client_queue_delete_index);
-			b = ctx->client_queue[ctx->client_queue_delete_index];
+				ctx->sender_queue_delete_index);
+			b = ctx->sender_queue[ctx->sender_queue_delete_index];
 			if (safety_counter++ > 1000)
 				return;
 		}
 
 		/* our buffer size is zero, it must be just building up */
-		if (ctx->client_queue_write_index == ctx->client_queue_delete_index) {
+		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {
 			break;
 		}
 
 		/* perform the deletion based on the buffer size plus twice the configured/measured avg_rtt */
 		uint64_t delay = (timestampNTP_u64() - b->time) / RIST_CLOCK;
-		if (delay < ctx->client_recover_min_time) {
+		if (delay < ctx->sender_recover_min_time) {
 			break;
 		}
 
 		//msg(0, ctx->id, RIST_LOG_WARN,
 		//		"\tDeleting %"PRIu32" (%zu bytes) after %"PRIu64" (%zu) ms\n",
-		//		b->seq, b->size, delay, ctx->client_recover_min_time);
+		//		b->seq, b->size, delay, ctx->sender_recover_min_time);
 
 		/* now delete it */
-		ctx->client_queue_bytesize -= b->size;
+		ctx->sender_queue_bytesize -= b->size;
 		free(b->data);
 		free(b);
-		ctx->client_queue[ctx->client_queue_delete_index] = NULL;
-		ctx->client_queue_delete_index = (ctx->client_queue_delete_index + 1) % ctx->client_queue_max;
+		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
+		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 
 	}
 
@@ -185,8 +185,8 @@ static void _ensure_key_is_valid(struct rist_key *key)
 
 size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
-	intptr_t server_id = p->server_ctx ? p->server_ctx->id : 0;
-	intptr_t client_id = p->client_ctx ? p->client_ctx->id : 0;
+	intptr_t receiver_id = p->receiver_ctx ? p->receiver_ctx->id : 0;
+	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
 
 	struct rist_common_ctx *ctx = get_cctx(p);
 	struct rist_key *k = &ctx->SECRET;
@@ -195,14 +195,14 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	size_t hdr_len = 0;
 	size_t ret = 0;
 
-	//if (p->server_mode)
-	//	msg(server_id, client_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and rtp_seq %"PRIu16" payload is %d\n", 
+	//if (p->receiver_mode)
+	//	msg(receiver_id, sender_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and rtp_seq %"PRIu16" payload is %d\n", 
 	//		seq, seq_rtp, payload_type);
 	//else
-	//	msg(server_id, client_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and idx is %zu/%zu/%zu (read/write/delete) and payload is %d\n", 
-	//		seq, p->client_ctx->client_queue_read_index, 
-	//		p->client_ctx->client_queue_write_index, 
-	//		p->client_ctx->client_queue_delete_index,
+	//	msg(receiver_id, sender_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and idx is %zu/%zu/%zu (read/write/delete) and payload is %d\n", 
+	//		seq, p->sender_ctx->sender_queue_read_index, 
+	//		p->sender_ctx->sender_queue_write_index, 
+	//		p->sender_ctx->sender_queue_delete_index,
 	//		payload_type);
 
 	// TODO: write directly on the payload to make it faster
@@ -235,7 +235,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			if (seq != ctx->seq)
 			{
 				// This is a retranmission
-				//msg(server_id, client_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"\n", seq, seq_rtp);
+				//msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"\n", seq, seq_rtp);
 				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
 				//hdr->rtp.ssrc |= (1 << 31);
 				// TODO: fix this with an OR instead
@@ -330,16 +330,16 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		data = payload - hdr_len + RIST_GRE_PROTOCOL_REDUCED_SIZE;
 	}
 
-	// TODO: compare p->client_ctx->client_queue_read_index and p->client_ctx->client_queue_write_index
+	// TODO: compare p->sender_ctx->sender_queue_read_index and p->sender_ctx->sender_queue_write_index
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
 
 	ret = sendto(p->sd, data, len, 0, &(p->u.address), p->address_len);
 	if (ret < 0) {
-		msg(server_id, client_id, RIST_LOG_ERROR, "\tSend failed: %d\n", ret);
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tSend failed: %d\n", ret);
 	} else {
-		rist_calculate_bitrate_client(len, &p->bw);
-		p->stats_client_instant.sent++;
+		rist_calculate_bitrate_sender(len, &p->bw);
+		p->stats_sender_instant.sent++;
 	}
 
 	return ret;
@@ -348,13 +348,13 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 /* This function is used by receiver for all and by sender only for rist-data and oob-data */
 int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate)
 {
-	intptr_t server_id = p->server_ctx ? p->server_ctx->id : 0;
-	intptr_t client_id = p->client_ctx ? p->client_ctx->id : 0;
+	intptr_t receiver_id = p->receiver_ctx ? p->receiver_ctx->id : 0;
+	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
 
 	struct rist_common_ctx *ctx = get_cctx(p);
 
 	if (p->sd < 0 || !p->address_len) {
-		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] rist_send_common_rtcp failed\n");		
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] rist_send_common_rtcp failed\n");		
 		return -1;
 	}
 
@@ -365,10 +365,10 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		ctx->seq_rtp++;
 
 	size_t ret = 0;
-	if (p->client_ctx && p->client_ctx->simulate_loss && !(ctx->seq % 1000)) {
-	//if (p->client_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
+	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000)) {
+	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
 		ret = payload_len;
-		//msg(server_id, client_id, RIST_LOG_ERROR,
+		//msg(receiver_id, sender_id, RIST_LOG_ERROR,
 		//	"\tSimulating lost packet for seq #%"PRIu32"\n", ctx->seq);
 	} else {
 		ret = rist_send_seq_rtcp(p, ctx->seq, ctx->seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
@@ -378,12 +378,12 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	{
 		if (p->address_family == AF_INET6) {
 			// TODO: print IP and port (and error number?)
-			msg(server_id, client_id, RIST_LOG_ERROR,
+			msg(receiver_id, sender_id, RIST_LOG_ERROR,
 				"\tError on transmission sendto for seq #%"PRIu32"\n", ctx->seq);
 		} else {
 			struct sockaddr_in *sin4 = (struct sockaddr_in *)&p->u.address;
 			unsigned char *ip = (unsigned char *)&sin4->sin_addr.s_addr;
-			msg(server_id, client_id, RIST_LOG_ERROR,
+			msg(receiver_id, sender_id, RIST_LOG_ERROR,
 				"\tError on transmission sendto, ret=%d to %d.%d.%d.%d:%d/%d, seq #%"PRIu32", %d bytes\n",
 					ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
 					p->local_port, ctx->seq, payload_len);
@@ -398,17 +398,17 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 
 int rist_set_url(struct rist_peer *peer)
 {
-	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
-	intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
+	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
+	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
 	if (!peer->url) {
 		if (peer->local_port > 0) {
-			/* Put client in IPv4 learning mode */
+			/* Put sender in IPv4 learning mode */
 			peer->address_family = AF_INET;
 			peer->address_len = sizeof(struct sockaddr_in);
 			memset(&peer->u.address, 0, sizeof(struct sockaddr_in));
-			msg(server_id, client_id, RIST_LOG_INFO,
-				"[INIT] Client: in learning mode\n");
+			msg(receiver_id, sender_id, RIST_LOG_INFO,
+				"[INIT] Sender: in learning mode\n");
 		}
 
 		return 1;
@@ -416,10 +416,10 @@ int rist_set_url(struct rist_peer *peer)
 
 	struct network_url parsed_url;
 	if (parse_url(peer->url, &parsed_url) != 0) {
-		msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] %s / %s\n", parsed_url.error, peer->url);
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] %s / %s\n", parsed_url.error, peer->url);
 		return -1;
 	} else {
-		msg(server_id, client_id, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n",
+		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n",
 			(char *) parsed_url.hostname, parsed_url.port);
 	}
 
@@ -508,8 +508,8 @@ void rist_populate_cname(struct rist_peer *peer)
 
 void rist_create_socket(struct rist_peer *peer)
 {
-	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
-	intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
+	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
+	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
 	if(rist_set_url(peer)) {
 		return;
@@ -531,17 +531,17 @@ void rist_create_socket(struct rist_peer *peer)
 			port = htons(addrv6->sin6_port);
 		}
 		if (!host) {
-			msg(server_id, client_id, RIST_LOG_INFO, "[ERROR] failed to convert address to string (errno=%d)", errno);
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[ERROR] failed to convert address to string (errno=%d)", errno);
 			return;
 		}
 
 		peer->sd = udp_Open(host, port, NULL, 0, 0, NULL);
 		if (peer->sd > 0) {
-			msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Starting in URL listening mode (socket# %d)\n", peer->sd);
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
 			char *msgbuf = malloc(256);
 			msgbuf = udp_GetErrorDescription(peer->sd, msgbuf);
-			msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Error starting in URL listening mode. %s\n", msgbuf);
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Error starting in URL listening mode. %s\n", msgbuf);
 			free(msgbuf);
 		}
 	}
@@ -549,22 +549,22 @@ void rist_create_socket(struct rist_peer *peer)
 		// We use sendto ... so, no need to connect directly here
 		peer->sd = udp_Connect_Simple(peer->address_family, 32, NULL);
 		if (peer->sd > 0)
-			msg(server_id, client_id, RIST_LOG_INFO, "[INIT] Starting in URL connect mode (%d)\n", peer->sd);
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL connect mode (%d)\n", peer->sd);
 		else {
 			char *msgbuf = malloc(256);
 			msgbuf = udp_GetErrorDescription(peer->sd, msgbuf);
-			msg(server_id, client_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", msgbuf);
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", msgbuf);
 			free(msgbuf);
 		}
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
 	rist_populate_cname(peer);
-	msg(server_id, client_id, RIST_LOG_INFO, "[INFO] Our cname is %s\n", peer->cname);
+	msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Our cname is %s\n", peer->cname);
 
 }
 
-int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len)
+int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 
@@ -608,7 +608,7 @@ int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int arra
 		seqext_buf->seq_msb = htobe16(seq >> 16);
 
 		// Now the NACK message
-		if (peer->server_ctx->nack_type == RIST_NACK_BITMASK)
+		if (peer->receiver_ctx->nack_type == RIST_NACK_BITMASK)
 		{
 			struct rist_rtcp_nack_bitmask *rtcp = (struct rist_rtcp_nack_bitmask *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext));
 			rtcp->flags = RTCP_NACK_BITMASK_FLAGS;
@@ -645,11 +645,11 @@ int rist_send_server_rtcp(struct rist_peer *peer, uint32_t seq_array[], int arra
 		payload_type = RIST_PAYLOAD_TYPE_RTCP_NACK;
 	}
 
-	// We use direct send from server to client (no fifo to keep track of seq/idx)
+	// We use direct send from receiver to sender (no fifo to keep track of seq/idx)
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, false);
 }
 
-void rist_send_client_rtcp(struct rist_peer *peer)
+void rist_send_sender_rtcp(struct rist_peer *peer)
 {
 	uint16_t namelen = strlen(peer->cname) + 3;
 	// It has to be a multiple of 4
@@ -696,17 +696,17 @@ void rist_send_client_rtcp(struct rist_peer *peer)
 
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
-	struct rist_client *ctx = peer->client_ctx;
+	struct rist_sender *ctx = peer->sender_ctx;
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->client_queue[ctx->client_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-	if (RIST_UNLIKELY(!ctx->client_queue[ctx->client_queue_write_index])) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside client buffer, OOM, decrease max bitrate or buffer time length\n");
+	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
 	}
-	ctx->client_queue[ctx->client_queue_write_index]->peer = peer;
-	ctx->client_queue_bytesize += payload_len;
-	ctx->client_queue_write_index = (ctx->client_queue_write_index + 1) % ctx->client_queue_max;
+	ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
+	ctx->sender_queue_bytesize += payload_len;
+	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
 	pthread_rwlock_unlock(&ctx->queue_lock);
 	return;
 }
@@ -724,7 +724,7 @@ static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 		if (get_cctx(peer)->debug)
 			msg(0, 0, RIST_LOG_DEBUG, "[DEBUG] Sending %d nacks starting with %"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32"\n",
 			peer->nacks.counter, peer->nacks.array[0],peer->nacks.array[1],peer->nacks.array[2],peer->nacks.array[3]);
-		if (rist_send_server_rtcp(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
+		if (rist_send_receiver_rtcp(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
 			peer->nacks.counter = 0;
 		else
 			msg(0, 0, RIST_LOG_ERROR, "\tCould not send nacks, will try again\n");
@@ -751,7 +751,7 @@ void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
 	}
 }
 
-int rist_client_enqueue(struct rist_client *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port)
+int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;
 
@@ -777,7 +777,7 @@ int rist_client_enqueue(struct rist_client *ctx, const void *data, int len, uint
 			data = cbuf;
 			payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
 		} else {
-			//msg(server_id, ctx->id, DEBUG,
+			//msg(receiver_id, ctx->id, DEBUG,
 			//    "compressed %d to %lu\n", len, compressed_len);
 			// Use origin data AS IS becauce compression bloated it
 		}
@@ -785,22 +785,22 @@ int rist_client_enqueue(struct rist_client *ctx, const void *data, int len, uint
 
 	ctx->last_datagram_time = datagram_time;
 
-	/* insert into client fifo queue */
+	/* insert into sender fifo queue */
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->client_queue[ctx->client_queue_write_index] = rist_new_buffer(data, len, payload_type, 0, datagram_time, src_port, dst_port);
-	if (RIST_UNLIKELY(!ctx->client_queue[ctx->client_queue_write_index])) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside client buffer, OOM, decrease max bitrate or buffer time length\n");
+	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(data, len, payload_type, 0, datagram_time, src_port, dst_port);
+	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
+		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return -1;
 	}
-	ctx->client_queue_write_index = (ctx->client_queue_write_index + 1) % ctx->client_queue_max;
-	ctx->client_queue_bytesize += len;
+	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+	ctx->sender_queue_bytesize += len;
 	pthread_rwlock_unlock(&ctx->queue_lock);
 
 	return 0;
 }
 
-void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer *buffer)
+void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer *buffer)
 {
 	struct rist_peer *peer;
 	struct rist_peer *selected_peer_by_weight = NULL;
@@ -866,11 +866,11 @@ void rist_client_send_data_balanced(struct rist_client *ctx, struct rist_buffer 
 	}
 }
 
-static size_t rist_client_index_get(struct rist_client *ctx, uint32_t seq, struct rist_peer *peer)
+static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
 {
 	// This is by design in advanced mode, that is why we push all output data and handshakes 
-	// through the client_queue, so we can keep the seq and idx in sync
-	size_t idx = (seq + 1) % (uint64_t)ctx->client_queue_max;
+	// through the sender_queue, so we can keep the seq and idx in sync
+	size_t idx = (seq + 1) % (uint64_t)ctx->sender_queue_max;
 	if (!peer->advanced) {
 		// For simple profile and main profile without extended seq numbers, we use a conversion table
 		idx = ctx->seq_index[(uint16_t)seq];
@@ -878,49 +878,49 @@ static size_t rist_client_index_get(struct rist_client *ctx, uint32_t seq, struc
 	return idx;
 }
 
-int rist_retry_dequeue(struct rist_client *ctx)
+int rist_retry_dequeue(struct rist_sender *ctx)
 {
 //	msg(0, ctx->id, RIST_LOG_ERROR,
-//			"\tCurrent read/write index are %zu/%zu \n", ctx->client_retry_queue_read_index,
-//			ctx->client_retry_queue_write_index);
+//			"\tCurrent read/write index are %zu/%zu \n", ctx->sender_retry_queue_read_index,
+//			ctx->sender_retry_queue_write_index);
 
 	// TODO: Is this logic flawed and we are always one unit behind (look at oob_dequee)
-	size_t client_retry_queue_read_index = (ctx->client_retry_queue_read_index + 1) % ctx->client_retry_queue_size;
+	size_t sender_retry_queue_read_index = (ctx->sender_retry_queue_read_index + 1) % ctx->sender_retry_queue_size;
 
-	if (client_retry_queue_read_index == ctx->client_retry_queue_write_index) {
+	if (sender_retry_queue_read_index == ctx->sender_retry_queue_write_index) {
 		//msg(0, ctx->id, RIST_LOG_ERROR,
 		//	"\t[GOOD] We are all up to date, index is %" PRIu64 "\n",
-		//	ctx->client_retry_queue_read_index);
+		//	ctx->sender_retry_queue_read_index);
 		return 0;
 	}
 
-	ctx->client_retry_queue_read_index = client_retry_queue_read_index;
-	struct rist_retry *retry = &ctx->client_retry_queue[ctx->client_retry_queue_read_index];
+	ctx->sender_retry_queue_read_index = sender_retry_queue_read_index;
+	struct rist_retry *retry = &ctx->sender_retry_queue[ctx->sender_retry_queue_read_index];
 
 	// If they request a non-sense seq number, we will catch it when we check the seq number against
 	// the one on that buffer position and it does not match
 
-	size_t idx = rist_client_index_get(ctx, retry->seq, retry->peer);
-	if (ctx->client_queue[idx] == NULL) {
+	size_t idx = rist_sender_index_get(ctx, retry->seq, retry->peer);
+	if (ctx->sender_queue[idx] == NULL) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu), consider increasing the buffer size\n",
-			retry->seq, idx, ctx->client_queue_read_index, ctx->client_queue_write_index, ctx->client_queue_delete_index);
-		retry->peer->stats_client_instant.retrans_skip++;
+			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index);
+		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
-	} else if (retry->peer->advanced && ctx->client_queue[idx]->seq != retry->seq) {
+	} else if (retry->peer->advanced && ctx->sender_queue[idx]->seq != retry->seq) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), something is very wrong!\n",
-			retry->seq, idx, ctx->client_queue_read_index, ctx->client_queue_write_index, ctx->client_queue_delete_index,
-			ctx->client_queue[idx]->seq, ctx->client_queue_max);
-		retry->peer->stats_client_instant.retrans_skip++;
+			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
+		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
-	else if (!retry->peer->advanced && (uint16_t)retry->seq != ctx->client_queue[idx]->seq_rtp) {
+	else if (!retry->peer->advanced && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), bitrate is too high, use advanced profile instead\n",
-			(uint16_t)retry->seq, idx, ctx->client_queue_read_index, ctx->client_queue_write_index, ctx->client_queue_delete_index,
-			ctx->client_queue[idx]->seq_rtp, ctx->client_queue_max);
-		retry->peer->stats_client_instant.retrans_skip++;
+			(uint16_t)retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
+		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
 
@@ -935,13 +935,13 @@ int rist_retry_dequeue(struct rist_client *ctx)
 	if (current_bitrate > max_bitrate) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
 			cli_bw->bitrate, retry_bw->bitrate, max_bitrate, idx);
-		retry->peer->stats_client_instant.retrans_skip++;
+		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
 
 	// For timing debugging
 	uint64_t now = timestampNTP_u64();
-	uint64_t data_age = (now - ctx->client_queue[idx]->time) / RIST_CLOCK;
+	uint64_t data_age = (now - ctx->sender_queue[idx]->time) / RIST_CLOCK;
 	uint64_t retry_age = (now - retry->insert_time) / RIST_CLOCK;
 	if (retry_age > retry->peer->config.recovery_length_max) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
@@ -951,7 +951,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 		return -1;
 	}
 
-	struct rist_buffer *buffer = ctx->client_queue[idx];
+	struct rist_buffer *buffer = ctx->sender_queue[idx];
 	/* queue_time holds the original insertion time for this seq */
 	if (ctx->common.debug)
 		msg(0, ctx->id, RIST_LOG_DEBUG,
@@ -985,14 +985,14 @@ int rist_retry_dequeue(struct rist_client *ctx)
 	}
 
 	// update bandwidh value
-	rist_calculate_bitrate_client(ret, retry_bw);
+	rist_calculate_bitrate_sender(ret, retry_bw);
 
 	if (ret < buffer->size) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[ERROR] Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, buffer->seq);
-		retry->peer->stats_client_instant.retrans_skip++;
+		retry->peer->stats_sender_instant.retrans_skip++;
 	} else {
-		retry->peer->stats_client_instant.retrans++;
+		retry->peer->stats_sender_instant.retrans++;
 	}
 
 	if (ret >= 0)
@@ -1001,7 +1001,7 @@ int rist_retry_dequeue(struct rist_client *ctx)
 		return -1;
 }
 
-void rist_retry_enqueue(struct rist_client *ctx, uint32_t seq, struct rist_peer *peer)
+void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
 {
 	// Even though all the checks are on the dequeue function, we leave this one here
 	// to prevent the flodding of our fifo .. It is only based on the date of the
@@ -1009,8 +1009,8 @@ void rist_retry_enqueue(struct rist_client *ctx, uint32_t seq, struct rist_peer 
 	// This is a safety check to protect against buggy or non compliant receivers that request the
 	// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
 	uint64_t now = timestampNTP_u64();
-	size_t idx = rist_client_index_get(ctx, seq, peer);
-	struct rist_buffer *buffer = ctx->client_queue[idx];
+	size_t idx = rist_sender_index_get(ctx, seq, peer);
+	struct rist_buffer *buffer = ctx->sender_queue[idx];
 	if (buffer)
 	{
 		if (buffer->last_retry_request != 0)
@@ -1037,18 +1037,18 @@ void rist_retry_enqueue(struct rist_client *ctx, uint32_t seq, struct rist_peer 
 	{
 		msg(0, ctx->id, RIST_LOG_WARN,
 			"[ERROR] Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
-			ctx->client_recover_min_time);
+			ctx->sender_recover_min_time);
 		return;
 	}
 
 	// Now insert into the missing queue
 	struct rist_retry *retry;
-	retry = &ctx->client_retry_queue[ctx->client_retry_queue_write_index];
+	retry = &ctx->sender_retry_queue[ctx->sender_retry_queue_write_index];
 	retry->seq = seq;
 	retry->peer = peer;
 	retry->insert_time = now;
-	if (++ctx->client_retry_queue_write_index >= ctx->client_retry_queue_size) {
-		ctx->client_retry_queue_write_index = 0;
+	if (++ctx->sender_retry_queue_write_index >= ctx->sender_retry_queue_size) {
+		ctx->sender_retry_queue_write_index = 0;
 	}
 }
 
@@ -1056,8 +1056,8 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 {
 	char ipstr[INET6_ADDRSTRLEN];
 	uint32_t port;
-	intptr_t server_id = peer->server_ctx ? peer->server_ctx->id : 0;
-	intptr_t client_id = peer->client_ctx ? peer->client_ctx->id : 0;
+	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
+	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
 	// deal with both IPv4 and IPv6:
 	if (peer->address_family == AF_INET6) {
@@ -1070,7 +1070,7 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 		snprintf(ipstr, INET6_ADDRSTRLEN, "%s", inet_ntoa(addr->sin_addr));
 	}
 
-	msg(server_id, client_id, RIST_LOG_INFO,
+	msg(receiver_id, sender_id, RIST_LOG_INFO,
 		"[INFO] %sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32", ports: %u->%u\n",
 		prefix, ipstr, port, peer->listening, peer->adv_peer_id,
 		peer->local_port, peer->remote_port);

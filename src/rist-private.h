@@ -1,4 +1,4 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
@@ -129,7 +129,7 @@ struct rist_peer_flow_stats {
 	uint64_t last_recv_ts;
 };
 
-struct rist_peer_client_stats {
+struct rist_peer_sender_stats {
 	uint64_t sent;
 	uint32_t received;
 	uint32_t retrans;
@@ -137,7 +137,7 @@ struct rist_peer_client_stats {
 	uint32_t retrans_skip;
 };
 
-struct rist_peer_server_stats {
+struct rist_peer_receiver_stats {
 	uint64_t recv;
 	uint32_t missing;
 	uint32_t retries;
@@ -159,15 +159,15 @@ struct rist_flow {
 	volatile int shutdown;
 	int max_output_jitter;
 
-	struct rist_buffer *server_queue[RIST_SERVER_QUEUE_BUFFERS]; /* output queue */
+	struct rist_buffer *receiver_queue[RIST_SERVER_QUEUE_BUFFERS]; /* output queue */
 
 	pthread_rwlock_t queue_lock;
 
-	bool server_queue_has_items;
-	size_t server_queue_size;        /* size in bytes */
+	bool receiver_queue_has_items;
+	size_t receiver_queue_size;        /* size in bytes */
 	uint64_t recovery_buffer_ticks;  /* size in ticks */
-	size_t server_queue_output_idx;  /* next packet to output */
-	size_t server_queue_max;
+	size_t receiver_queue_output_idx;  /* next packet to output */
+	size_t receiver_queue_max;
 
 	/* Missing incoming packets, waiting for retransmission */
 	struct rist_missing_buffer *missing;
@@ -186,15 +186,15 @@ struct rist_flow {
 	size_t peer_lst_len;
 	uint32_t last_seq_output;
 	uint32_t last_seq_found;
-	intptr_t server_id;
-	intptr_t client_id;
+	intptr_t receiver_id;
+	intptr_t sender_id;
 	uint64_t last_ipstats_time;
 	uint64_t last_output_time;
 	int64_t time_offset;
 	bool authenticated;
 
-	/* Server thread variables */
-	pthread_t server_thread;
+	/* Receiver thread variables */
+	pthread_t receiver_thread;
 	/* data out thread signaling */
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;
@@ -277,12 +277,12 @@ struct rist_common_ctx {
 	bool debug;
 };
 
-struct rist_server {
-	/* Server data callback */
-	void (*server_receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
-	void *server_receive_callback_argument;
+struct rist_receiver {
+	/* Receiver data callback */
+	void (*receiver_receive_callback)(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buffer, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags);
+	void *receiver_receive_callback_argument;
 
-	/* Server timed async data output */
+	/* Receiver timed async data output */
 	pthread_rwlock_t dataout_fifo_queue_lock;
 	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
 	size_t dataout_fifo_queue_bytesize;
@@ -290,8 +290,8 @@ struct rist_server {
 	uint16_t dataout_fifo_queue_read_index;
 	uint16_t dataout_fifo_queue_write_index;
 
-	/* Server thread variables */
-	pthread_t server_thread;
+	/* Receiver thread variables */
+	pthread_t receiver_thread;
 
 	/* Reporting id */
 	intptr_t id;
@@ -320,46 +320,46 @@ struct rist_server {
 	enum rist_nack_type nack_type;
 };
 
-struct rist_client {
-	/* compression flag (client only) */
+struct rist_sender {
+	/* compression flag (sender only) */
 	bool compression;
 
 	/* Advertised flow for this context */
 	uint32_t adv_flow_id;
 
-	/* max bitrate of all client peers (sets the buffer size on client queue)*/
+	/* max bitrate of all sender peers (sets the buffer size on sender queue)*/
 	uint32_t recovery_maxbitrate_max;
 
-	/* Client thread variables */
-	pthread_t client_thread;
+	/* Sender thread variables */
+	pthread_t sender_thread;
 	/* data/nacks out thread signaling */
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;
 
-	bool client_initialized;
+	bool sender_initialized;
 	uint32_t total_weight;
-	struct rist_buffer *client_queue[RIST_SERVER_QUEUE_BUFFERS]; /* input queue */
-	size_t client_queue_bytesize;
-	size_t client_queue_delete_index;
-	size_t client_queue_read_index;
-	size_t client_queue_write_index;
-	size_t client_queue_max;
+	struct rist_buffer *sender_queue[RIST_SERVER_QUEUE_BUFFERS]; /* input queue */
+	size_t sender_queue_bytesize;
+	size_t sender_queue_delete_index;
+	size_t sender_queue_read_index;
+	size_t sender_queue_write_index;
+	size_t sender_queue_max;
 	int weight_counter;
 	uint64_t last_datagram_time;
 	bool simulate_loss;
 	uint64_t stats_next_time;
 
 	/* retry queue */
-	struct rist_retry *client_retry_queue;
-	size_t client_retry_queue_write_index;
-	size_t client_retry_queue_read_index;
-	size_t client_retry_queue_size;
+	struct rist_retry *sender_retry_queue;
+	size_t sender_retry_queue_write_index;
+	size_t sender_retry_queue_read_index;
+	size_t sender_retry_queue_size;
 	uint64_t cooldown_time;
 	int cooldown_mode;
 
 	/* Recovery */
 	uint32_t seq_index[UINT16_SIZE];
-	size_t client_recover_min_time;
+	size_t sender_recover_min_time;
 
 	/* Reporting id */
 	intptr_t id;
@@ -414,7 +414,7 @@ struct rist_peer {
 
 	bool buffer_bloat_active;
 
-	bool server_mode;
+	bool receiver_mode;
 	bool advanced;
 	bool short_seq;
 
@@ -460,20 +460,20 @@ struct rist_peer {
 	bool listening;
 
 	/* rist ctx */
-	struct rist_client *client_ctx;
-	struct rist_server *server_ctx;
+	struct rist_sender *sender_ctx;
+	struct rist_receiver *receiver_ctx;
 
 	/* rist buffer bloating counteract */
 	uint64_t cooldown_time;
 
 	/* Statistics Sender */
-	struct rist_peer_client_stats stats_client_instant;
-	struct rist_peer_client_stats stats_client_total;
+	struct rist_peer_sender_stats stats_sender_instant;
+	struct rist_peer_sender_stats stats_sender_total;
 
 
 	/* Statistics Receiver */
-	struct rist_peer_server_stats stats_server_instant;
-	struct rist_peer_server_stats stats_server_total;
+	struct rist_peer_receiver_stats stats_receiver_instant;
+	struct rist_peer_receiver_stats stats_receiver_total;
 
 	bool dead;
 	uint64_t birthtime_peer;
@@ -494,17 +494,17 @@ struct rist_peer {
 };
 
 /* defined in flow.c */
-RIST_PRIV struct rist_flow *rist_server_flow_statistics(struct rist_server *ctx, struct rist_flow *flow);
-RIST_PRIV void rist_client_peer_statistics(struct rist_peer *peer);
-RIST_PRIV void rist_delete_flow(struct rist_server *ctx, struct rist_flow *f);
-RIST_PRIV void rist_server_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt);
-RIST_PRIV int rist_server_associate_flow(struct rist_peer *p, uint32_t flow_id);
+RIST_PRIV struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);
+RIST_PRIV void rist_sender_peer_statistics(struct rist_peer *peer);
+RIST_PRIV void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f);
+RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt);
+RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id);
 RIST_PRIV uint32_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV uint64_t timestampNTP_u64(void);
 RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);
-RIST_PRIV void rist_calculate_bitrate_client(size_t len, struct rist_bandwidth_estimation *bw);
-RIST_PRIV void empty_server_queue(struct rist_flow *f);
+RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw);
+RIST_PRIV void empty_receiver_queue(struct rist_flow *f);
 
 /* defined in rist.c */
 RIST_PRIV void rist_fsm_recv_connect(struct rist_peer *peer);
