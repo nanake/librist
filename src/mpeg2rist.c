@@ -111,7 +111,11 @@ static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_p
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
-	rist_sender_oob_write(ctx, peer, message, ret);
+	struct rist_oob_block oob_block;
+	oob_block.peer = peer;
+	oob_block.payload = message;
+	oob_block.payload_len = ret;
+	rist_sender_oob_write(ctx, &oob_block);
 	return 1;
 }
 
@@ -122,12 +126,12 @@ static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
 	return;
 }
 
-static void cb_recv_oob(void *arg, struct rist_peer *peer, const void *buf, size_t len)
+static void cb_recv_oob(void *arg, struct rist_oob_block *oob_block)
 {
 	struct rist_sender *ctx = (struct rist_sender *)arg;
 	(void)ctx;
-	if (len > 4 && strncmp(buf, "auth,", 5) == 0) {
-		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)len, (char *)buf);
+	if (oob_block->payload_len > 4 && strncmp(oob_block->payload, "auth,", 5) == 0) {
+		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
 	}
 	return;
 }
