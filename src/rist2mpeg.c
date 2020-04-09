@@ -107,8 +107,8 @@ static int keep_running = 1;
 static struct network_url parsed_url[INPUT_COUNT];
 
 struct rist_port_filter {
-	uint16_t src_port;
-	uint16_t dst_port;
+	uint16_t virt_src_port;
+	uint16_t virt_dst_port;
 };
 
 static void cb_recv(void *arg, struct rist_peer *peer, uint32_t flow_id, const void *buf, size_t len, uint16_t src_port, uint16_t dst_port, uint64_t timestamp_ntp, uint32_t flags)
@@ -118,13 +118,13 @@ static void cb_recv(void *arg, struct rist_peer *peer, uint32_t flow_id, const v
 	(void) timestamp_ntp;
 	(void) flags;
 
-	if (port_filter->src_port && port_filter->src_port != src_port) {
-		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->src_port, src_port);
+	if (port_filter->virt_src_port && port_filter->virt_src_port != src_port) {
+		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, src_port);
 		return;
 	}
 
-	if (port_filter->dst_port && port_filter->dst_port != dst_port) {
-		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->dst_port, dst_port);
+	if (port_filter->virt_dst_port && port_filter->virt_dst_port != dst_port) {
+		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, dst_port);
 		return;
 	}
 
@@ -193,8 +193,8 @@ int main(int argc, char *argv[])
 	uint32_t buffer_bloat_limit = 6;
 	uint32_t buffer_bloat_hard_limit = 20;
 	struct rist_port_filter port_filter;
-	port_filter.src_port = 0;
-	port_filter.dst_port = 0;
+	port_filter.virt_src_port = 0;
+	port_filter.virt_dst_port = 0;
 	struct sigaction act;
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
@@ -277,10 +277,10 @@ int main(int argc, char *argv[])
 			profile = atoi(optarg);
 		break;
 		case 'n':
-			port_filter.src_port = atoi(optarg);
+			port_filter.virt_src_port = atoi(optarg);
 		break;
 		case 'N':
-			port_filter.dst_port = atoi(optarg);
+			port_filter.virt_dst_port = atoi(optarg);
 		break;
 		case 'C':
 			cname = strdup(optarg);
@@ -386,7 +386,7 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_server_peer_add(ctx, &peer_config, &peer) == -1) {
+		if (rist_server_peer_insert(ctx, &peer_config, &peer) == -1) {
 			fprintf(stderr, "Could not add peer connector to server #%i\n", (int)(i + 1));
 			exit(1);
 		}
@@ -445,10 +445,10 @@ int main(int argc, char *argv[])
 		// Master loop
 		while (keep_running)
 		{
-			struct rist_output_buffer *b = rist_server_data_read(ctx);
+			struct rist_data_block *b = rist_server_data_read(ctx);
 			if (b && b->payload)
-				cb_recv(&port_filter, b->peer, b->flow_id, b->payload, b->payload_len, b->src_port,
-					b->dst_port, b->timestamp_ntp, b->flow_id);
+				cb_recv(&port_filter, b->peer, b->flow_id, b->payload, b->payload_len, b->virt_src_port,
+					b->virt_dst_port, b->timestamp_ntp, b->flow_id);
 			usleep(5000);
 		}
 	}

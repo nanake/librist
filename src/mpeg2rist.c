@@ -153,8 +153,8 @@ int main(int argc, char *argv[])
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
-	uint16_t src_port = 1971;
-	uint16_t dst_port = 1968;
+	uint16_t virt_src_port = 1971;
+	uint16_t virt_dst_port = 1968;
 	uint8_t encryption_type = 1;
 	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
 	uint32_t recovery_maxbitrate = 100000;
@@ -261,10 +261,10 @@ int main(int argc, char *argv[])
 			profile = atoi(optarg);
 		break;
 		case 'n':
-			src_port = atoi(optarg);
+			virt_src_port = atoi(optarg);
 		break;
 		case 'N':
-			dst_port = atoi(optarg);
+			virt_dst_port = atoi(optarg);
 		break;
 		case 'C':
 			cname = strdup(optarg);
@@ -379,7 +379,7 @@ int main(int argc, char *argv[])
 
 		const struct rist_peer_config peer_config = {
 			.address = address[i],
-			.gre_dst_port = dst_port + 1,
+			.gre_dst_port = virt_dst_port + 1,
 			.recovery_mode = recovery_mode,
 			.recovery_maxbitrate = recovery_maxbitrate,
 			.recovery_maxbitrate_return = recovery_maxbitrate_return,
@@ -395,7 +395,7 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_client_peer_add(ctx, &peer_config, &peer) == -1) {
+		if (rist_client_peer_insert(ctx, &peer_config, &peer) == -1) {
 			fprintf(stderr, "Could not add peer connector to client #%d\n", (int)(i + 1));
 			exit(1);
 		}
@@ -414,7 +414,7 @@ int main(int argc, char *argv[])
 	while (!signalReceived) {
 		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
 		if (r > 0) {
-			w = rist_client_data_write(ctx, buffer, r, src_port, dst_port);
+			w = rist_client_data_write(ctx, buffer, r, virt_src_port, virt_dst_port);
 			(void) w;
 		}
 	}
