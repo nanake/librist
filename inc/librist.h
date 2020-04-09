@@ -10,6 +10,7 @@
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (5)
 #define RIST_SUBVERSION (1)
+#define RIST_PEER_CONFIG_VERSION (0)
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -103,7 +104,7 @@ struct rist_data_block {
 };
 
 struct rist_peer_config {
-	uint8_t config_version;
+	uint8_t version;
 	const char *address;
 	uint16_t gre_dst_port;
 
