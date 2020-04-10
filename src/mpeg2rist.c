@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (cname) {
-		if (rist_sender_cname_set(ctx, cname, strlen(cname)) != 0) {
+		if (rist_sender_cname_set(ctx, cname) != 0) {
 			fprintf(stderr, "Could not set the cname\n");
 			exit(1);
 		}
@@ -424,7 +424,7 @@ int main(int argc, char *argv[])
 			data_block.payload_len = r;
 			data_block.virt_src_port = virt_src_port;
 			data_block.virt_dst_port = virt_dst_port;
-			data_block.timestamp_ntp = 0; // delegate this to the library
+			data_block.ts_ntp = 0; // delegate this to the library
 			w = rist_sender_data_write(ctx, &data_block);
 			(void) w;
 		}

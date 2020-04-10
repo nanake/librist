@@ -337,7 +337,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (cname) {
-		if (rist_receiver_cname_set(ctx, cname, strlen(cname)) != 0) {
+		if (rist_receiver_cname_set(ctx, cname) != 0) {
 			fprintf(stderr, "Could not set the cname\n");
 			exit(1);
 		}
@@ -431,23 +431,27 @@ int main(int argc, char *argv[])
 	// callback is best unless you are using the timestamps passed with the buffer
 	enable_data_callback = 0;
 
-	/* Start the rist protocol thread */
 	if (enable_data_callback == 1) {
-		if (rist_receiver_start(ctx, cb_recv, &port_filter)) {
-			fprintf(stderr, "Could not start rist receiver\n");
+		if (rist_receiver_data_callback_set(ctx, cb_recv, &port_filter))
+		{
+			fprintf(stderr, "Could not set data_callback pointer");
 			exit(1);
 		}
+	}
+
+	if (rist_receiver_start(ctx)) {
+		fprintf(stderr, "Could not start rist receiver\n");
+		exit(1);
+	}
+	/* Start the rist protocol thread */
+	if (enable_data_callback == 1) {
 		pause();
 	}
 	else {
-		if (rist_receiver_start(ctx, NULL, NULL)) {
-			fprintf(stderr, "Could not start rist receiver\n");
-			exit(1);
-		}
 		// Master loop
 		while (keep_running)
 		{
-			struct rist_data_block *b;
+			const struct rist_data_block *b;
 			int ret = rist_receiver_data_read(ctx, 5, &b);
 			if (!ret && b && b->payload) cb_recv(&port_filter, b);
 		}
