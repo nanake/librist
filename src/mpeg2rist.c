@@ -105,7 +105,7 @@ static void usage(char *cmd)
 	exit(1);
 }
 
-static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_sender *ctx = (struct rist_sender *)arg;
 	char message[500];
@@ -390,7 +390,7 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_sender_peer_create(ctx, &peer_config, &peer) == -1) {
+		if (rist_sender_peer_create(ctx, &peer, &peer_config) == -1) {
 			fprintf(stderr, "Could not add peer connector to sender #%d\n", (int)(i + 1));
 			exit(1);
 		}

@@ -138,7 +138,7 @@ static void intHandler(int signal) {
 	keep_running = 0;
 }
 
-static int cb_auth_connect(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer)
+static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	char message[500];
@@ -388,7 +388,7 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_receiver_peer_insert(ctx, &peer_config, &peer) == -1) {
+		if (rist_receiver_peer_create(ctx, &peer, &peer_config) == -1) {
 			fprintf(stderr, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
@@ -452,7 +452,7 @@ int main(int argc, char *argv[])
 		while (keep_running)
 		{
 			const struct rist_data_block *b;
-			int ret = rist_receiver_data_read(ctx, 5, &b);
+			int ret = rist_receiver_data_read(ctx, &b, 5);
 			if (!ret && b && b->payload) cb_recv(&port_filter, b);
 		}
 	}
