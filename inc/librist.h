@@ -99,7 +99,7 @@ struct rist_data_block {
 	size_t payload_len;
 	uint64_t timestamp_ntp;
 	uint32_t flags;
-	// These virtual ports are not used for simple profile
+	/* These virtual ports are not used for simple profile */
 	uint16_t virt_src_port;
 	uint16_t virt_dst_port;
 };
@@ -114,6 +114,7 @@ struct rist_oob_block {
 struct rist_peer_config {
 	uint8_t version;
 	const char *address;
+	/* The gre_dst_port is not used for simple rofile */
 	uint16_t gre_dst_port;
 
 	/* Recovery options */
@@ -303,9 +304,10 @@ RIST_API int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oo
  * Use this API to read out-of-band data from an internal fifo queue instead of the callback
  *
  * @param a RIST sender context
- * @return a pointer to the rist_oob_block structure
+ * @param a pointer to the rist_oob_block structure
+ * @return 0 on success, -1 in case of error.
  */
-RIST_API struct rist_oob_block *rist_sender_oob_read(struct rist_sender *ctx);
+RIST_API int rist_sender_oob_read(struct rist_sender *ctx, struct rist_oob_block **oob_block);
 
 /**
  * @brief Write data into a librist packet.
@@ -498,9 +500,10 @@ RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, const struct ris
  * Use this API to read out-of-band data from an internal fifo queue instead of the callback
  *
  * @param a RIST receiver context
- * @return a pointer to the rist_oob_block structure
+ * @param a pointer to the rist_oob_block structure
+ * @return 0 on success, -1 in case of error.
  */
-RIST_API struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx);
+RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, struct rist_oob_block **oob_block);
 
 /**
  * @brief Reads rist data
@@ -509,9 +512,10 @@ RIST_API struct rist_oob_block *rist_receiver_oob_read(struct rist_receiver *ctx
  *
  * @param a RIST receiver context
  * @param timeout How long to wait for queue data (ms)
- * @return a pointer to the rist_data_block structure
+ * @param a pointer to the rist_data_block structure
+ * @return 0 on success, -1 in case of error.
  */
-RIST_API struct rist_data_block *rist_receiver_data_read(struct rist_receiver *ctx, int timeout);
+RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, struct rist_data_block **data_block);
 
 /**
  * @brief Destroy RIST receiver
