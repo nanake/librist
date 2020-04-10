@@ -333,17 +333,7 @@ int main(int argc, char *argv[])
 	}
 
 	struct rist_sender *ctx;
-
-	uint64_t now;
-	struct timeval time;
-	gettimeofday(&time, NULL);
-	now = time.tv_sec * 1000000;
-	now += time.tv_usec;
-	uint32_t adv_flow_id = (uint32_t)(now >> 16);
-	// It must me an even number
-	adv_flow_id &= ~(1UL << 0);
-
-	if (rist_sender_create(&ctx, profile, adv_flow_id, loglevel) != 0) {
+	if (rist_sender_create(&ctx, profile, 0, loglevel) != 0) {
 		fprintf(stderr, "Could not create rist sender context\n");
 		exit(1);
 	}
@@ -400,7 +390,7 @@ int main(int argc, char *argv[])
 		};
 
 		struct rist_peer *peer;
-		if (rist_sender_peer_insert(ctx, &peer_config, &peer) == -1) {
+		if (rist_sender_peer_create(ctx, &peer_config, &peer) == -1) {
 			fprintf(stderr, "Could not add peer connector to sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
