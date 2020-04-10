@@ -447,8 +447,9 @@ int main(int argc, char *argv[])
 		// Master loop
 		while (keep_running)
 		{
-			struct rist_data_block *b = rist_receiver_data_read(ctx, 5);
-			if (b && b->payload) cb_recv(&port_filter, b);
+			struct rist_data_block *b;
+			int ret = rist_receiver_data_read(ctx, 5, &b);
+			if (!ret && b && b->payload) cb_recv(&port_filter, b);
 		}
 	}
 
