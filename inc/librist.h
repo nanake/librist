@@ -95,9 +95,10 @@ struct rist_peer;
 struct rist_data_block {
 	struct rist_peer *peer;
 	uint32_t flow_id;
+	uint64_t seq;
 	const void *payload;
 	size_t payload_len;
-	uint64_t timestamp_ntp;
+	uint64_t ts_ntp;
 	uint32_t flags;
 	/* These virtual ports are not used for simple profile */
 	uint16_t virt_src_port;
@@ -108,7 +109,7 @@ struct rist_oob_block {
 	struct rist_peer *peer;
 	const void *payload;
 	size_t payload_len;
-	uint64_t timestamp_ntp;
+	uint64_t ts_ntp;
 };
 
 struct rist_peer_config {
@@ -170,11 +171,10 @@ RIST_API int rist_sender_auth_handler_set(struct rist_sender *ctx,
  * This allows you to override the auto-generated SDES CName
  *
  * @param a RIST sender context
- * @param cname data to be sent through librist
- * @param cname_len size of cname buffer
+ * @param cname cstring to be sent through librist (null terminated, 128 bytes max)
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_sender_cname_set(struct rist_sender *ctx, const void *cname, size_t cname_len);
+RIST_API int rist_sender_cname_set(struct rist_sender *ctx, const char *cname);
 
 /**
  * @brief Add a peer connector to the existing sender.
@@ -259,7 +259,7 @@ RIST_API int rist_sender_max_jitter_set(struct rist_sender *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
+		void (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -307,7 +307,7 @@ RIST_API int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oo
  * @param a pointer to the rist_oob_block structure
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_sender_oob_read(struct rist_sender *ctx, struct rist_oob_block **oob_block);
+RIST_API int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob_block **oob_block);
 
 /**
  * @brief Write data into a librist packet.
@@ -316,7 +316,7 @@ RIST_API int rist_sender_oob_read(struct rist_sender *ctx, struct rist_oob_block
  *
  * @param a RIST sender context
  * @param a pointer to the rist_data_block structure
- * the timestamp_ntp will be populated by the lib when a value of 0 is passed
+ * the ts_ntp will be populated by the lib when a value of 0 is passed
  * @return number of written bytes on success, -1 in case of error.
  */
 RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
@@ -365,11 +365,10 @@ RIST_API int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
  * This allows you to override the auto-generated SDES CName
  *
  * @param a RIST receiver context
- * @param cname data to be sent through librist
- * @param cname_len size of cname buffer
+ * @param cname cstring to be sent through librist (128 bytes max including null terminator)
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_cname_set(struct rist_receiver *ctx, const void *cname, size_t cname_len);
+RIST_API int rist_receiver_cname_set(struct rist_receiver *ctx, const char *cname);
 
 /**
  * @brief Add a peer connector to the existing receiver.
@@ -404,7 +403,8 @@ RIST_API int rist_receiver_peer_remove(struct rist_receiver *ctx,
  * @param key_size size of the key used for the encryption
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_encrypt_aes_set(struct rist_receiver *ctx, const char *secret, int key_size);
+RIST_API int rist_receiver_encrypt_aes_set(struct rist_receiver *ctx,
+		const char *secret, int key_size);
 
 /**
  * @brief Set RIST retry timeout
@@ -466,9 +466,9 @@ RIST_API int rist_receiver_oob_set(struct rist_receiver *ctx,
 RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_nack_type nacks_type);
 
 /**
- * @brief Setup receiver start
+ * @brief Enable data callback channel
  *
- * Start receiver data output thread. This function returns immediately.
+ * Call to enable data callback channel.
  *
  * @param a RIST receiver context
  * @param data_callback The function that will be called when a data frame is
@@ -476,9 +476,19 @@ RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_na
  * @param arg the extra argument passed to the `data_callback`
  * @note Return immediately
  */
-RIST_API int rist_receiver_start(struct rist_receiver *ctx,
+RIST_API int rist_receiver_data_callback_set(struct rist_receiver *ctx,
 	void (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg);
+
+/**
+ * @brief Setup receiver start
+ *
+ * Start receiver data output thread.
+ *
+ * @param a RIST receiver context
+ * @note Return immediately
+ */
+RIST_API int rist_receiver_start(struct rist_receiver *ctx);
 
 /**
  * @brief Write data directly to a remote sender peer.
@@ -503,7 +513,7 @@ RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, const struct ris
  * @param a pointer to the rist_oob_block structure
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, struct rist_oob_block **oob_block);
+RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_block **oob_block);
 
 /**
  * @brief Reads rist data
@@ -515,7 +525,7 @@ RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, struct rist_oob_b
  * @param a pointer to the rist_data_block structure
  * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, struct rist_data_block **data_block);
+RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, const struct rist_data_block **data_block);
 
 /**
  * @brief Destroy RIST receiver

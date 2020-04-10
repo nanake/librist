@@ -474,7 +474,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
-int rist_receiver_oob_read(struct rist_receiver *ctx, struct rist_oob_block **oob_block)
+int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_block **oob_block)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_oob_read call!\n");
@@ -484,14 +484,14 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, struct rist_oob_block **oo
 	return 0;
 }
 
-int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, struct rist_data_block **data_buffer)
+int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, const struct rist_data_block **data_buffer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_data_read call!\n");
 		return -1;
 	}
 
-	struct rist_data_block *data_block = *data_buffer;
+	const struct rist_data_block *data_block = *data_buffer;
 	data_block = NULL;
 
 	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
@@ -535,7 +535,7 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	output_buffer->payload_len = b->size;
 	output_buffer->virt_src_port = b->src_port;
 	output_buffer->virt_dst_port = b->dst_port;
-	output_buffer->timestamp_ntp = b->source_time;
+	output_buffer->ts_ntp = b->source_time;
 	output_buffer->flags = flags;
 	return output_buffer;
 }
@@ -2114,7 +2114,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 		return -1;
 	}
 
-	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, data_block->timestamp_ntp, data_block->virt_src_port, data_block->virt_dst_port);
+	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, data_block->ts_ntp, data_block->virt_src_port, data_block->virt_dst_port);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
 		msg(0, ctx->id, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
@@ -2122,7 +2122,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 	return ret;
 }
 
-int rist_sender_oob_read(struct rist_sender *ctx, struct rist_oob_block **oob_block)
+int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob_block **oob_block)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_sender_oob_read call!\n");
@@ -2599,7 +2599,7 @@ free_ctx_and_ret:
 	return ret;
 }
 
-int rist_sender_cname_set(struct rist_sender *ctx, const void *cname, size_t cname_len)
+int rist_sender_cname_set(struct rist_sender *ctx, const char *cname)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_sender_cname_set call!\n");
@@ -2609,16 +2609,16 @@ int rist_sender_cname_set(struct rist_sender *ctx, const void *cname, size_t cna
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
 		return -1;
 	}
-	else if (cname_len >= 127)
+	else if (strlen(cname) >= 127)
 	{
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
 		return -1;
 	}
-	memcpy(&ctx->common.cname, cname, cname_len);
+	memcpy(&ctx->common.cname, cname, strlen(cname));
 	return 0;
 }
 
-int rist_receiver_cname_set(struct rist_receiver *ctx, const void *cname, size_t cname_len)
+int rist_receiver_cname_set(struct rist_receiver *ctx, const char *cname)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_cname_set call!\n");
@@ -2628,11 +2628,11 @@ int rist_receiver_cname_set(struct rist_receiver *ctx, const void *cname, size_t
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
 		return -1;
 	}
-	else if (cname_len >= 127) {
+	else if (strlen(cname) >= 127) {
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
 		return -1;
 	}
-	memcpy(&ctx->common.cname, cname, cname_len);
+	memcpy(&ctx->common.cname, cname, strlen(cname));
 	return 0;
 }
 
@@ -3030,7 +3030,7 @@ int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
 }
 
 int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
+		void (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3045,7 +3045,7 @@ int rist_sender_oob_set(struct rist_sender *ctx,
 		return -1;
 	}
 	ctx->common.oob_data_enabled = true;
-	ctx->common.oob_data_callback = oob_data_callback;
+	ctx->common.oob_data_callback = oob_callback;
 	ctx->common.oob_data_callback_argument = arg;
 	ctx->common.oob_queue_write_index = 0;
 	ctx->common.oob_queue_read_index = 0;
@@ -3262,17 +3262,21 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	return 0;
 }
 
-int rist_receiver_start(struct rist_receiver *ctx,
-	void(*data_callback)(void *arg, const struct rist_data_block *data_block),
+int rist_receiver_data_callback_set(struct rist_receiver *ctx,
+	void (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg)
+{
+	ctx->receiver_data_callback = data_callback;
+	ctx->receiver_data_callback_argument = arg;
+	return 0;
+}
+
+int rist_receiver_start(struct rist_receiver *ctx)
 {
 	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init dataout_fifo_queue_lock\n");
 		return -1;
 	}
-
-	ctx->receiver_data_callback = data_callback;
-	ctx->receiver_data_callback_argument = arg;
 
 	if (!ctx->receiver_thread) {
 		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0) {
