@@ -259,7 +259,7 @@ struct rist_common_ctx {
 
 	/* Auth callback variables */
 	struct {
-		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer);
+		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer);
 		void (*disconn_cb)(void *arg, struct rist_peer *peer);
 		void *arg;
 	} auth;

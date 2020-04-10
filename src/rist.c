@@ -484,7 +484,7 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_bloc
 	return 0;
 }
 
-int rist_receiver_data_read(struct rist_receiver *ctx, int timeout, const struct rist_data_block **data_buffer)
+int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_buffer, int timeout)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_data_read call!\n");
@@ -847,8 +847,8 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 	return p;
 }
 
-int rist_receiver_peer_insert(struct rist_receiver *ctx, 
-		const struct rist_peer_config *config, struct rist_peer **peer)
+int rist_receiver_peer_create(struct rist_receiver *ctx, 
+		struct rist_peer **peer, const struct rist_peer_config *config)
 {
 	struct rist_peer *p_rtcp;
 	struct rist_peer *p = rist_receiver_peer_insert_local(ctx, config);
@@ -2514,10 +2514,21 @@ fail:
 	return -1;
 }
 
+int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id)
+{
+	*flow_id = ctx->adv_flow_id;
+	return 0;
+}
+
 int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 			uint32_t flow_id, enum rist_log_level log_level)
  {
 	int ret;
+
+	if (flow_id % 2 != 0) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Flow ID must be an even number!\n");
+		return -1;
+	}
 
 	struct rist_sender *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx) {
@@ -2566,6 +2577,17 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 
 	if (log_level >= RIST_LOG_DEBUG) {
 		ctx->common.debug = true;
+	}
+
+	if (flow_id == 0) {
+		uint64_t now;
+		struct timeval time;
+		gettimeofday(&time, NULL);
+		now = time.tv_sec * 1000000;
+		now += time.tv_usec;
+		flow_id = (uint32_t)(now >> 16);
+		// It must me an even number
+		flow_id &= ~(1UL << 0);
 	}
 
 	ctx->adv_flow_id = flow_id;
@@ -2729,7 +2751,7 @@ static int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 	*/
 }
 
-int rist_sender_peer_remove(struct rist_sender *ctx, struct rist_peer *peer)
+int rist_sender_peer_destroy(struct rist_sender *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
@@ -2746,7 +2768,7 @@ int rist_sender_peer_remove(struct rist_sender *ctx, struct rist_peer *peer)
 	return 0;
 }
 
-int rist_receiver_peer_remove(struct rist_receiver *ctx, struct rist_peer *peer)
+int rist_receiver_peer_destroy(struct rist_receiver *ctx, struct rist_peer *peer)
 {
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null!\n");
@@ -2764,7 +2786,7 @@ int rist_receiver_peer_remove(struct rist_receiver *ctx, struct rist_peer *peer)
 }
 
 static int rist_auth_handler(struct rist_common_ctx *ctx,
-		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
  		void *arg)
 {
@@ -2775,7 +2797,7 @@ static int rist_auth_handler(struct rist_common_ctx *ctx,
 }
 
 int rist_sender_auth_handler_set(struct rist_sender *ctx,
-		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
@@ -2920,8 +2942,8 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 }
 
-int rist_sender_peer_insert(struct rist_sender *ctx,
-		const struct rist_peer_config *config, struct rist_peer **peer)
+int rist_sender_peer_create(struct rist_sender *ctx,
+		struct rist_peer **peer, const struct rist_peer_config *config)
 {
 	struct rist_peer *newpeer = rist_sender_peer_insert_local(ctx, config, false);
 
@@ -2969,7 +2991,7 @@ int rist_sender_peer_insert(struct rist_sender *ctx,
 }
 
 int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
-		int (*conn_cb)(void *arg, char* connecting_ip, uint16_t connecting_port, char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		void (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
