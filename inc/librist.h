@@ -93,16 +93,17 @@ struct rist_sender;
 struct rist_peer;
 
 struct rist_data_block {
-	struct rist_peer *peer;
-	uint32_t flow_id;
-	uint64_t seq;
 	const void *payload;
 	size_t payload_len;
 	uint64_t ts_ntp;
-	uint32_t flags;
 	/* These virtual ports are not used for simple profile */
 	uint16_t virt_src_port;
 	uint16_t virt_dst_port;
+	/* These next fields are not needed/used by rist_sender_data_write */
+	struct rist_peer *peer;
+	uint32_t flow_id;
+	uint64_t seq;
+	uint32_t flags;
 };
 
 struct rist_oob_block {
@@ -314,7 +315,7 @@ RIST_API int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob
  *
  * @param ctx RIST sender context
  * @param data_block pointer to the rist_data_block structure
- * the ts_ntp will be populated by the lib when a value of 0 is passed
+ * the ts_ntp will be populated by the lib if a value of 0 is passed
  * @return number of written bytes on success, -1 in case of error.
  */
 RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
