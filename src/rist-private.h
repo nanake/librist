@@ -260,12 +260,12 @@ struct rist_common_ctx {
 	/* Auth callback variables */
 	struct {
 		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer);
-		void (*disconn_cb)(void *arg, struct rist_peer *peer);
+		int (*disconn_cb)(void *arg, struct rist_peer *peer);
 		void *arg;
 	} auth;
 
 	/* Out-of-band data variables */
-	void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block);
+	int (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
 	pthread_rwlock_t oob_queue_lock;
@@ -283,7 +283,7 @@ struct rist_receiver {
 	pthread_mutex_t mutex;
 
 	/* Receiver data callback */
-	void (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
+	int (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
 	void *receiver_data_callback_argument;
 
 	/* Receiver timed async data output */

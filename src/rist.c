@@ -537,6 +537,7 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	output_buffer->virt_src_port = b->src_port;
 	output_buffer->virt_dst_port = b->dst_port;
 	output_buffer->ts_ntp = b->source_time;
+	output_buffer->seq = b->seq;
 	output_buffer->flags = flags;
 	return output_buffer;
 }
@@ -2063,7 +2064,7 @@ protocol_bypass:
 				parent_ip_string = "";
 			}
 			if (incoming_ip_string) {
-				if (!cctx->auth.conn_cb(cctx->auth.arg,
+				if (cctx->auth.conn_cb(cctx->auth.arg,
 						incoming_ip_string,
 						port,
 						parent_ip_string,
@@ -2789,7 +2790,7 @@ int rist_receiver_peer_destroy(struct rist_receiver *ctx, struct rist_peer *peer
 
 static int rist_auth_handler(struct rist_common_ctx *ctx,
 		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
  		void *arg)
 {
 	ctx->auth.conn_cb = conn_cb;
@@ -2800,7 +2801,7 @@ static int rist_auth_handler(struct rist_common_ctx *ctx,
 
 int rist_sender_auth_handler_set(struct rist_sender *ctx,
 		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
 	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
@@ -2994,7 +2995,7 @@ int rist_sender_peer_create(struct rist_sender *ctx,
 
 int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg)
 {
 	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
@@ -3054,7 +3055,7 @@ int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
 }
 
 int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
+		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3078,7 +3079,7 @@ int rist_sender_oob_set(struct rist_sender *ctx,
 }
 
 int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
+		int (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
 	if (!ctx) {
@@ -3287,7 +3288,7 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 }
 
 int rist_receiver_data_callback_set(struct rist_receiver *ctx,
-	void (*data_callback)(void *arg, const struct rist_data_block *data_block),
+	int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg)
 {
 	ctx->receiver_data_callback = data_callback;

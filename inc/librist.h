@@ -157,14 +157,14 @@ RIST_API int rist_sender_create(struct rist_sender **ctx, enum rist_profile prof
  *
  * @param ctx RIST sender context
  * @param connect_cb A pointer to the function that will be called when a new peer
- * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
+ * connects. Return 0 or -1 to authorize or decline (NULL function pointer is valid)
  * @param disconn_cb A pointer to the function that will be called when a new peer
  * is marked as dead (NULL function pointer is valid)
  * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
  */
 RIST_API int rist_sender_auth_handler_set(struct rist_sender *ctx,
 		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 
 /**
@@ -261,7 +261,7 @@ RIST_API int rist_sender_jitter_max_set(struct rist_sender *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_oob_set(struct rist_sender *ctx, 
-		void (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
+		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -360,14 +360,14 @@ RIST_API int rist_receiver_create(struct rist_receiver **ctx, enum rist_profile 
  *
  * @param ctx RIST sender context
  * @param connect_cb A pointer to the function that will be called when a new peer
- * connects. Return 1 or 0 to authorize or decline (NULL function pointer is valid)
+ * connects. Return 0 or -1 to authorize or decline (NULL function pointer is valid)
  * @param disconn_cb A pointer to the function that will be called when a new peer
  * is marked as dead (NULL function pointer is valid)
  * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
  */
 RIST_API int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		void (*disconn_cb)(void *arg, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 
 /**
@@ -464,7 +464,7 @@ RIST_API int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_oob_set(struct rist_receiver *ctx, 
-		void (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
+		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
 /**
@@ -490,7 +490,7 @@ RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_na
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_data_callback_set(struct rist_receiver *ctx,
-	void (*data_callback)(void *arg, const struct rist_data_block *data_block),
+	int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg);
 
 /**
