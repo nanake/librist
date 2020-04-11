@@ -94,7 +94,7 @@ static int rist_max_jitter_set(struct rist_common_ctx *ctx, int t)
 	return -1;
 }
 
-int rist_sender_max_jitter_set(struct rist_sender *ctx, int t)
+int rist_sender_jitter_max_set(struct rist_sender *ctx, int t)
 {
 	return rist_max_jitter_set(&ctx->common, t);
 }
@@ -2115,7 +2115,8 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 		return -1;
 	}
 
-	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, data_block->ts_ntp, data_block->virt_src_port, data_block->virt_dst_port);
+	uint64_t ts_ntp = data_block->ts_ntp == 0 ? timestampNTP_u64() : data_block->ts_ntp;
+	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
 		msg(0, ctx->id, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
