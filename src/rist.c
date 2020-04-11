@@ -3041,7 +3041,7 @@ static int rist_encrypt_enable(struct rist_common_ctx *ctx,
 	return ret;
 }
 
-int rist_sender_encrypt_aes_set(struct rist_sender *ctx, const char *secret,
+int rist_sender_encryption_aes_set(struct rist_sender *ctx, const char *secret,
 								int key_size)
 {
 	return rist_encrypt_enable(&ctx->common, secret, key_size, 0, ctx->id);

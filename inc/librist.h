@@ -213,7 +213,7 @@ RIST_API int rist_sender_peer_destroy(struct rist_sender *ctx,
  * @param key_size size of the key used for the encryption (128 or 256)
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_sender_encrypt_aes_set(struct rist_sender *ctx,
+RIST_API int rist_sender_encryption_aes_set(struct rist_sender *ctx,
 		const char *secret, int key_size);
 
 /**
