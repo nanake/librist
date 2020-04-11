@@ -491,8 +491,7 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 		return -1;
 	}
 
-	const struct rist_data_block *data_block = *data_buffer;
-	data_block = NULL;
+	const struct rist_data_block *data_block = NULL;
 
 	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
 	if (ctx->dataout_fifo_queue_read_index != ctx->dataout_fifo_queue_write_index) {
@@ -512,6 +511,8 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
 		pthread_mutex_unlock(&(ctx->mutex));
 	}
+
+	*data_buffer = data_block;
 
 	return 0;
 }
