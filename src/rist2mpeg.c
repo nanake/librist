@@ -111,18 +111,18 @@ struct rist_port_filter {
 	uint16_t virt_dst_port;
 };
 
-static void cb_recv(void *arg, const struct rist_data_block *b)
+static int cb_recv(void *arg, const struct rist_data_block *b)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 
 	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
 		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
-		return;
+		return -1;
 	}
 
 	if (port_filter->virt_dst_port && port_filter->virt_dst_port != b->virt_dst_port) {
 		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, b->virt_dst_port);
-		return;
+		return -1;
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
@@ -131,6 +131,8 @@ static void cb_recv(void *arg, const struct rist_data_block *b)
 				sizeof(struct sockaddr_in));
 		}
 	}
+
+	return 0;
 }
 
 static void intHandler(int signal) {
@@ -149,24 +151,24 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	oob_block.payload = message;
 	oob_block.payload_len = ret;
 	rist_receiver_oob_write(ctx, &oob_block);
-	return 1;
+	return 0;
 }
 
-static void cb_auth_disconnect(void *arg, struct rist_peer *peer)
+static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
-	return;
+	return 0;
 }
 
-static void cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
+static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
 	if (oob_block->payload_len > 4 && strncmp(oob_block->payload, "auth,", 5) == 0) {
 		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
 	}
-	return;
+	return 0;
 }
 
 int main(int argc, char *argv[])
