@@ -99,7 +99,7 @@ int rist_sender_jitter_max_set(struct rist_sender *ctx, int t)
 	return rist_max_jitter_set(&ctx->common, t);
 }
 
-int rist_receiver_max_jitter_set(struct rist_receiver *ctx, int t)
+int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t)
 {
 	return rist_max_jitter_set(&ctx->common, t);
 }

@@ -450,7 +450,7 @@ RIST_API int rist_receiver_keepalive_timeout_set(struct rist_receiver *ctx, int 
  * @param t max jitter in ms
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_max_jitter_set(struct rist_receiver *ctx, int t);
+RIST_API int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t);
 
 /**
  * @brief Enable out-of-band data channel
