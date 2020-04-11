@@ -3094,7 +3094,7 @@ int rist_receiver_oob_set(struct rist_receiver *ctx,
 	return 0;
 }
 
-int rist_receiver_encrypt_aes_set(struct rist_receiver *ctx, const char *secret, int key_size)
+int rist_receiver_encryption_aes_set(struct rist_receiver *ctx, const char *secret, int key_size)
 {
 	return rist_encrypt_enable(&ctx->common, secret, key_size, ctx->id, 0);
 }
