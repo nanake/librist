@@ -374,7 +374,7 @@ int main(int argc, char *argv[])
 		const struct rist_peer_config peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
 			.address = addr[i],
-			.gre_dst_port = 1969,
+			.virt_dst_port = 1968,
 			.recovery_mode = recovery_mode,
 			.recovery_maxbitrate = recovery_maxbitrate,
 			.recovery_maxbitrate_return = recovery_maxbitrate_return,
