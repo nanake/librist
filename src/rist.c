@@ -837,8 +837,8 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		return NULL;
 	}
 
-	if (config->gre_dst_port != 0) {
-		p->remote_port = config->gre_dst_port;
+	if (config->virt_dst_port != 0) {
+		p->remote_port = config->virt_dst_port;
 	}
 
 	store_peer_settings(config, p);
@@ -1629,7 +1629,7 @@ static void sender_peer_delete(struct rist_sender *ctx, struct rist_peer *peer)
 static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 {
 	peer->config.weight = peer_src->config.weight;
-	peer->config.gre_dst_port = peer_src->config.gre_dst_port;
+	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
 	peer->config.recovery_mode = peer_src->config.recovery_mode;
 	peer->config.recovery_maxbitrate = peer_src->config.recovery_maxbitrate;
 	peer->config.recovery_maxbitrate_return = peer_src->config.recovery_maxbitrate_return;
@@ -2927,8 +2927,8 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	{
 		newpeer->local_port = 32768 + (ctx->common.peer_counter % 28232);
 		// This overrides the physical port populate in rist_create_socket with the gre dst port
-		if (ctx->common.profile != RIST_PROFILE_SIMPLE && config->gre_dst_port != 0)
-			newpeer->remote_port = config->gre_dst_port;
+		if (ctx->common.profile != RIST_PROFILE_SIMPLE && config->virt_dst_port != 0)
+			newpeer->remote_port = config->virt_dst_port;
 	}
 
 	newpeer->cooldown_time = 0;

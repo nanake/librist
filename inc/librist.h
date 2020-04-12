@@ -96,10 +96,10 @@ struct rist_data_block {
 	const void *payload;
 	size_t payload_len;
 	uint64_t ts_ntp;
-	/* These virtual ports are not used for simple profile */
+	/* The virtual source and destination ports are not used for simple profile */
 	uint16_t virt_src_port;
-	uint16_t virt_dst_port;
 	/* These next fields are not needed/used by rist_sender_data_write */
+	uint16_t virt_dst_port;
 	struct rist_peer *peer;
 	uint32_t flow_id;
 	uint64_t seq;
@@ -115,9 +115,14 @@ struct rist_oob_block {
 
 struct rist_peer_config {
 	int version;
+
+	/* Communication parameters */
+	int initate_conn;
 	const char *address;
-	/* The gre_dst_port is not used for simple profile */
-	uint16_t gre_dst_port;
+	uint16_t physical_port;
+
+	/* The virtual destination port is not used for simple profile */
+	uint16_t virt_dst_port;
 
 	/* Recovery options */
 	enum rist_recovery_mode recovery_mode;
@@ -128,8 +133,11 @@ struct rist_peer_config {
 	uint32_t recovery_reorder_buffer;
 	uint32_t recovery_rtt_min;
 	uint32_t recovery_rtt_max;
+
+	/* Load balancing weight (use 0 for duplication) */
 	uint32_t weight;
 
+	/* Congestion control */
 	enum rist_buffer_bloat_mode buffer_bloat_mode;
 	uint32_t buffer_bloat_limit;
 	uint32_t buffer_bloat_hard_limit;
