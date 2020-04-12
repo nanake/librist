@@ -123,9 +123,18 @@ The RTP header is always present on data packets
 
 /*
 
+Data Channel:
+
 [  GRE header  ]
-[  RTP header ]
-[  Payload     ]
+[  Reduced overhead header .]
+[  RTP header .]
+[  User payload  ]
+
+RTCP Control Channel:
+
+[  GRE header  ]
+[  Reduced overhead header. ]
+[  RTCP payload .]
 
 */
 
