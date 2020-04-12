@@ -838,7 +838,7 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 	}
 
 	if (config->virt_dst_port != 0) {
-		p->remote_port = config->virt_dst_port;
+		p->remote_port = config->virt_dst_port + 1;
 	}
 
 	store_peer_settings(config, p);
@@ -2928,7 +2928,7 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		newpeer->local_port = 32768 + (ctx->common.peer_counter % 28232);
 		// This overrides the physical port populate in rist_create_socket with the gre dst port
 		if (ctx->common.profile != RIST_PROFILE_SIMPLE && config->virt_dst_port != 0)
-			newpeer->remote_port = config->virt_dst_port;
+			newpeer->remote_port = config->virt_dst_port + 1;
 	}
 
 	newpeer->cooldown_time = 0;
@@ -2952,6 +2952,8 @@ int rist_sender_peer_create(struct rist_sender *ctx,
 
 	if (!newpeer)
 		return -1;
+
+	// TODO: Validate config data (virt_dst_port != 0 for example)
 
 	newpeer->is_data = true;
 	peer_append(newpeer);

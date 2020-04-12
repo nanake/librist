@@ -351,6 +351,8 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	intptr_t receiver_id = p->receiver_ctx ? p->receiver_ctx->id : 0;
 	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
 
+	// This can only and will most likely be zero for data packets. RTCP should always have value.
+	// TODO: add warning message if it is zero for non data packet
 	if (dst_port == 0)
 		dst_port = p->config.virt_dst_port;
 
