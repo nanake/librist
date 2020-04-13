@@ -10,7 +10,20 @@
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (5)
 #define RIST_SUBVERSION (1)
+#define RIST_URL_OPTIONS_VERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
+
+/* Rist URL parameter names */
+#define RIST_URL_PARAM_BUFFER_SIZE    "buffer"
+#define RIST_URL_PARAM_SECRET         "secret"
+#define RIST_URL_PARAM_AES_TYPE       "aes-type"
+#define RIST_URL_PARAM_BANDWIDTH      "bandwidth"
+#define RIST_URL_PARAM_RET_BANDWIDTH  "return-bandwidth"
+#define RIST_URL_PARAM_MAX_JITTER     "max-jitter"
+#define RIST_URL_PARAM_REORDER_BUFFER "reorder-buffer"
+#define RIST_URL_PARAM_RTT            "rtt"
+#define RIST_URL_PARAM_COMPRESSION    "compression"
+#define RIST_URL_PARAM_CNAME          "cname"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -92,6 +105,21 @@ struct rist_receiver;
 struct rist_sender;
 struct rist_peer;
 
+struct rist_url_options {
+	int version;
+	int aes_type;
+	char secret[128];
+	int compression;
+	uint32_t maxbitrate;
+	uint32_t maxbitrate_return;
+	uint32_t buffer_size;
+	char cname[128];
+	uint32_t max_jitter;
+	uint32_t rtt;
+	uint32_t reorder_buffer;
+	char clean_url[256];
+};
+
 struct rist_data_block {
 	const void *payload;
 	size_t payload_len;
@@ -117,7 +145,12 @@ struct rist_peer_config {
 	int version;
 
 	/* Communication parameters */
-	int initate_conn;
+	// If a value of 0 is specified for address family, the library 
+	// will parse the address and populate all communication parameters.
+	// Alternatively, use either AF_INET or AF_INET6 and address will be
+	// treated like an IP address or hostname
+	int address_family; 
+	int initiate_conn;
 	const char *address;
 	uint16_t physical_port;
 
@@ -554,6 +587,17 @@ RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, const struct ris
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
+
+/**
+ * @brief Parses url for extended config data (encryption, compression, etc)
+ *
+ * Use this API to parse a generic URL string and turn it into a meaninful options structure
+ *
+ * @param[out] url_options a pointer to the rist_url_options structure
+ * @param[out] num_params returns the number of parameters successfully parsed
+ * @return 0 on success, -1 on error (all parameters must be valid)
+ */
+RIST_API int rist_url_options(const char *url, struct rist_url_options **url_options, int *num_params);
 
 __END_DECLS
 

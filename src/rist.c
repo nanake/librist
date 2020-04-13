@@ -32,9 +32,130 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol,arg);
 static PTHREAD_START_FUNC(receiver_pthread_dataout,arg);
 static void rist_fsm_init_comm(struct rist_peer *peer);
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer);
-
 static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
 										struct rist_receiver *receiver_ctx);
+
+typedef struct rist_url_param {
+	char *key;
+	char *val;
+} rist_url_param_t;
+
+static inline char* find(const char *str, char value)
+{
+	str = strchr( str, value );
+	return str != NULL ? (char *)(str + 1) : NULL;
+}
+
+static int url_parse_query(char *query, const char* delimiter,
+		rist_url_param_t *params, int max_params)
+{
+	int i = 0;
+	char *token = NULL;
+
+	if (!query || *query == '\0')
+		return -1;
+	if (!params || max_params == 0)
+		return 0;
+
+	token = strtok( query, delimiter );
+	while (token != NULL && i < max_params) {
+		params[i].key = token;
+		params[i].val = NULL;
+		if ((params[i].val = strchr( params[i].key, '=' )) != NULL) {
+			size_t val_len = strlen( params[i].val );
+			*(params[i].val) = '\0';
+			if (val_len > 1) {
+				params[i].val++;
+				if (params[i].key[0])
+					i++;
+			};
+		}
+		token = strtok( NULL, delimiter );
+	}
+	return i;
+}
+
+static int parse_url_options(const char* url, struct rist_url_options *url_options, int *num_params_out)
+	{
+	char* query = NULL;
+	struct rist_url_param url_params[32];
+	int num_params = 0;
+	int i = 0;
+	int ret = 0;
+
+	if (!url || !url[0] || !url_options)
+		return -1;
+
+	// Parse URL parameters
+	query = find( url, '?' );
+	if (query) {
+		uint32_t clean_url_len = query - url;
+		num_params = url_parse_query( query, "&", url_params,
+				sizeof(url_params) / sizeof(struct rist_url_param) );
+		if (num_params > 0) {
+			for (i = 0; i < num_params; ++i) {
+				char* val = url_params[i].val;
+				if (!val)
+					continue;
+
+				if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_SIZE ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->buffer_size = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET )
+						== 0) {
+					strcpy(url_options->secret, val);
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CNAME )
+						== 0) {
+					strcpy(url_options->cname, val);
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MAX_JITTER )
+						== 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->max_jitter = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_TYPE )
+						== 0) {
+					int temp = atoi( val );
+					if (temp == 0 || temp == 128 || temp == 192 || temp == 256) {
+						url_options->aes_type = temp;
+					}
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BANDWIDTH ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						url_options->maxbitrate = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RET_BANDWIDTH ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->maxbitrate_return = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTT ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->rtt = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_REORDER_BUFFER ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->reorder_buffer = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_COMPRESSION ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						url_options->compression = temp;
+				}
+				else {
+					ret = -1;
+					fprintf(stderr, "Unknown parameter %s\n", url_params[i].key);
+				}
+			}
+		}
+		strncpy(url_options->clean_url, url, clean_url_len);
+	}
+	else
+	{
+		strcpy(url_options->clean_url, url);
+	}
+
+	*num_params_out = num_params;
+	return ret;
+}
 
 struct rist_common_ctx *get_cctx(struct rist_peer *peer)
 {
@@ -482,6 +603,16 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_bloc
 	}
 	msg(0, 0, RIST_LOG_ERROR, "[ERROR] rist_receiver_oob_read not implemented!\n");
 	return 0;
+}
+
+int rist_url_options(const char *url, struct rist_url_options **url_options, int *num_params)
+{
+	struct rist_url_options parsed_url_options;
+	int ret = parse_url_options(url, &parsed_url_options, num_params);
+	if (ret == 0) {
+		*url_options = &parsed_url_options;
+	}
+	return ret;
 }
 
 int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_buffer, int timeout)
