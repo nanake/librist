@@ -252,10 +252,11 @@ RIST_API int rist_sender_peer_destroy(struct rist_sender *ctx,
  * @param ctx RIST sender context
  * @param secret Pre-shared passphrase
  * @param key_size size of the key used for the encryption (128 or 256)
+ * @param key_rotation Key rotation interval (default is 0, i.e. once per 2^32)
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_encryption_aes_set(struct rist_sender *ctx,
-		const char *secret, int key_size);
+		const char *secret, int key_size, uint32_t key_rotation);
 
 /**
  * @brief Set RIST retry timeout
@@ -455,10 +456,11 @@ RIST_API int rist_receiver_peer_destroy(struct rist_receiver *ctx,
  * @param ctx RIST receiver context
  * @param secret Pre-shared passphrase
  * @param key_size size of the key used for the encryption (128 or 256)
+ * @param key_rotation Key rotation interval (default is 0, i.e. once per 2^32)
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_encryption_aes_set(struct rist_receiver *ctx,
-		const char *secret, int key_size);
+		const char *secret, int key_size, uint32_t key_rotation);
 
 /**
  * @brief Set RIST retry timeout

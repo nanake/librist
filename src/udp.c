@@ -86,6 +86,9 @@ static void _ensure_key_is_valid(struct rist_key *key)
 	} else if (key->used_times > RIST_AES_KEY_REUSE_TIMES) {
 		// Key can only be used upto certain times
 		new_nonce = true;
+	} else if (key->key_rotation > 0 && key->used_times >= key->key_rotation) {
+		// custom rotation
+		new_nonce = true;
 	}
 
 	if (new_nonce) {

@@ -2444,6 +2444,7 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_sender *se
 	p->receiver_mode = (receiver_ctx != NULL);
 	p->key_secret.key_size = k->key_size;
 	p->key_secret.password = k->password;
+	p->key_secret.key_rotation = k->key_rotation;
 
 	p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
 	p->sender_ctx = sender_ctx;
@@ -3135,7 +3136,7 @@ int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 }
 
 static int rist_encrypt_enable(struct rist_common_ctx *ctx,
-								const char *secret, int key_size,
+								const char *secret, int key_size, uint32_t key_rotation,
 								intptr_t receiver_id, intptr_t sender_id)
 {
 	int ret;
@@ -3166,6 +3167,7 @@ static int rist_encrypt_enable(struct rist_common_ctx *ctx,
 	memset(&ctx->SECRET, 0, sizeof(ctx->SECRET));
 	ctx->SECRET.key_size = key_size;
 	ctx->SECRET.password = secret;
+	ctx->SECRET.key_rotation = key_rotation;
 
 	/* update peer list (in case this was set after the peer was added) */
 	for (struct rist_peer *peer = ctx->PEERS; peer; peer = peer->next) {
@@ -3176,9 +3178,9 @@ static int rist_encrypt_enable(struct rist_common_ctx *ctx,
 }
 
 int rist_sender_encryption_aes_set(struct rist_sender *ctx, const char *secret,
-								int key_size)
+								int key_size, uint32_t key_rotation)
 {
-	return rist_encrypt_enable(&ctx->common, secret, key_size, 0, ctx->id);
+	return rist_encrypt_enable(&ctx->common, secret, key_size, key_rotation, 0, ctx->id);
 }
 
 int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
@@ -3228,9 +3230,10 @@ int rist_receiver_oob_set(struct rist_receiver *ctx,
 	return 0;
 }
 
-int rist_receiver_encryption_aes_set(struct rist_receiver *ctx, const char *secret, int key_size)
+int rist_receiver_encryption_aes_set(struct rist_receiver *ctx, const char *secret, 
+		int key_size, uint32_t key_rotation)
 {
-	return rist_encrypt_enable(&ctx->common, secret, key_size, ctx->id, 0);
+	return rist_encrypt_enable(&ctx->common, secret, key_size, key_rotation, ctx->id, 0);
 }
 
 int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_nack_type nack_type)

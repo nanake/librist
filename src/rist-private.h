@@ -81,6 +81,7 @@ struct rist_key {
 	uint32_t used_times;
 	uint32_t gre_nonce;
 	uint32_t aes_key_sched[60];
+	uint32_t key_rotation;
 };
 
 struct rist_buffer {
