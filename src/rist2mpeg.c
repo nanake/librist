@@ -352,7 +352,7 @@ int main(int argc, char *argv[])
 
 	if (shared_secret != NULL) {
 		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_receiver_encryption_aes_set(ctx, shared_secret, keysize) == -1) {
+		if (rist_receiver_encryption_aes_set(ctx, shared_secret, keysize, 0) == -1) {
 			fprintf(stderr, "Could not add enable encryption\n");
 			exit(1);
 		}
