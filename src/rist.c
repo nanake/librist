@@ -17,6 +17,9 @@
 #include "lz4/lz4.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
+#ifdef __linux
+#include "linux-crypto.h"
+#endif
 
 #ifdef _WIN32
 #ifdef _WIN64
@@ -1923,8 +1926,12 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 					(const void *) &nonce_be, sizeof(nonce_be),
 					RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 					aes_key, k->key_size / 8);
-
+#ifndef __linux
 				aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
+#else
+				if (!peer->cryptoctx) linux_crypto_init(&peer->cryptoctx);
+				linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx);
+#endif
 			}
 
 			if (k->used_times > RIST_AES_KEY_REUSE_TIMES) {
@@ -1943,9 +1950,12 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 			// Decrypt everything
 			k->used_times++;
+#ifndef __linux
 			aes_decrypt_ctr((const void *) (recv_buf + gre_size), ret - gre_size, (void *) (recv_buf + gre_size),
 				k->aes_key_sched, k->key_size, IV);
-
+#else
+			linux_crypto_decrypt((void *)(recv_buf + gre_size), ret - gre_size, IV, peer->cryptoctx);
+#endif
 		} else if (has_seq) {
 			// Key bit is not set, that means the other side does not want to send
 			//  encrypted data

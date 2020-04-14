@@ -27,6 +27,7 @@ __BEGIN_DECLS
 #include "network.h"
 #include "libevsocket.h"
 #include "aes.h"
+#include "linux-crypto.h"
 #include <errno.h>
 
 #define UINT16_SIZE (UINT16_MAX + 1)
@@ -420,6 +421,9 @@ struct rist_peer {
 
 	/* Encryption */
 	struct rist_key key_secret; // used for received packets
+#ifdef __linux
+	struct linux_crypto *cryptoctx;
+#endif
 
 	/* compression flag (sender only) */
 	bool compression;
@@ -434,7 +438,7 @@ struct rist_peer {
 	socklen_t address_len;
 	uint16_t address_family;
 	uint16_t state;
-	const char miface[128];
+	char miface[128];
 
 	/* Events */
 	struct timeval expire;

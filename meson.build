@@ -42,6 +42,7 @@ librist = library('rist',
 	'extra/lz4/lz4frame.c',
 	'extra/lz4/lz4hc.c',
 	'extra/lz4/xxhash.c',
+	'extra/linux-crypto.c',
 	include_directories: include_directories('inc', 'extra'),
 	dependencies: deps,
 	install: true)

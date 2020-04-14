@@ -17,6 +17,9 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
+#ifdef __linux
+#include <linux-crypto.h>
+#endif
 
 uint64_t timestampNTP_u64(void)
 {
@@ -144,7 +147,7 @@ static uint32_t rand_u32(void)
 	return u32;
 }
 
-static void _ensure_key_is_valid(struct rist_key *key)
+static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 {
 	bool new_nonce = false;
 
@@ -185,7 +188,12 @@ static void _ensure_key_is_valid(struct rist_key *key)
 		}
 		fprintf(stderr, "\n");
 */
+#ifndef __linux
 		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
+#else
+		if (!peer->cryptoctx) linux_crypto_init(&peer->cryptoctx);
+		linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx);
+#endif
 	}
 }
 
@@ -281,7 +289,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
-			_ensure_key_is_valid(k);
+			_ensure_key_is_valid(k, p);
 
 			// Prepare GRE header
 			struct rist_gre_key_seq *gre_key_seq = (void *) header_buf;
@@ -324,9 +332,12 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			}
 			fprintf(stderr, "\n");
 	*/
+#ifndef __linux
 			aes_encrypt_ctr((const void *) (payload - hdr_len), hdr_len + payload_len, 
 				(void *) (payload - hdr_len), k->aes_key_sched, k->key_size, IV);
-
+#else
+			linux_crypto_encrypt((void *) (payload - hdr_len), hdr_len + payload_len, IV, p->cryptoctx);
+#endif
 		} else {
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
 			SET_BIT(gre_seq->flags1, 7); // set checksum bit
