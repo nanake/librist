@@ -434,6 +434,7 @@ struct rist_peer {
 	socklen_t address_len;
 	uint16_t address_family;
 	uint16_t state;
+	const char miface[128];
 
 	/* Events */
 	struct timeval expire;

@@ -569,7 +569,7 @@ void rist_create_socket(struct rist_peer *peer)
 			return;
 		}
 
-		peer->sd = udp_Open(host, port, NULL, 0, 0, NULL);
+		peer->sd = udp_Open(host, port, NULL, 0, 0, &peer->miface[0]);
 		if (peer->sd > 0) {
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {

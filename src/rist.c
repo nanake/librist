@@ -979,6 +979,7 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		return NULL;
 	}
 
+	strncpy(&p->miface[0], config->miface, 128);
 	strncpy(&p->cname[0], config->cname, 128);
 
 	if (!config->key_size) { 
@@ -1726,6 +1727,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
 	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], 128);
 	strncpy(&peer->cname[0], &peer_src->cname[0], 128);
+	strncpy(&peer->miface[0], &peer_src->miface[0], 128);
 	peer->config.weight = peer_src->config.weight;
 	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
 	peer->config.recovery_mode = peer_src->config.recovery_mode;
@@ -2983,6 +2985,7 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		return NULL;
 	}
 
+	strncpy(&newpeer->miface[0], config->miface, 128);
 	strncpy(&newpeer->cname[0], config->cname, 128);
 
 	if (!config->key_size) { 
