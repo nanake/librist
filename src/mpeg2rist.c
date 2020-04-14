@@ -158,19 +158,19 @@ int main(int argc, char *argv[])
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint16_t virt_src_port = 1971;
-	uint16_t virt_dst_port = 1968;
+	uint16_t virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
 	uint8_t encryption_type = 1;
-	enum rist_recovery_mode recovery_mode = RIST_RECOVERY_MODE_TIME;
-	uint32_t recovery_maxbitrate = 100000;
-	uint32_t recovery_maxbitrate_return = 0;
-	uint32_t recovery_length_min = 1000;
-	uint32_t recovery_length_max = 1000;
-	uint32_t recovery_reorder_buffer = 25;
-	uint32_t recovery_rtt_min = 50;
-	uint32_t recovery_rtt_max = 500;
-	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
-	uint32_t buffer_bloat_limit = 6;
-	uint32_t buffer_bloat_hard_limit = 20;
+	enum rist_recovery_mode recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
+	uint32_t recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
+	uint32_t recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
+	uint32_t recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
+	uint32_t recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
+	uint32_t recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
+	uint32_t recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
+	uint32_t recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
+	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
+	uint32_t buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
+	uint32_t buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
 	struct sigaction act;
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
@@ -371,9 +371,9 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
+		// Applications defaults and/or command line options
 		const struct rist_peer_config peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
-			.address = address[i],
 			.virt_dst_port = virt_dst_port,
 			.recovery_mode = recovery_mode,
 			.recovery_maxbitrate = recovery_maxbitrate,
@@ -388,6 +388,13 @@ int main(int argc, char *argv[])
 			.buffer_bloat_limit = buffer_bloat_limit,
 			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
 		};
+
+		// Address/URL overrides
+		if (rist_parse_address(address[i], (void *)&peer_config))
+		{
+			fprintf(stderr, "Could not parse peer options for sender #%d\n", (int)(i + 1));
+			exit(1);
+		}
 
 		struct rist_peer *peer;
 		if (rist_sender_peer_create(ctx, &peer, &peer_config) == -1) {
