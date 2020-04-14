@@ -12,6 +12,20 @@
 #define RIST_SUBVERSION (1)
 #define RIST_PEER_CONFIG_VERSION (0)
 
+/* Default peer config values */
+#define RIST_DEFAULT_VIRT_DST_PORT (1968)
+#define RIST_DEFAULT_RECOVERY_MODE RIST_RECOVERY_MODE_TIME
+#define RIST_DEFAULT_RECOVERY_MAXBITRATE (100000)
+#define RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN (0)
+#define RIST_DEFAULT_RECOVERY_LENGHT_MIN (1000)
+#define RIST_DEFAULT_RECOVERY_LENGHT_MAX (1000)
+#define RIST_DEFAULT_RECOVERY_REORDER_BUFFER (25)
+#define RIST_DEFAULT_RECOVERY_RTT_MIN (50)
+#define RIST_DEFAULT_RECOVERY_RTT_MAX (500)
+#define RIST_DEFAULT_BUFFER_BLOAT_MODE RIST_BUFFER_BLOAT_MODE_OFF
+#define RIST_DEFAULT_BUFFER_BLOAT_LIMIT	(6)
+#define RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT (20)
+
 /* Rist URL parameter names */
 #define RIST_URL_PARAM_BUFFER_SIZE    "buffer"
 #define RIST_URL_PARAM_SECRET         "secret"
@@ -594,12 +608,12 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
  *
  * Use this API to parse a generic URL string and turn it into a meaninful peer_config structure
  *
- * @param url a pointer to a url to be parsed
- * @param[out] peer_config a pointer to a new rist_peer_config structure
+ * @param url a pointer to a url to be parsed, i.e. rist://myserver.net:1234?buffer=100&cname=hello
+ * @param[out] peer_config a pointer to a the rist_peer_config structure (NULL is allowed)
  * @return 0 on success or non-zero on error. The value returned is actually the number
  * of parameters that are valid
  */
-RIST_API int rist_url_options(const char *url, struct rist_peer_config **peer_config);
+RIST_API int rist_parse_address(const char *url, struct rist_peer_config **peer_config);
 
 __END_DECLS
 
