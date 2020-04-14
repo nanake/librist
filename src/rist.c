@@ -75,7 +75,7 @@ static int url_parse_query(char *query, const char* delimiter,
 	return i;
 }
 
-static int parse_url_options(const char* url, struct rist_url_options *url_options, int *num_params_out)
+static int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_config, int *num_params_out)
 	{
 	char* query = NULL;
 	struct rist_url_param url_params[32];
@@ -83,7 +83,7 @@ static int parse_url_options(const char* url, struct rist_url_options *url_optio
 	int i = 0;
 	int ret = 0;
 
-	if (!url || !url[0] || !url_options)
+	if (!url || !url[0] || !output_peer_config)
 		return -1;
 
 	// Parse URL parameters
@@ -100,45 +100,51 @@ static int parse_url_options(const char* url, struct rist_url_options *url_optio
 
 				if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_SIZE ) == 0) {
 					int temp = atoi( val );
-					if (temp >= 0)
-						url_options->buffer_size = temp;
-				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET )
-						== 0) {
-					strcpy(url_options->secret, val);
-				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CNAME )
-						== 0) {
-					strcpy(url_options->cname, val);
-				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MAX_JITTER )
-						== 0) {
-					int temp = atoi( val );
-					if (temp >= 0)
-						url_options->max_jitter = temp;
-				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_TYPE )
-						== 0) {
+					if (temp >= 0) {
+						output_peer_config->recovery_length_min = temp;
+						output_peer_config->recovery_length_max = temp;
+					}
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MIFACE ) == 0) {
+					strncpy((void *)output_peer_config->miface, val, 128);
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET ) == 0) {
+					strncpy((void *)output_peer_config->secret, val, 128);
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CNAME ) == 0) {
+					strncpy((void *)output_peer_config->cname, val, 128);
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_TYPE ) == 0) {
 					int temp = atoi( val );
 					if (temp == 0 || temp == 128 || temp == 192 || temp == 256) {
-						url_options->aes_type = temp;
+						output_peer_config->key_size = temp;
 					}
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BANDWIDTH ) == 0) {
 					int temp = atoi( val );
 					if (temp > 0)
-						url_options->maxbitrate = temp;
+						output_peer_config->recovery_maxbitrate = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RET_BANDWIDTH ) == 0) {
 					int temp = atoi( val );
 					if (temp >= 0)
-						url_options->maxbitrate_return = temp;
+						output_peer_config->recovery_maxbitrate_return = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTT ) == 0) {
 					int temp = atoi( val );
-					if (temp >= 0)
-						url_options->rtt = temp;
+					if (temp >= 0) {
+						output_peer_config->recovery_rtt_min = temp;
+						output_peer_config->recovery_rtt_max = temp;
+					}
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_REORDER_BUFFER ) == 0) {
 					int temp = atoi( val );
 					if (temp >= 0)
-						url_options->reorder_buffer = temp;
+						output_peer_config->recovery_reorder_buffer = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_COMPRESSION ) == 0) {
 					int temp = atoi( val );
 					if (temp >= 0)
-						url_options->compression = temp;
+						output_peer_config->compression = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->virt_dst_port = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_WEIGHT ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						output_peer_config->weight = temp;
 				}
 				else {
 					ret = -1;
@@ -146,11 +152,7 @@ static int parse_url_options(const char* url, struct rist_url_options *url_optio
 				}
 			}
 		}
-		strncpy(url_options->clean_url, url, clean_url_len);
-	}
-	else
-	{
-		strcpy(url_options->clean_url, url);
+		strncpy((void *)output_peer_config->address, url, clean_url_len > 256 ? 256 : clean_url_len);
 	}
 
 	*num_params_out = num_params;
@@ -605,14 +607,34 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_bloc
 	return 0;
 }
 
-int rist_url_options(const char *url, struct rist_url_options **url_options, int *num_params)
+int rist_url_options(const char *url, struct rist_peer_config **peer_config)
 {
-	struct rist_url_options parsed_url_options;
-	int ret = parse_url_options(url, &parsed_url_options, num_params);
-	if (ret == 0) {
-		*url_options = &parsed_url_options;
-	}
-	return ret;
+	struct rist_peer_config output_peer_config;
+	// Default options
+	output_peer_config.version = RIST_PEER_CONFIG_VERSION;
+	output_peer_config.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
+	output_peer_config.recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
+	output_peer_config.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
+	output_peer_config.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
+	output_peer_config.recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
+	output_peer_config.recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
+	output_peer_config.recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
+	output_peer_config.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
+	output_peer_config.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
+	output_peer_config.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
+	output_peer_config.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
+	output_peer_config.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
+	// Update it with url data
+	int *num_params = 0;
+	int ret = parse_url_options(url, &output_peer_config, num_params);
+
+	// Set the output object reference
+	*peer_config = &output_peer_config;
+
+	if (ret == 0)
+		return 0;
+	else
+		return *num_params;
 }
 
 int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_buffer, int timeout)

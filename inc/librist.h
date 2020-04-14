@@ -10,7 +10,6 @@
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (5)
 #define RIST_SUBVERSION (1)
-#define RIST_URL_OPTIONS_VERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Rist URL parameter names */
@@ -19,11 +18,13 @@
 #define RIST_URL_PARAM_AES_TYPE       "aes-type"
 #define RIST_URL_PARAM_BANDWIDTH      "bandwidth"
 #define RIST_URL_PARAM_RET_BANDWIDTH  "return-bandwidth"
-#define RIST_URL_PARAM_MAX_JITTER     "max-jitter"
 #define RIST_URL_PARAM_REORDER_BUFFER "reorder-buffer"
 #define RIST_URL_PARAM_RTT            "rtt"
 #define RIST_URL_PARAM_COMPRESSION    "compression"
 #define RIST_URL_PARAM_CNAME          "cname"
+#define RIST_URL_PARAM_VIRT_DST_PORT  "virt_dst_port"
+#define RIST_URL_PARAM_WEIGHT         "weight"
+#define RIST_URL_PARAM_MIFACE         "miface"
 
 #include <stdint.h>
 #include <stdlib.h>
@@ -105,21 +106,6 @@ struct rist_receiver;
 struct rist_sender;
 struct rist_peer;
 
-struct rist_url_options {
-	int version;
-	int aes_type;
-	char secret[128];
-	int compression;
-	uint32_t maxbitrate;
-	uint32_t maxbitrate_return;
-	uint32_t buffer_size;
-	char cname[128];
-	uint32_t max_jitter;
-	uint32_t rtt;
-	uint32_t reorder_buffer;
-	char clean_url[256];
-};
-
 struct rist_data_block {
 	const void *payload;
 	size_t payload_len;
@@ -151,7 +137,8 @@ struct rist_peer_config {
 	// treated like an IP address or hostname
 	int address_family; 
 	int initiate_conn;
-	const char *address;
+	const char address[256];
+	const char miface[128];
 	uint16_t physical_port;
 
 	/* The virtual destination port is not used for simple profile */
@@ -170,10 +157,22 @@ struct rist_peer_config {
 	/* Load balancing weight (use 0 for duplication) */
 	uint32_t weight;
 
+	/* Encryption */
+	const char secret[128];
+	int key_size;
+	uint32_t key_rotation;
+
+	/* Compression (sender only as receiver is auto detect) */
+	int compression;
+
+	/* cname identifier for rtcp packets */
+	const char cname[128];
+
 	/* Congestion control */
 	enum rist_buffer_bloat_mode buffer_bloat_mode;
 	uint32_t buffer_bloat_limit;
 	uint32_t buffer_bloat_hard_limit;
+
 };
 
 /**
@@ -591,15 +590,16 @@ RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, const struct ris
 RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
 
 /**
- * @brief Parses url for extended config data (encryption, compression, etc)
+ * @brief Parses url for peer config data (encryption, compression, etc)
  *
- * Use this API to parse a generic URL string and turn it into a meaninful options structure
+ * Use this API to parse a generic URL string and turn it into a meaninful peer_config structure
  *
- * @param[out] url_options a pointer to the rist_url_options structure
- * @param[out] num_params returns the number of parameters successfully parsed
- * @return 0 on success, -1 on error (all parameters must be valid)
+ * @param url a pointer to a url to be parsed
+ * @param[out] peer_config a pointer to a new rist_peer_config structure
+ * @return 0 on success or non-zero on error. The value returned is actually the number
+ * of parameters that are valid
  */
-RIST_API int rist_url_options(const char *url, struct rist_url_options **url_options, int *num_params);
+RIST_API int rist_url_options(const char *url, struct rist_peer_config **peer_config);
 
 __END_DECLS
 
