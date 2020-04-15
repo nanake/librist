@@ -370,11 +370,12 @@ int main(int argc, char *argv[])
 			continue;
 		}
 
-		// TODO: make the 1968 configurable (used for reverse connection gre-dst-port inside main profile)
+		// TODO: make the RIST_DEFAULT_VIRT_DST_PORT configurable 
+		// (used for reverse connection gre-dst-port inside main profile)
 		// Applications defaults and/or command line options
-		const struct rist_peer_config peer_config = {
+		const struct rist_peer_config app_peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
-			.virt_dst_port = 1968,
+			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
 			.recovery_mode = recovery_mode,
 			.recovery_maxbitrate = recovery_maxbitrate,
 			.recovery_maxbitrate_return = recovery_maxbitrate_return,
@@ -389,7 +390,8 @@ int main(int argc, char *argv[])
 			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
 		};
 
-		// Address/URL overrides
+		// URL overrides (also cleans up the URL)
+		const struct rist_peer_config *peer_config = &app_peer_config;
 		if (rist_parse_address(addr[i], (void *)&peer_config))
 		{
 			fprintf(stderr, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
@@ -397,7 +399,7 @@ int main(int argc, char *argv[])
 		}
 
 		struct rist_peer *peer;
-		if (rist_receiver_peer_create(ctx, &peer, &peer_config) == -1) {
+		if (rist_receiver_peer_create(ctx, &peer, peer_config) == -1) {
 			fprintf(stderr, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}

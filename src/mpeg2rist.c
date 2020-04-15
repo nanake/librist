@@ -372,7 +372,7 @@ int main(int argc, char *argv[])
 		}
 
 		// Applications defaults and/or command line options
-		const struct rist_peer_config peer_config = {
+		const struct rist_peer_config app_peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
 			.virt_dst_port = virt_dst_port,
 			.recovery_mode = recovery_mode,
@@ -389,15 +389,16 @@ int main(int argc, char *argv[])
 			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
 		};
 
-		// Address/URL overrides
-		if (rist_parse_address(address[i], (void *)&peer_config))
+		// URL overrides (also cleans up the URL)
+		const struct rist_peer_config *peer_config = &app_peer_config;
+		if (rist_parse_address(address[i], &peer_config))
 		{
 			fprintf(stderr, "Could not parse peer options for sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
 		struct rist_peer *peer;
-		if (rist_sender_peer_create(ctx, &peer, &peer_config) == -1) {
+		if (rist_sender_peer_create(ctx, &peer, peer_config) == -1) {
 			fprintf(stderr, "Could not add peer connector to sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
