@@ -52,6 +52,8 @@ __BEGIN_DECLS
 #define RTCP_NACK_BITMASK_FLAGS 0x81
 #define RTCP_NACK_SEQEXT_FLAGS 0x81
 
+#define MPEGTSCLOCKHZ 90000
+
 // Maximum offset before the payload that the code can use to put in headers
 #define RIST_MAX_PAYLOAD_OFFSET (sizeof(struct rist_gre_key_seq) + sizeof(struct rist_protocol_hdr))
 

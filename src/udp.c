@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
+#include <stdint.h>
 #ifdef __linux
 #include <linux-crypto.h>
 #endif
@@ -56,7 +57,9 @@ uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 	i_ntp = i_ntp >> 16;
 	if (!advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		//i_ntp = (i_ntp * 90000ULL) / 65536ULL;
+		uint32_t seconds = (i_ntp >> 32) & 0xFFFFFFFF;
+		uint32_t fraction = i_ntp & 0xFFFFFFFF;
+		i_ntp = (seconds * MPEGTSCLOCKHZ) + (double)(fraction / UINT32_MAX)*90000;
 	}
 	return (uint32_t)i_ntp;
 }
@@ -66,8 +69,9 @@ uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t
 	uint64_t i_ntp = (uint64_t)i_rtp;
 	if (!peer->advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		//i_ntp = (i_ntp * 65536ULL) / 90000ULL;
-		i_ntp = i_ntp << 16;
+		uint64_t seconds = i_ntp /MPEGTSCLOCKHZ;
+		uint64_t fraction = ((i_ntp % MPEGTSCLOCKHZ) * UINT32_MAX) / MPEGTSCLOCKHZ;
+		i_ntp = (seconds << 32) | fraction;
 	}
 	else
 	{
