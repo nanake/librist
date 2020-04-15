@@ -593,8 +593,9 @@ void rist_create_socket(struct rist_peer *peer)
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
-	rist_populate_cname(peer);
-	msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Our cname is %s\n", peer->cname);
+	if (peer->cname[0] == 0)
+		rist_populate_cname(peer);
+	msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Peer cname is %s\n", peer->cname);
 
 }
 

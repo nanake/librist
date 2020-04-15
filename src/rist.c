@@ -979,6 +979,8 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		return NULL;
 	}
 
+	strncpy(&p->cname[0], config->cname, 128);
+
 	if (!config->key_size) { 
 		p->key_secret.key_size = config->key_size;
 		strncpy(&p->key_secret.password[0], config->secret, 128);
@@ -1723,6 +1725,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->key_secret.key_size = peer_src->key_secret.key_size;
 	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
 	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], 128);
+	strncpy(&peer->cname[0], &peer_src->cname[0], 128);
 	peer->config.weight = peer_src->config.weight;
 	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
 	peer->config.recovery_mode = peer_src->config.recovery_mode;
@@ -2157,7 +2160,6 @@ protocol_bypass:
 		p->parent = peer;
 		p->adv_peer_id = new_peer_id;
 		p->state_local = p->state_peer = RIST_PEER_STATE_PING;
-		rist_populate_cname(p);
 
 		// Optional validation of connecting sender
 		if (cctx->auth.conn_cb) {
@@ -2725,43 +2727,6 @@ free_ctx_and_ret:
 	return ret;
 }
 
-int rist_sender_cname_set(struct rist_sender *ctx, const char *cname)
-{
-	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_sender_cname_set call!\n");
-		return -1;
-	}
-	else if (!cname) {
-		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
-		return -1;
-	}
-	else if (strlen(cname) >= 127)
-	{
-		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
-		return -1;
-	}
-	memcpy(&ctx->common.cname, cname, strlen(cname));
-	return 0;
-}
-
-int rist_receiver_cname_set(struct rist_receiver *ctx, const char *cname)
-{
-	if (!ctx) {
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_cname_set call!\n");
-		return -1;
-	}
-	else if (!cname) {
-		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Provided CName is null\n");
-		return -1;
-	}
-	else if (strlen(cname) >= 127) {
-		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] CName cannot be more than 127 chars\n");
-		return -1;
-	}
-	memcpy(&ctx->common.cname, cname, strlen(cname));
-	return 0;
-}
-
 static int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 {
 	// TODO: test remove from sender list and peer linked list and
@@ -3017,6 +2982,8 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	if (!newpeer) {
 		return NULL;
 	}
+
+	strncpy(&newpeer->cname[0], config->cname, 128);
 
 	if (!config->key_size) { 
 		newpeer->key_secret.key_size = config->key_size;

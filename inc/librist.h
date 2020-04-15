@@ -222,17 +222,6 @@ RIST_API int rist_sender_auth_handler_set(struct rist_sender *ctx,
 		void *arg);
 
 /**
- * @brief Configure the SDES CName
- *
- * This allows you to override the auto-generated SDES CName
- *
- * @param ctx RIST sender context
- * @param cname cstring to be sent through librist (null terminated, 128 bytes max)
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_cname_set(struct rist_sender *ctx, const char *cname);
-
-/**
  * @brief Add a peer connector to the existing sender.
  *
  * One sender can send data to multiple peers.
@@ -399,17 +388,6 @@ RIST_API int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
-
-/**
- * @brief Configure the SDES CName
- *
- * This allows you to override the auto-generated SDES CName
- *
- * @param ctx RIST receiver context
- * @param cname cstring to be sent through librist (128 bytes max including null terminator)
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_cname_set(struct rist_receiver *ctx, const char *cname);
 
 /**
  * @brief Add a peer connector to the existing receiver.
