@@ -75,7 +75,7 @@ static int url_parse_query(char *query, const char* delimiter,
 	return i;
 }
 
-static int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_config, int *num_params_out)
+static int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_config)
 	{
 	char* query = NULL;
 	struct rist_url_param url_params[32];
@@ -153,10 +153,14 @@ static int parse_url_options(const char* url, 	struct rist_peer_config *output_p
 			}
 		}
 		strncpy((void *)output_peer_config->address, url, clean_url_len > 256 ? 256 : clean_url_len);
+	} else {
+		strncpy((void *)output_peer_config->address, url, 256);
 	}
 
-	*num_params_out = num_params;
-	return ret;
+	if (ret != 0)
+		return num_params;
+	else
+		return 0;
 }
 
 struct rist_common_ctx *get_cctx(struct rist_peer *peer)
@@ -607,39 +611,40 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_bloc
 	return 0;
 }
 
-int rist_parse_address(const char *url, struct rist_peer_config **peer_config)
+int rist_parse_address(const char *url, const struct rist_peer_config **peer_config)
 {
-	// Default options (only used when incoming *peer_config is null)
-	struct rist_peer_config output_peer_config = {
-		.version = RIST_PEER_CONFIG_VERSION,
-		.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
-		.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
-		.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE,
-		.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN,
-		.recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN,
-		.recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX,
-		.recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER,
-		.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN,
-		.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX,
-		.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE,
-		.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT,
-		.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT
-	};
 
-	// Update it with url data
 	int ret = 0;
-	int *num_params = 0;
-	if (*peer_config) {
-		ret = parse_url_options(url, *peer_config, num_params);
-	} else {
-		ret = parse_url_options(url, &output_peer_config, num_params);
+	if (*peer_config == NULL)
+	{
+		// Default options on new struct
+		struct rist_peer_config output_peer_config = {
+			.version = RIST_PEER_CONFIG_VERSION,
+			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
+			.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
+			.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE,
+			.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN,
+			.recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN,
+			.recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX,
+			.recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER,
+			.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN,
+			.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX,
+			.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE,
+			.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT,
+			.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT
+		};
+		ret = parse_url_options(url, &output_peer_config);
 		*peer_config = &output_peer_config;
 	}
-
-	if (ret == 0)
-		return 0;
 	else
-		return *num_params;
+	{
+		// Update incoming object with url data
+		struct rist_peer_config *existing_peer_config = (void *)*peer_config;
+		ret = parse_url_options(url, existing_peer_config);
+		*peer_config = existing_peer_config;
+	}
+
+	return ret;
 }
 
 int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_buffer, int timeout)

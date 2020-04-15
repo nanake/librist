@@ -613,7 +613,7 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
  * @return 0 on success or non-zero on error. The value returned is actually the number
  * of parameters that are valid
  */
-RIST_API int rist_parse_address(const char *url, struct rist_peer_config **peer_config);
+RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
 
 __END_DECLS
 
