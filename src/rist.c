@@ -1028,8 +1028,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 			return -1;
 		}
 
-		char new_url[500];
-		sprintf(new_url, "%s:%d", p->url, p->local_port + 1); 
+		sprintf((char *)config->address, "%s:%d", p->url, p->local_port + 1);
 		p_rtcp = rist_receiver_peer_insert_local(ctx, config);
 		if (!p_rtcp)
 		{
@@ -1038,7 +1037,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 			return -1;
 		}
 		p_rtcp->is_rtcp = true;
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INFO] Created RTCP peer: host %s, port %d, new_url %s, %"PRIu32"\n", p->url, p->local_port, new_url, p->adv_peer_id);
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INFO] Created RTCP peer: host %s, port %d, new_url %s, %"PRIu32"\n", p_rtcp->url, p_rtcp->local_port, config->address, p_rtcp->adv_peer_id);
 		peer_append(p_rtcp);
 		/* jumpstart communication */
 		rist_fsm_init_comm(p_rtcp);
