@@ -53,7 +53,7 @@ uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 	i_ntp = i_ntp >> 16;
 	if (!advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		i_ntp = (i_ntp * 90000ULL) / 65536ULL;
+		//i_ntp = (i_ntp * 90000ULL) / 65536ULL;
 	}
 	return (uint32_t)i_ntp;
 }
@@ -63,7 +63,7 @@ uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t
 	uint64_t i_ntp = (uint64_t)i_rtp;
 	if (!peer->advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		i_ntp = (i_ntp * 65536ULL) / 90000ULL;
+		//i_ntp = (i_ntp * 65536ULL) / 90000ULL;
 		i_ntp = i_ntp << 16;
 	}
 	else
