@@ -350,14 +350,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (shared_secret != NULL) {
-		int keysize =  encryption_type == 1 ? 128 : 256;
-		if (rist_receiver_encryption_aes_set(ctx, shared_secret, keysize, 0) == -1) {
-			fprintf(stderr, "Could not add enable encryption\n");
-			exit(1);
-		}
-	}
-
 	if (profile != RIST_PROFILE_SIMPLE) {
 		if (rist_receiver_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
@@ -373,6 +365,7 @@ int main(int argc, char *argv[])
 		// TODO: make the RIST_DEFAULT_VIRT_DST_PORT configurable 
 		// (used for reverse connection gre-dst-port inside main profile)
 		// Applications defaults and/or command line options
+		int keysize = encryption_type * 128;
 		const struct rist_peer_config app_peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
 			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
@@ -387,8 +380,13 @@ int main(int argc, char *argv[])
 			.weight = 5,
 			.buffer_bloat_mode = buffer_bloat_mode,
 			.buffer_bloat_limit = buffer_bloat_limit,
-			.buffer_bloat_hard_limit = buffer_bloat_hard_limit
+			.buffer_bloat_hard_limit = buffer_bloat_hard_limit,
+			.key_size = keysize
 		};
+
+		if (shared_secret != NULL) {
+			strncpy((void *)&app_peer_config.secret[0], shared_secret, 128);
+		}
 
 		// URL overrides (also cleans up the URL)
 		const struct rist_peer_config *peer_config = &app_peer_config;
