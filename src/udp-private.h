@@ -255,12 +255,6 @@ RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
 	char udn[0];
 })
 
-static inline uint32_t timestampRTP_u32( uint64_t i_ntp )
-{
-	// We just need the middle 32 bits
-	return (uint32_t)(i_ntp >> 16);
-}
-
 /* shared functions in udp.c */
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
 RIST_PRIV int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len);
@@ -274,6 +268,10 @@ RIST_PRIV void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct 
 RIST_PRIV int rist_retry_dequeue(struct rist_sender *ctx);
 RIST_PRIV int rist_set_url(struct rist_peer *peer);
 RIST_PRIV void rist_create_socket(struct rist_peer *peer);
+
+RIST_PRIV uint64_t timestampNTP_u64(void);
+RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
+RIST_PRIV uint64_t timeRTPtoNTP(struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp);
 
 __END_DECLS
 

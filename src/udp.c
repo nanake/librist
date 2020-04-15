@@ -18,6 +18,74 @@
 #include <stddef.h>
 #include <errno.h>
 
+uint64_t timestampNTP_u64(void)
+{
+
+	// We use clock_gettime instead of gettimeofday even though we only need microseconds
+	// because gettimeofday implementation under linux is dependent on the kernel clock
+	// and can produce duplicate times (too close to kernel timer)
+
+	// We use the NTP time standard: rfc5905 (https://tools.ietf.org/html/rfc5905#section-6)
+	// The 64-bit timestamps used by NTP consist of a 32-bit part for seconds 
+	// and a 32-bit part for fractional second, giving a time scale that rolls 
+	// over every 232 seconds (136 years) and a theoretical resolution of 
+	// 2−32 seconds (233 picoseconds). NTP uses an epoch of January 1, 1900. 
+	// Therefore, the first rollover occurs on February 7, 2036.
+
+	timespec_t ts;
+#ifdef __APPLE__
+  	clock_gettime_osx(&ts);
+#else
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+#endif
+	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
+	uint64_t t = (uint64_t)(ts.tv_nsec) << 32;
+	t /= 1000000000;
+	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
+	// No leap seconds during that period since they were not invented yet.
+	t |= ((70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec) << 32;
+	return t; // nanoseconds (technically, 232.831 picosecond units)
+}
+
+uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
+{
+	// We just need the middle 32 bits, i.e. 65536Hz clock
+	i_ntp = i_ntp >> 16;
+	if (!advanced) {
+		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
+		i_ntp = (i_ntp * 90000ULL) / 65536ULL;
+	}
+	return (uint32_t)i_ntp;
+}
+
+uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp )
+{
+	uint64_t i_ntp = (uint64_t)i_rtp;
+	if (!peer->advanced) {
+		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
+		i_ntp = (i_ntp * 65536ULL) / 90000ULL;
+		i_ntp = i_ntp << 16;
+	}
+	else
+	{
+		i_ntp = i_ntp << 16;
+		// We are missing the lower 16 bits and the higher 16 bits for full NTP info and accuracy
+		if (time_extension > 0)
+		{
+			// rebuild source_time (lower and upper 16 bits)
+			uint64_t part3 = (uint64_t)(time_extension & 0xffff);
+			uint64_t part1 = ((uint64_t)(time_extension & 0xffff0000)) << 32;
+			i_ntp = part1 | i_ntp | part3;
+			//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
+		}
+		else if (peer->flow)
+		{
+			// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
+		}
+	}
+	return i_ntp;
+}
+
 void rist_clean_sender_enqueue(struct rist_sender *ctx)
 {
 	int delete_count = 1;
@@ -127,7 +195,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
 
 	struct rist_common_ctx *ctx = get_cctx(p);
-	struct rist_key *k = &ctx->SECRET;
+	struct rist_key *k = &p->key_secret;
 	uint8_t *data;
 	size_t len, gre_len;
 	size_t hdr_len = 0;
@@ -180,7 +248,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
 			}
 			hdr->rtp.payload_type = MPEG_II_TRANSPORT_STREAM;
-			hdr->rtp.ts = htobe32(timestampRTP_u32(source_time));
+			hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
 			hdr->rtp.seq = htobe16(seq_rtp);
 		}
 		// copy the rtp header data (needed for encryption)
@@ -623,7 +691,7 @@ void rist_send_sender_rtcp(struct rist_peer *peer)
 	uint32_t ntp_msw = (70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec;
 	sr->ntp_msw = htobe32(ntp_msw);
 	sr->ntp_lsw = htobe32(ntp_lsw);
-	sr->rtp_ts = htobe32(timestampRTP_u32(now));
+	sr->rtp_ts = htobe32(timestampRTP_u32(peer->advanced, now));
 	sr->sender_pkts = 0;//htonl(f->packets_count);
 	sr->sender_bytes = 0;//htonl(f->bytes_count);
 

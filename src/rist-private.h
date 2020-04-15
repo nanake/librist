@@ -77,7 +77,7 @@ enum rist_peer_state {
 
 struct rist_key {
 	int key_size;
-	const char *password;
+	char password[128];
 	uint32_t used_times;
 	uint32_t gre_nonce;
 	uint32_t aes_key_sched[60];
@@ -227,9 +227,6 @@ struct rist_common_ctx {
 	/* Timers */
 	int rist_keepalive_interval;
 	int rist_max_jitter;
-
-	/* Crypto */
-	struct rist_key SECRET;
 
 	/* Peer list sync - RW locks */
 	struct rist_peer *PEERS;
@@ -506,7 +503,6 @@ RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer
 RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id);
 RIST_PRIV uint32_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
-RIST_PRIV uint64_t timestampNTP_u64(void);
 RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void empty_receiver_queue(struct rist_flow *f);

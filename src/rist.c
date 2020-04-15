@@ -285,34 +285,6 @@ static void init_peer_settings(struct rist_peer *peer)
 	}
 }
 
-uint64_t timestampNTP_u64(void)
-{
-	// We use clock_gettime instead of gettimeofday even though we only need microseconds
-	// because gettimeofday implementation under linux is dependent on the kernel clock
-	// and can produce duplicate times (too close to kernel timer)
-
-	// We use the NTP time standard: rfc5905 (https://tools.ietf.org/html/rfc5905#section-6)
-	// The 64-bit timestamps used by NTP consist of a 32-bit part for seconds 
-	// and a 32-bit part for fractional second, giving a time scale that rolls 
-	// over every 232 seconds (136 years) and a theoretical resolution of 
-	// 2−32 seconds (233 picoseconds). NTP uses an epoch of January 1, 1900. 
-	// Therefore, the first rollover occurs on February 7, 2036.
-
-	timespec_t ts;
-#ifdef __APPLE__
-  	clock_gettime_osx(&ts);
-#else
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-#endif
-	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
-	uint64_t t = (uint64_t)(ts.tv_nsec) << 32;
-	t /= 1000000000;
-	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
-	// No leap seconds during that period since they were not invented yet.
-	t |= ((70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec) << 32;
-	return t; // nanoseconds (technically, 232.831 picosecond units)
-}
-
 struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	// TODO: we will ran out of stack before heap and when that happens malloc will crash not just
@@ -986,10 +958,31 @@ nack_loop_continue:
 static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx, 
 		const struct rist_peer_config *config)
 {
+	if (!config->key_size) { 
+		if (config->key_rotation != 128 && config->key_size != 192 && config->key_size != 256) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length\n");
+			return NULL;
+		}
+		if (!config->secret || !strlen(config->secret)) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
+			return NULL;
+		}
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Using %d bits secret key\n", config->key_size);
+	}
+	else {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Encryption is disabled for this peer\n");
+	}
+
 	/* Initialize peer */
 	struct rist_peer *p = peer_initialize(config->address, NULL, ctx);
 	if (!p) {
 		return NULL;
+	}
+
+	if (!config->key_size) { 
+		p->key_secret.key_size = config->key_size;
+		strncpy(&p->key_secret.password[0], config->secret, 128);
+		p->key_secret.key_rotation = config->key_rotation;
 	}
 
 	/* Initialize socket */
@@ -1735,26 +1728,6 @@ static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 	rist_shutdown_peer(peer);
 }
 
-static uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp )
-{
-	// We are missing the lower 16 bits and the higher 16 bits for full NTP info and accuracy
-	uint64_t i_ntp = (uint64_t)i_rtp;
-	i_ntp = i_ntp << 16;
-	if (time_extension > 0)
-	{
-		// rebuild source_time (lower and upper 16 bits)
-		uint64_t part3 = (uint64_t)(time_extension & 0xffff);
-		uint64_t part1 = ((uint64_t)(time_extension & 0xffff0000)) << 32;
-		i_ntp = part1 | i_ntp | part3;
-		//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
-	}
-	else if (peer->flow)
-	{
-		// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
-	}
-	return i_ntp;
-}
-
 static void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
 {
 	/* Add a reference to ctx->peer_lst */
@@ -1766,31 +1739,11 @@ static void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
 	pthread_rwlock_unlock(peerlist_lock);
 }
 
-/* for later use
-static void sender_peer_delete(struct rist_sender *ctx, struct rist_peer *peer)
-{
-	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
-	uint32_t i = 0;
-	for (size_t j = 0; j < ctx->peer_lst_len; j++) {
-		if (ctx->peer_lst[j] == peer) {
-			msg(ctx->id, 0, RIST_LOG_INFO,
-				"[INIT] Removing peer (%"PRIu32")\n",
-				peer->adv_peer_id);
-		} else {
-			i++;
-		}
-		ctx->peer_lst[i] = ctx->peer_lst[j];
-	}
-	ctx->peer_lst = realloc(ctx->peer_lst,
-		(ctx->peer_lst_len - 1) * sizeof(*ctx->peer_lst));
-	ctx->peer_lst_len--;
-	pthread_rwlock_unlock(peerlist_lock);
-}
-*/
-
 static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 {
+	peer->key_secret.key_size = peer_src->key_secret.key_size;
+	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
+	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], 128);
 	peer->config.weight = peer_src->config.weight;
 	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
 	peer->config.recovery_mode = peer_src->config.recovery_mode;
@@ -2082,7 +2035,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		if(proto_hdr->rtp.payload_type != MPEG_II_TRANSPORT_STREAM) {
 			// TODO: perform proper timestamp conversion as the code expects mpegts time
 			// For now, this hack will keep things working minus network jitter suppresion
-			proto_hdr->rtp.ts = htobe32(timestampRTP_u32(timestampNTP_u64()));
+			proto_hdr->rtp.ts = htobe32(timestampRTP_u32(advanced, timestampNTP_u64()));
 		}
 		flow_id = be32toh(proto_hdr->rtp.ssrc);
 		// If this is a retry, extract the information and restore correct flow_id
@@ -2170,9 +2123,7 @@ protocol_bypass:
 	}
 	pthread_rwlock_unlock(peerlist_lock);
 
-	// Peer was not found ...
-
-	// Create/update peers if necessary
+	// Peer was not found, create a new one
 	if (peer->listening &&
 		 (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
 		/* No match, new peer creation when on listening mode */
@@ -2469,15 +2420,7 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_sender *se
 		p->url = strdup(url);
 	}
 
-	struct rist_key *k = (receiver_ctx != NULL) ?
-			&receiver_ctx->common.SECRET :
-			&sender_ctx->common.SECRET;
-
 	p->receiver_mode = (receiver_ctx != NULL);
-	p->key_secret.key_size = k->key_size;
-	p->key_secret.password = k->password;
-	p->key_secret.key_rotation = k->key_rotation;
-
 	p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
 	p->sender_ctx = sender_ctx;
 	p->receiver_ctx = receiver_ctx;
@@ -3060,11 +3003,31 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
+	if (!config->key_size) { 
+		if (config->key_rotation != 128 && config->key_size != 192 && config->key_size != 256) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length\n");
+			return NULL;
+		}
+		if (!config->secret || !strlen(config->secret)) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
+			return NULL;
+		}
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Using %d bits secret key\n", config->key_size);
+	}
+	else {
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Encryption is disabled for this peer\n");
+	}
 
 	/* Initialize peer */
 	struct rist_peer *newpeer = peer_initialize(config->address, ctx, NULL);
 	if (!newpeer) {
 		return NULL;
+	}
+
+	if (!config->key_size) { 
+		newpeer->key_secret.key_size = config->key_size;
+		strncpy(&newpeer->key_secret.password[0], config->secret, 128);
+		newpeer->key_secret.key_rotation = config->key_rotation;
 	}
 
 	/* Initialize socket */
@@ -3167,54 +3130,6 @@ int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
 }
 
-static int rist_encrypt_enable(struct rist_common_ctx *ctx,
-								const char *secret, int key_size, uint32_t key_rotation,
-								intptr_t receiver_id, intptr_t sender_id)
-{
-	int ret;
-
-	if (!key_size) {
-		msg(receiver_id, sender_id, RIST_LOG_ERROR,
-			"\tKey length is zero, disabling encryption\n");
-		key_size = 0;
-		secret = NULL;
-		ret = 0;
-		goto perform_update;
-	}
-
-	if (!secret || !strlen(secret)) {
-		msg(receiver_id, sender_id, RIST_LOG_ERROR,
-			"\tInvalid secret key, disabling encryption\n");
-		key_size = 0;
-		secret = NULL;
-		ret = -1;
-		goto perform_update;
-	}
-
-	msg(receiver_id, sender_id, RIST_LOG_INFO,
-		"[INIT] Using %d bits secret key\n", key_size);
-	ret = 0;
-
-	perform_update:
-	memset(&ctx->SECRET, 0, sizeof(ctx->SECRET));
-	ctx->SECRET.key_size = key_size;
-	ctx->SECRET.password = secret;
-	ctx->SECRET.key_rotation = key_rotation;
-
-	/* update peer list (in case this was set after the peer was added) */
-	for (struct rist_peer *peer = ctx->PEERS; peer; peer = peer->next) {
-		peer->key_secret = ctx->SECRET;
-	}
-
-	return ret;
-}
-
-int rist_sender_encryption_aes_set(struct rist_sender *ctx, const char *secret,
-								int key_size, uint32_t key_rotation)
-{
-	return rist_encrypt_enable(&ctx->common, secret, key_size, key_rotation, 0, ctx->id);
-}
-
 int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
 {
 	ctx->compression = !!compression;
@@ -3260,12 +3175,6 @@ int rist_receiver_oob_set(struct rist_receiver *ctx,
 	ctx->common.oob_data_callback = oob_data_callback;
 	ctx->common.oob_data_callback_argument = arg;
 	return 0;
-}
-
-int rist_receiver_encryption_aes_set(struct rist_receiver *ctx, const char *secret, 
-		int key_size, uint32_t key_rotation)
-{
-	return rist_encrypt_enable(&ctx->common, secret, key_size, key_rotation, ctx->id, 0);
 }
 
 int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_nack_type nack_type)
