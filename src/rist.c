@@ -665,10 +665,15 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	output_buffer->peer = b->peer;
 	output_buffer->flow_id = flow_id;
 	uint8_t *newbuffer;
-	if (output_buffer->payload && b->size != output_buffer->payload_len)
+	if (output_buffer->payload && b->size != output_buffer->payload_len) {
 		newbuffer = realloc((void *)output_buffer->payload, b->size);
-	else if (!output_buffer->payload)
+	} else if (!output_buffer->payload) {
 		newbuffer = malloc(b->size);
+	}
+	else {
+		newbuffer = (void *)output_buffer->payload;
+	}
+
 	memcpy(newbuffer, payload, b->size);
 	output_buffer->payload = newbuffer;
 	output_buffer->payload_len = b->size;
