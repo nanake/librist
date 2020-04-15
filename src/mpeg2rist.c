@@ -344,13 +344,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (cname) {
-		if (rist_sender_cname_set(ctx, cname) != 0) {
-			fprintf(stderr, "Could not set the cname\n");
-			exit(1);
-		}
-	}
-
 	if (profile != RIST_PROFILE_SIMPLE) {
 		if (rist_sender_oob_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
@@ -385,6 +378,10 @@ int main(int argc, char *argv[])
 
 		if (shared_secret != NULL) {
 			strncpy((void *)&app_peer_config.secret[0], shared_secret, 128);
+		}
+
+		if (cname != NULL) {
+			strncpy((void *)&app_peer_config.cname[0], cname, 128);
 		}
 
 		// URL overrides (also cleans up the URL)

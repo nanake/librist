@@ -338,13 +338,6 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (cname) {
-		if (rist_receiver_cname_set(ctx, cname) != 0) {
-			fprintf(stderr, "Could not set the cname\n");
-			exit(1);
-		}
-	}
-
 	if (rist_receiver_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
 		fprintf(stderr, "Could not init rist auth handler\n");
 		exit(1);
@@ -386,6 +379,10 @@ int main(int argc, char *argv[])
 
 		if (shared_secret != NULL) {
 			strncpy((void *)&app_peer_config.secret[0], shared_secret, 128);
+		}
+
+		if (cname != NULL) {
+			strncpy((void *)&app_peer_config.cname[0], cname, 128);
 		}
 
 		// URL overrides (also cleans up the URL)
