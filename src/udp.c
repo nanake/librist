@@ -256,6 +256,29 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	}
 
 	if (ctx->profile > RIST_PROFILE_SIMPLE) {
+
+		/* Compress the data packets */
+		if (p->compression) {
+			int clen;
+			void *cbuf = ctx->buf.dec;
+			clen = LZ4_compress_default((const char *)payload, cbuf, payload_len, RIST_MAX_PACKET_SIZE);
+			if (clen < 0) {
+				msg(receiver_id, sender_id, RIST_LOG_ERROR,
+					"[ERROR] Compression failed (%d), not sending\n", clen);
+			}
+			else {
+				if (clen < payload_len) {
+					payload_len = clen;
+					payload = cbuf;
+					payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
+				} else {
+					//msg(receiver_id, ctx->id, DEBUG,
+					//    "compressed %d to %lu\n", len, compressed_len);
+					// Use origin data AS IS becauce compression bloated it
+				}
+			}
+		}
+
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
 			_ensure_key_is_valid(k);
@@ -385,7 +408,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		ret = rist_send_seq_rtcp(p, ctx->seq, ctx->seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
 	}
 
-	if (ret < payload_len) 
+	if ((!p->compression && ret < payload_len) || ret <= 0)
 	{
 		if (p->address_family == AF_INET6) {
 			// TODO: print IP and port (and error number?)
@@ -769,29 +792,6 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 	if (ctx->common.PEERS == NULL) {
 		// Do not cache data if the lib user has not added peers
 		return -1;
-	}
-
-	/* Compress the data packets */
-	if (ctx->compression) {
-		int clen;
-		void *cbuf = ctx->common.buf.dec;
-
-		clen = LZ4_compress_default(data, cbuf, len, RIST_MAX_PACKET_SIZE);
-		if (clen < 0) {
-			msg(0, ctx->id, RIST_LOG_ERROR,
-				"\tCompression failed (%d), not sending\n", clen);
-			return -1;
-		}
-
-		if (clen < len) {
-			len = clen;
-			data = cbuf;
-			payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
-		} else {
-			//msg(receiver_id, ctx->id, DEBUG,
-			//    "compressed %d to %lu\n", len, compressed_len);
-			// Use origin data AS IS becauce compression bloated it
-		}
 	}
 
 	ctx->last_datagram_time = datagram_time;

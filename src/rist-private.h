@@ -298,24 +298,6 @@ struct rist_receiver {
 	/* Reporting id */
 	intptr_t id;
 
-	/* Default peer config */
-/*
-	uint16_t gre_dst_port;
-	enum rist_recovery_mode recovery_mode;
-	uint32_t recovery_maxbitrate;
-	uint32_t recovery_maxbitrate_return;
-	uint32_t recovery_length_min;
-	uint32_t recovery_length_max;
-	uint32_t recovery_length_target;
-	uint32_t recovery_reorder_buffer;
-	uint32_t recovery_rtt_min;
-	uint32_t recovery_rtt_max;
-	uint32_t weight;
-	enum rist_buffer_bloat_mode buffer_bloat_mode;
-	uint8_t buffer_bloat_limit;
-	uint8_t buffer_bloat_hard_limit;
-*/
-
 	/* Common stuff */
 	struct rist_common_ctx common;
 
@@ -323,9 +305,6 @@ struct rist_receiver {
 };
 
 struct rist_sender {
-	/* compression flag (sender only) */
-	bool compression;
-
 	/* Advertised flow for this context */
 	uint32_t adv_flow_id;
 
@@ -441,6 +420,9 @@ struct rist_peer {
 
 	/* Encryption */
 	struct rist_key key_secret; // used for received packets
+
+	/* compression flag (sender only) */
+	bool compression;
 
 	/* Addressing */
 	uint16_t local_port;

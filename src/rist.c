@@ -1451,30 +1451,9 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	//msg(ctx->id, 0, RIST_LOG_ERROR,
 	//	"[DEBUG] rist_recv_data, seq %"PRIu32"\n", seq);
 
-	/* Decompress payload */
-	// TODO: restore compression
-	//if ((hdr->rtp.flags & 0x0F) == RIST_PAYLOAD_TYPE_DATA_LZ4) {
-	if (0) {
-		int dlen;
-		void *dbuf = get_cctx(peer)->buf.dec;
-
-		dlen = LZ4_decompress_safe((const void *) payload->data, dbuf, payload->size, RIST_MAX_PACKET_SIZE);
-		if (dlen < 0) {
-			msg(ctx->id, 0, RIST_LOG_ERROR,
-				"[ERROR] Could not decompress data packet (%d), ignoring ...\n", dlen);
-			return;
-		}
-
-		// msg(receiver_id, 0, DEBUG,
-		//      "decompressed %d to %lu\n",
-		//      payload_len, decompressed_len);
-		payload->size = dlen;
-		payload->data = dbuf;
-	}
-
-//	Just some debug output
-//	if ((seq - peer->flow->last_seq_output) != 1)
-//		msg(receiver_id, sender_id, RIST_LOG_ERROR, "Received seq %"PRIu32" and last %"PRIu32"\n\n\n", seq, peer->flow->last_seq_output);
+	//	Just some debug output
+	//	if ((seq - peer->flow->last_seq_output) != 1)
+	//		msg(receiver_id, sender_id, RIST_LOG_ERROR, "Received seq %"PRIu32" and last %"PRIu32"\n\n\n", seq, peer->flow->last_seq_output);
 
 	/**************** WIP *****************/
 	/* * * * * * * * * * * * * * * * * * * */
@@ -1878,21 +1857,18 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-		advanced = 0;//CHECK_BIT(gre->flags2, 3);
 
-		if (advanced)
-		{
-			// Peer ID (TODO: do it more elegantly?)
-			if (CHECK_BIT(gre->flags1, 3)) SET_BIT(peer_id, 0);
-			if (CHECK_BIT(gre->flags1, 2)) SET_BIT(peer_id, 1);
-			if (CHECK_BIT(gre->flags1, 1)) SET_BIT(peer_id, 2);
-			if (CHECK_BIT(gre->flags1, 0)) SET_BIT(peer_id, 3);
-			// Payload type (TODO: do it more elegantly)
-			if (CHECK_BIT(gre->flags2, 4)) SET_BIT(payload.type, 3);
-			if (CHECK_BIT(gre->flags2, 5)) SET_BIT(payload.type, 2);
-			if (CHECK_BIT(gre->flags2, 6)) SET_BIT(payload.type, 1);
-			if (CHECK_BIT(gre->flags2, 7)) SET_BIT(payload.type, 0);
-		}
+		advanced = CHECK_BIT(gre->flags2, 3);
+		// Peer ID (TODO: do it more elegantly?)
+		if (CHECK_BIT(gre->flags1, 3)) SET_BIT(peer_id, 0);
+		if (CHECK_BIT(gre->flags1, 2)) SET_BIT(peer_id, 1);
+		if (CHECK_BIT(gre->flags1, 1)) SET_BIT(peer_id, 2);
+		if (CHECK_BIT(gre->flags1, 0)) SET_BIT(peer_id, 3);
+		// Payload type (TODO: do it more elegantly)
+		if (CHECK_BIT(gre->flags2, 4)) SET_BIT(payload.type, 3);
+		if (CHECK_BIT(gre->flags2, 5)) SET_BIT(payload.type, 2);
+		if (CHECK_BIT(gre->flags2, 6)) SET_BIT(payload.type, 1);
+		if (CHECK_BIT(gre->flags2, 7)) SET_BIT(payload.type, 0);
 
 		if (has_checksum) {
 			time_extension = be32toh(gre->checksum_reserved1);
@@ -1997,6 +1973,25 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
 			goto protocol_bypass;
 		}
+		// Decompress if necessary
+		if (payload.type == RIST_PAYLOAD_TYPE_DATA_LZ4) {
+			int dlen;
+			void *dbuf = get_cctx(p)->buf.dec;
+			dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, payload.size, RIST_MAX_PACKET_SIZE);
+			if (dlen < 0) {
+				msg(receiver_id, sender_id, RIST_LOG_ERROR,
+					"[ERROR] Could not decompress data packet (%d), assuming normal data ...\n", dlen);
+			}
+			else {
+				// msg(receiver_id, 0, DEBUG,
+				//      "decompressed %d to %lu\n",
+				//      payload_len, decompressed_len);
+				payload.size = dlen;
+				payload.data = dbuf;
+			}
+			// Restore normal payload type
+			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
+		}
 		/* Map the first subheader and rtp payload area to our structure */
 		proto_hdr = (void *)(recv_buf + gre_size);
 		payload.src_port = be16toh(proto_hdr->src_port);
@@ -2094,7 +2089,6 @@ protocol_bypass:
 				case RIST_PAYLOAD_TYPE_RTCP_NACK:
 					rist_recv_rtcp(p, seq, flow_id, &payload);
 				break;
-				case RIST_PAYLOAD_TYPE_DATA_LZ4:
 				case RIST_PAYLOAD_TYPE_DATA_RAW:
 					rtp_time = be32toh(proto_hdr->rtp.ts);
 					source_time = timeRTPtoNTP(p, time_extension, rtp_time);
@@ -2109,7 +2103,7 @@ protocol_bypass:
 					if (RIST_UNLIKELY(!p->receiver_mode))
 						msg(receiver_id, sender_id, RIST_LOG_WARN,
 						"[WARNING] Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
-					else
+					else 
 						rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry);
 				break;
 				default:
@@ -3107,6 +3101,7 @@ int rist_sender_peer_create(struct rist_sender *ctx,
 	else {
 		newpeer->peer_data = newpeer;
 		newpeer->is_rtcp = true;
+		newpeer->compression = config->compression;
 	}
 
 	/* jumpstart communication */
@@ -3128,12 +3123,6 @@ int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 		void *arg)
 {
 	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
-}
-
-int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression)
-{
-	ctx->compression = !!compression;
-	return 0;
 }
 
 int rist_sender_oob_set(struct rist_sender *ctx, 

@@ -306,17 +306,6 @@ RIST_API int rist_sender_oob_set(struct rist_sender *ctx,
 		void *arg);
 
 /**
- * @brief Enable compression
- *
- * Call after sender initialization to enable compression.
- *
- * @param ctx RIST sender context
- * @param compression, 0 to disable, 1-10 for compression level
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_compression_lz4_set(struct rist_sender *ctx, int compression);
-
-/**
  * @brief Kickstart a pre-configured sender
  *
  * After all the peers have been added, this function triggers
