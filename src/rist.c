@@ -667,7 +667,7 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	uint8_t *newbuffer;
 	if (output_buffer->payload && b->size != output_buffer->payload_len)
 		newbuffer = realloc((void *)output_buffer->payload, b->size);
-	else
+	else if (!output_buffer->payload)
 		newbuffer = malloc(b->size);
 	memcpy(newbuffer, payload, b->size);
 	output_buffer->payload = newbuffer;
