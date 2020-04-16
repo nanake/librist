@@ -618,11 +618,14 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 
-	uint16_t namelen = strlen(peer->cname) + 3;
-	// It has to be a multiple of 4
-	namelen = (((namelen - 2) >> 2) + 1) << 2;
+	uint16_t namelen = strlen(peer->cname) + 1; // add one for a trailing 0
+	/* add ssrc(4), type(1) and length(1) and align to 32 bits */
+	uint16_t sdes_chunk_size = ((((namelen + 6) >> 2) + 1) << 2);
+	uint16_t padding = sdes_chunk_size - namelen - 6;
+	uint16_t sdes_size = sdes_chunk_size + 4; // Add flags(1), ptype(1) and len(2) (outside the chunk)
+
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
-	int payload_len = sizeof(struct rist_rtcp_rr_empty_pkt) + sizeof(struct rist_rtcp_hdr) + namelen;
+	int payload_len = sizeof(struct rist_rtcp_rr_empty_pkt) + sdes_size;
 	struct rist_rtcp_rr_empty_pkt *rr = (struct rist_rtcp_rr_empty_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET);
 	struct rist_rtcp_sdes_pkt *sdes = (struct rist_rtcp_sdes_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + sizeof(struct rist_rtcp_rr_empty_pkt));
 
@@ -636,12 +639,13 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 	/* Populate SDES for sender description */
 	sdes->rtcp.flags = RTCP_SDES_FLAGS;
 	sdes->rtcp.ptype = PTYPE_SDES;
-	sdes->rtcp.len = htons((namelen >> 2)+1);
+	sdes->rtcp.len = htons(sdes_chunk_size >> 2);
 	sdes->rtcp.ssrc = htobe32(peer->adv_flow_id);
 	sdes->cname = 1;
-	sdes->name_len = strlen(peer->cname);
-	strcpy(sdes->udn, peer->cname);
-	// TODO: make sure the padding bytes are zeroes (they are random bytes now)
+	sdes->name_len = namelen;
+	// We copy the extra padding bytes from the source because it is a preallocated buffer 
+	// of size 128 with all zeroes
+	memcpy(sdes->udn, peer->cname, namelen + padding);
 
 	if (array_len > 0)
 	{
