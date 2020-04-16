@@ -2500,7 +2500,7 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	// loop behavior parameters
 	int max_dataperloop = 100;
 	int max_oobperloop = 100;
-	int max_nacksperloop = RIST_RETRY_RATIO;
+	int max_nacksperloop = RIST_MAX_NACKS;
 
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 	uint64_t rist_stats_interval = (uint64_t)1000 * (uint64_t)RIST_CLOCK; // 1 second

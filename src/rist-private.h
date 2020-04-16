@@ -39,7 +39,6 @@ __BEGIN_DECLS
 // This will restrict the use of the library to the configured maximum packet size
 #define RIST_MAX_PACKET_SIZE (10000)
 
-#define RIST_RETRY_RATIO (10)
 #define RIST_RTT_MIN (3)
 // this value is UINT32_MAX 4294967.296
 #define RIST_CLOCK (4294967L)
