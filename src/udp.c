@@ -55,7 +55,7 @@ uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 {
 	// We just need the middle 32 bits, i.e. 65536Hz clock
 	i_ntp = i_ntp >> 16;
-	if (!advanced) {
+	if (0 && !advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
 		uint32_t seconds = (i_ntp >> 32) & 0xFFFFFFFF;
 		uint32_t fraction = i_ntp & 0xFFFFFFFF;
@@ -67,7 +67,7 @@ uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp )
 {
 	uint64_t i_ntp = (uint64_t)i_rtp;
-	if (!peer->advanced) {
+	if (0 && !peer->advanced) {
 		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
 		uint64_t seconds = i_ntp /MPEGTSCLOCKHZ;
 		uint64_t fraction = ((i_ntp % MPEGTSCLOCKHZ) * UINT32_MAX) / MPEGTSCLOCKHZ;
@@ -1089,11 +1089,6 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			ctx->sender_recover_min_time);
 		return;
 	}
-
-	//size_t queue_size = rist_get_sender_retry_queue_size(ctx);
-	// TODO: Add safety check if the queue is already too large ... bloat control?
-	//fprintf(stderr,"insert missing, queue size is r=%zu/w=%zu/s=%zu\n", 
-	//	ctx->sender_retry_queue_read_index, ctx->sender_retry_queue_write_index, queue_size);
 
 	// Now insert into the missing queue
 	struct rist_retry *retry;
