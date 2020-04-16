@@ -1582,8 +1582,8 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 			case PTYPE_NACK_CUSTOM:
 				if (subtype == NACK_FMT_SEQEXT)
 				{
-					struct rist_rtcp_seqext *seq_ext = (struct rist_rtcp_seqext *) payload;
-					nack_seq_msb = ((uint32_t)htobe16(seq_ext->seq_msb)) << 16;
+					struct rist_rtcp_seqext *seq_ext = (struct rist_rtcp_seqext *) pkt;
+					nack_seq_msb = ((uint32_t)be16toh(seq_ext->seq_msb)) << 16;
 					break;
 				}
 				else if (subtype != NACK_FMT_RANGE) {
