@@ -618,7 +618,7 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 
-	uint16_t namelen = strlen(peer->cname) + 1; // add one for a trailing 0
+	uint16_t namelen = strlen(peer->cname);
 	/* add ssrc(4), type(1) and length(1) and align to 32 bits */
 	uint16_t sdes_chunk_size = ((((namelen + 6) >> 2) + 1) << 2);
 	uint16_t padding = sdes_chunk_size - namelen - 6;
@@ -705,7 +705,7 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 
 void rist_send_sender_rtcp(struct rist_peer *peer)
 {
-	uint16_t namelen = strlen(peer->cname) + 1; // add one for a trailing 0
+	uint16_t namelen = strlen(peer->cname);
 	/* add ssrc(4), type(1) and length(1) and align to 32 bits */
 	uint16_t sdes_chunk_size = ((((namelen + 6) >> 2) + 1) << 2);
 	uint16_t padding = sdes_chunk_size - namelen - 6;
