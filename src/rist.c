@@ -2350,24 +2350,32 @@ int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_blo
 static void sender_send_nacks(struct rist_sender *ctx, int maxcounter)
 {
 	// Send retries from the queue (if any)
-	int maxCounter = 10;
-	// Send no more than 10 retries for every packet/loop (for uniform spacing)
+	int counter = 1;
+	int errors = 0;
 	size_t total_bytes = 0;
 
+	// Send no more than maxcounter retries for every packet/loop (for uniform spacing)
 	while (1) {
 		int ret = rist_retry_dequeue(ctx);
-
-		if (ret == -1 || ret == 0) {
-			// Skipped, too many or up to date
+		if (ret == 0) {
+			// ret == 0 is valid (nothing to send)
 			break;
+		} else if (ret < 0) {
+			errors++;
 		} else {
-			// Sent a retry succesfully, now, send another one
 			total_bytes += ret;
 		}
-		if (maxCounter++ > maxcounter) {
+		if (++counter > maxcounter) {
 			break;
 		}
 	}
+	if (counter > (maxcounter / 2))
+	{
+		msg(ctx->id, 0, RIST_LOG_WARN,
+			"[WARNING] Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu\n",
+			counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx));
+	}
+
 }
 
 static void sender_send_data(struct rist_sender *ctx, int maxcount)

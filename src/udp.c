@@ -913,6 +913,22 @@ static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq, struc
 	return idx;
 }
 
+size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx)
+{
+	size_t queue_size = 0;
+	if (ctx->sender_retry_queue_read_index > ctx->sender_retry_queue_write_index)
+	{
+		queue_size = ctx->sender_retry_queue_size - ctx->sender_retry_queue_read_index;
+		queue_size += ctx->sender_retry_queue_write_index;
+	}
+	else
+	{
+		queue_size = ctx->sender_retry_queue_write_index - ctx->sender_retry_queue_read_index;
+	}
+	return queue_size;
+}
+
+/* This function must return, 0 when there is nothing to send, < 0 on error and > 0 for bytes sent */
 int rist_retry_dequeue(struct rist_sender *ctx)
 {
 //	msg(0, ctx->id, RIST_LOG_ERROR,
@@ -938,23 +954,24 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 	size_t idx = rist_sender_index_get(ctx, retry->seq, retry->peer);
 	if (ctx->sender_queue[idx] == NULL) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu), consider increasing the buffer size\n",
-			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index);
+			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), consider increasing the buffer size\n",
+			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	} else if (retry->peer->advanced && ctx->sender_queue[idx]->seq != retry->seq) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), something is very wrong!\n",
+			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), something is very wrong!\n",
 			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
-			ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
+			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
 	else if (!retry->peer->advanced && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), bitrate is too high, use advanced profile instead\n",
+			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), bitrate is too high, use advanced profile instead\n",
 			(uint16_t)retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
-			ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
+			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
@@ -1030,10 +1047,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 		retry->peer->stats_sender_instant.retrans++;
 	}
 
-	if (ret >= 0)
-		return 0;
-	else
-		return -1;
+	return ret;
 }
 
 void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
@@ -1075,6 +1089,11 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			ctx->sender_recover_min_time);
 		return;
 	}
+
+	//size_t queue_size = rist_get_sender_retry_queue_size(ctx);
+	// TODO: Add safety check if the queue is already too large ... bloat control?
+	//fprintf(stderr,"insert missing, queue size is r=%zu/w=%zu/s=%zu\n", 
+	//	ctx->sender_retry_queue_read_index, ctx->sender_retry_queue_write_index, queue_size);
 
 	// Now insert into the missing queue
 	struct rist_retry *retry;

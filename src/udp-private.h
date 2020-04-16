@@ -270,6 +270,7 @@ RIST_PRIV void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct 
 RIST_PRIV int rist_retry_dequeue(struct rist_sender *ctx);
 RIST_PRIV int rist_set_url(struct rist_peer *peer);
 RIST_PRIV void rist_create_socket(struct rist_peer *peer);
+RIST_PRIV size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx);
 
 RIST_PRIV uint64_t timestampNTP_u64(void);
 RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
