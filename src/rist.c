@@ -1870,7 +1870,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
 
-		advanced = CHECK_BIT(gre->flags2, 3);
+		//advanced = CHECK_BIT(gre->flags2, 3);
 		// Peer ID (TODO: do it more elegantly?)
 		if (CHECK_BIT(gre->flags1, 3)) SET_BIT(peer_id, 0);
 		if (CHECK_BIT(gre->flags1, 2)) SET_BIT(peer_id, 1);
@@ -2046,11 +2046,6 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	// Finish defining the payload (we assume reduced header)
 	if(proto_hdr->rtp.payload_type < 200) {
-		if(proto_hdr->rtp.payload_type != MPEG_II_TRANSPORT_STREAM) {
-			// TODO: perform proper timestamp conversion as the code expects mpegts time
-			// For now, this hack will keep things working minus network jitter suppresion
-			proto_hdr->rtp.ts = htobe32(timestampRTP_u32(advanced, timestampNTP_u64()));
-		}
 		flow_id = be32toh(proto_hdr->rtp.ssrc);
 		// If this is a retry, extract the information and restore correct flow_id
 		if (flow_id & 1UL)
@@ -2110,7 +2105,7 @@ protocol_bypass:
 				break;
 				case RIST_PAYLOAD_TYPE_DATA_RAW:
 					rtp_time = be32toh(proto_hdr->rtp.ts);
-					source_time = timeRTPtoNTP(p, time_extension, rtp_time);
+					source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
 					if (!advanced)
 					{
 						// Get the sequence from the rtp header for queue management

@@ -53,44 +53,87 @@ uint64_t timestampNTP_u64(void)
 
 uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 {
-	// We just need the middle 32 bits, i.e. 65536Hz clock
-	i_ntp = i_ntp >> 16;
 	if (0 && !advanced) {
-		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		uint32_t seconds = (i_ntp >> 32) & 0xFFFFFFFF;
-		uint32_t fraction = i_ntp & 0xFFFFFFFF;
-		i_ntp = (seconds * MPEGTSCLOCKHZ) + (double)(fraction / UINT32_MAX)*90000;
-	}
-	return (uint32_t)i_ntp;
-}
+		uint64_t seconds = (i_ntp >> 32) & 0xFFFFFFFF;
+		// NTP fraction is 232ps based
+		uint64_t fraction = i_ntp & 0xFFFFFFFF;
+		fraction = 1000000 * fraction / 4294967296ULL; // microseconds
+		uint64_t i_pts = seconds * 1000000 + fraction;
 
-uint64_t timeRTPtoNTP( struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp )
-{
-	uint64_t i_ntp = (uint64_t)i_rtp;
-	if (0 && !peer->advanced) {
-		// NTP clock is 65536Hz and mpeg-ts payload is 90000Hz
-		uint64_t seconds = i_ntp /MPEGTSCLOCKHZ;
-		uint64_t fraction = ((i_ntp % MPEGTSCLOCKHZ) * UINT32_MAX) / MPEGTSCLOCKHZ;
-		i_ntp = (seconds << 32) | fraction;
+		lldiv_t q = lldiv(i_pts, 1000000);
+		return q.quot * (int64_t)RTP_PTYPE_MPEGTS_CLOCKHZ
+				+ q.rem * (int64_t)RTP_PTYPE_MPEGTS_CLOCKHZ / 1000000;
 	}
 	else
 	{
-		i_ntp = i_ntp << 16;
-		// We are missing the lower 16 bits and the higher 16 bits for full NTP info and accuracy
-		if (time_extension > 0)
-		{
-			// rebuild source_time (lower and upper 16 bits)
-			uint64_t part3 = (uint64_t)(time_extension & 0xffff);
-			uint64_t part1 = ((uint64_t)(time_extension & 0xffff0000)) << 32;
-			i_ntp = part1 | i_ntp | part3;
-			//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
-		}
-		else if (peer->flow)
-		{
-			// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
-		}
+		// We just need the middle 32 bits, i.e. 65536Hz clock
+		i_ntp = i_ntp >> 16;
+		return (uint32_t)i_ntp;
 	}
-	return i_ntp;
+}
+
+uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp)
+{
+	if (1 || ptype == RTP_PTYPE_RIST) {
+		// Convert rtp to 64 bit and shift it 16 bits
+		uint64_t part2 = (uint64_t)i_rtp;
+		part2 = part2 << 16;
+		// rebuild source_time (lower and upper 16 bits)
+		uint64_t part3 = (uint64_t)(time_extension & 0xffff);
+		uint64_t part1 = ((uint64_t)(time_extension & 0xffff0000)) << 32;
+		uint64_t i_ntp = part1 | part2 | part3;
+		//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
+		return i_ntp;
+	} else {
+		// Convert from other clocks to NTP clock (65536Hz)
+		uint64_t clock = 0;
+		switch(ptype) {
+			case RTP_PTYPE_MPEGTS:
+			case 14: // MPA
+			case 25: // CelB
+			case 26: // JPEG
+			case 28: // nv
+			case 31: // H261
+			case 32: // MPV
+			case 34: // H263
+				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
+				break;
+			case 0: // PCMU
+			case 3: // GSM
+			case 4: // G723
+			case 5: // DVI4
+			case 7: // LPC
+			case 8: // PCMA
+			case 9: // G722
+			case 12: // QCELP
+			case 13: // CN
+			case 15: // G728
+			case 18: // G729
+				clock = 8000;
+				break;
+			case 16: // DVI4
+				clock = 11025;
+				break;
+			case 6: // DVI4
+				clock = 16000;
+				break;
+			case 17: // DVI4
+				clock = 22050;
+				break;
+			case 10: // L16
+			case 11: // L16
+				clock = 44100;
+			break;
+			default:
+				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
+				// Insert a new timestamp (not ideal but better than failing)
+				i_rtp = htobe32(timestampRTP_u32(0, timestampNTP_u64()));
+			break;
+		}
+		lldiv_t q = lldiv(i_rtp, clock);
+		return q.quot * (int64_t)RTP_PTYPE_RIST_CLOCKHZ
+				+ q.rem * (int64_t)RTP_PTYPE_RIST_CLOCKHZ / clock;
+	}
 }
 
 void rist_clean_sender_enqueue(struct rist_sender *ctx)
@@ -249,7 +292,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			// RTP header for data packets
 			hdr->rtp.flags = RTP_MPEGTS_FLAGS;
 			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
-
+			hdr->rtp.seq = htobe16(seq_rtp);
 			if (seq != ctx->seq)
 			{
 				// This is a retranmission
@@ -259,9 +302,13 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				// TODO: fix this with an OR instead
 				hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
 			}
-			hdr->rtp.payload_type = MPEG_II_TRANSPORT_STREAM;
-			hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
-			hdr->rtp.seq = htobe16(seq_rtp);
+			if (ctx->profile == RIST_PROFILE_ADVANCED) {
+				hdr->rtp.payload_type = RTP_PTYPE_RIST;
+				hdr->rtp.ts = (uint32_t)(source_time >> 16);
+			} else {
+				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
+				hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
+			}
 		}
 		// copy the rtp header data (needed for encryption)
 		memcpy(payload - hdr_len, hdr, hdr_len);
@@ -310,7 +357,8 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			if (CHECK_BIT(payload_type, 1)) SET_BIT(gre_key_seq->flags2, 6);
 			if (CHECK_BIT(payload_type, 2)) SET_BIT(gre_key_seq->flags2, 5);
 			if (CHECK_BIT(payload_type, 3)) SET_BIT(gre_key_seq->flags2, 4);
-			SET_BIT(gre_key_seq->flags2, 3); // set advanced protocol identifier
+			if (ctx->profile == RIST_PROFILE_ADVANCED)
+				SET_BIT(gre_key_seq->flags2, 3); // set advanced protocol identifier
 
 			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));

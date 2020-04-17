@@ -43,7 +43,6 @@ __BEGIN_DECLS
 #define NACK_FMT_RANGE 0
 #define NACK_FMT_SEQEXT 1
 
-#define MPEG_II_TRANSPORT_STREAM (0x21)
 #define RTCP_SDES_SIZE 10
 #define RTP_MPEGTS_FLAGS 0x80
 #define RTCP_SR_FLAGS 0x80
@@ -52,7 +51,13 @@ __BEGIN_DECLS
 #define RTCP_NACK_BITMASK_FLAGS 0x81
 #define RTCP_NACK_SEQEXT_FLAGS 0x81
 
-#define MPEGTSCLOCKHZ 90000
+// RTP Payload types and clocks
+// March 1995 (page 9): https://tools.ietf.org/html/draft-ietf-avt-profile-04
+// Nov 2019 (page 2): https://www.iana.org/assignments/rtp-parameters/rtp-parameters.xhtml
+#define RTP_PTYPE_MPEGTS (0x21)
+#define RTP_PTYPE_MPEGTS_CLOCKHZ (90000)
+#define RTP_PTYPE_RIST (21)
+#define RTP_PTYPE_RIST_CLOCKHZ (UINT16_MAX + 1)
 
 // Maximum offset before the payload that the code can use to put in headers
 #define RIST_MAX_PAYLOAD_OFFSET (sizeof(struct rist_gre_key_seq) + sizeof(struct rist_protocol_hdr))
@@ -274,7 +279,7 @@ RIST_PRIV size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx);
 
 RIST_PRIV uint64_t timestampNTP_u64(void);
 RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
-RIST_PRIV uint64_t timeRTPtoNTP(struct rist_peer *peer, uint32_t time_extension, uint32_t i_rtp);
+RIST_PRIV uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp);
 
 __END_DECLS
 
