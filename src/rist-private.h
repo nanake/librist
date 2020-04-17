@@ -193,6 +193,7 @@ struct rist_flow {
 	uint64_t last_output_time;
 	int64_t time_offset;
 	bool authenticated;
+	uint32_t session_timeout;
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;
@@ -225,7 +226,6 @@ struct rist_common_ctx {
 	struct evsocket_ctx *evctx;
 
 	/* Timers */
-	int rist_keepalive_interval;
 	int rist_max_jitter;
 
 	/* Peer list sync - RW locks */
@@ -242,7 +242,6 @@ struct rist_common_ctx {
 	} buf;
 
 	/* timers */
-	uint64_t keepalive_next_time;
 	uint64_t nacks_next_time;
 
 	enum rist_profile profile;
@@ -329,6 +328,7 @@ struct rist_sender {
 	uint64_t last_datagram_time;
 	bool simulate_loss;
 	uint64_t stats_next_time;
+	uint32_t session_timeout;
 
 	/* retry queue */
 	struct rist_retry *sender_retry_queue;
@@ -476,6 +476,11 @@ struct rist_peer {
 
 	/* shutting down flag */
 	volatile bool shutdown;
+
+	/* Timers */
+	uint32_t rtcp_keepalive_interval;
+	uint64_t keepalive_next_time;
+	uint32_t session_timeout;
 
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];

@@ -148,16 +148,23 @@ static int parse_url_options(const char* url, 	struct rist_peer_config *output_p
 					int temp = atoi( val );
 					if (temp >= 0)
 						output_peer_config->weight = temp;
-				}
-				else {
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SESS_TIMEOUT ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->session_timeout = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_KEEPALIVE_INT ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->keepalive_interval = temp;
+				} else {
 					ret = -1;
 					fprintf(stderr, "Unknown parameter %s\n", url_params[i].key);
 				}
 			}
 		}
-		strncpy((void *)output_peer_config->address, url, clean_url_len > 256 ? 256 : clean_url_len);
+		strncpy((void *)output_peer_config->address, url, clean_url_len > RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG : clean_url_len);
 	} else {
-		strncpy((void *)output_peer_config->address, url, 256);
+		strncpy((void *)output_peer_config->address, url, RIST_MAX_STRING_LONG);
 	}
 
 	if (ret != 0)
@@ -173,45 +180,6 @@ struct rist_common_ctx *get_cctx(struct rist_peer *peer)
 	} else {
 		return &peer->receiver_ctx->common;
 	}
-}
-
-/* t is in ms */
-static int rist_session_timeout_set(struct rist_common_ctx *ctx, int t)
-{
-	(void) ctx;
-	(void) t;
-
-	return 0;
-}
-
-int rist_sender_session_timeout_set(struct rist_sender *ctx, int t)
-{
-	return rist_session_timeout_set(&ctx->common, t);
-}
-
-int rist_receiver_session_timeout_set(struct rist_receiver *ctx, int t)
-{
-	return rist_session_timeout_set(&ctx->common, t);
-}
-
-static int rist_keepalive_timeout_set(struct rist_common_ctx *ctx, int t)
-{
-	if (t > 0) {
-		ctx->rist_keepalive_interval = t * RIST_CLOCK;
-		return 0;
-	}
-
-	return -1;
-}
-
-int rist_sender_keepalive_timeout_set(struct rist_sender *ctx, int t)
-{
-	return rist_keepalive_timeout_set(&ctx->common, t);
-}
-
-int rist_receiver_keepalive_timeout_set(struct rist_receiver *ctx, int t)
-{
-	return rist_keepalive_timeout_set(&ctx->common, t);
 }
 
 static int rist_max_jitter_set(struct rist_common_ctx *ctx, int t)
@@ -987,13 +955,21 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		return NULL;
 	}
 
-	strncpy(&p->miface[0], config->miface, 128);
-	strncpy(&p->cname[0], config->cname, 128);
+	strncpy(&p->miface[0], config->miface, RIST_MAX_STRING_SHORT);
+	strncpy(&p->cname[0], config->cname, RIST_MAX_STRING_SHORT);
 
 	if (!config->key_size) { 
 		p->key_secret.key_size = config->key_size;
-		strncpy(&p->key_secret.password[0], config->secret, 128);
+		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		p->key_secret.key_rotation = config->key_rotation;
+	}
+
+	if (config->keepalive_interval > 0) {
+		p->rtcp_keepalive_interval = config->keepalive_interval * RIST_CLOCK;
+	}
+
+	if (config->session_timeout > 0) {
+		p->session_timeout = config->session_timeout * RIST_CLOCK;
 	}
 
 	/* Initialize socket */
@@ -1732,9 +1708,9 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 {
 	peer->key_secret.key_size = peer_src->key_secret.key_size;
 	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
-	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], 128);
-	strncpy(&peer->cname[0], &peer_src->cname[0], 128);
-	strncpy(&peer->miface[0], &peer_src->miface[0], 128);
+	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], RIST_MAX_STRING_SHORT);
+	strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
+	strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
 	peer->config.weight = peer_src->config.weight;
 	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
 	peer->config.recovery_mode = peer_src->config.recovery_mode;
@@ -1748,6 +1724,9 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->config.buffer_bloat_mode = peer_src->config.buffer_bloat_mode;
 	peer->config.buffer_bloat_limit = peer_src->config.buffer_bloat_limit;
 	peer->config.buffer_bloat_hard_limit = peer_src->config.buffer_bloat_hard_limit;
+	peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
+	peer->session_timeout = peer_src->session_timeout;
+
 	init_peer_settings(peer);
 }
 
@@ -2437,6 +2416,7 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_sender *se
 
 	p->receiver_mode = (receiver_ctx != NULL);
 	p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
+	p->rtcp_keepalive_interval = RIST_PING_INTERVAL * RIST_CLOCK;
 	p->sender_ctx = sender_ctx;
 	p->receiver_ctx = receiver_ctx;
 	p->birthtime_local = timestampNTP_u64();
@@ -2472,7 +2452,7 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 	return 0;
 }
 
-static void sender_peer_events(struct rist_sender *ctx)
+static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
 {
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 
@@ -2480,9 +2460,11 @@ static void sender_peer_events(struct rist_sender *ctx)
 
 	for (size_t j = 0; j < ctx->peer_lst_len; j++) {
 		struct rist_peer *peer = ctx->peer_lst[j];
-		// TODO: check last time sent and skip it
 		if (peer->send_keepalive) {
-			rist_peer_rtcp(NULL, peer);
+			if (now > peer->keepalive_next_time) {
+				peer->keepalive_next_time = now + peer->rtcp_keepalive_interval;
+				rist_peer_rtcp(NULL, peer);
+			}
 		}
 	}
 
@@ -2499,7 +2481,6 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 	uint64_t rist_stats_interval = (uint64_t)1000 * (uint64_t)RIST_CLOCK; // 1 second
-	uint64_t rist_keepalive_interval = (uint64_t)ctx->common.rist_keepalive_interval;
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting master sender loop at %d ms max jitter\n",
 				max_jitter_ms);
@@ -2507,7 +2488,6 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	uint64_t now  = timestampNTP_u64();
 	ctx->common.nacks_next_time = now;
 	ctx->stats_next_time = now;
-	ctx->common.keepalive_next_time = now;
 	while(!ctx->common.shutdown) {
 
 		// Conditional 5ms sleep that is woken by data coming in
@@ -2545,10 +2525,7 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 		evsocket_loop_single(ctx->common.evctx, 0);
 
 		// keepalive timer
-		if (now > ctx->common.keepalive_next_time) {
-			ctx->common.keepalive_next_time += rist_keepalive_interval;
-			sender_peer_events(ctx);
-		}
+		sender_peer_events(ctx, now);
 
 		// Send data and process nacks
 		if (ctx->sender_queue_bytesize > 0) {
@@ -2580,7 +2557,6 @@ static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profil
 {
 	init_socket_subsystem();
 	ctx->evctx = evsocket_init();
-	ctx->rist_keepalive_interval = RIST_PING_INTERVAL * RIST_CLOCK;
 	ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
 	if (profile > RIST_PROFILE_MAIN) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Profile not supported (%d), using main profile instead\n", profile);
@@ -3002,13 +2978,21 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		return NULL;
 	}
 
-	strncpy(&newpeer->miface[0], config->miface, 128);
-	strncpy(&newpeer->cname[0], config->cname, 128);
+	strncpy(&newpeer->miface[0], config->miface, RIST_MAX_STRING_SHORT);
+	strncpy(&newpeer->cname[0], config->cname, RIST_MAX_STRING_SHORT);
 
 	if (!config->key_size) { 
 		newpeer->key_secret.key_size = config->key_size;
-		strncpy(&newpeer->key_secret.password[0], config->secret, 128);
+		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		newpeer->key_secret.key_rotation = config->key_rotation;
+	}
+
+	if (config->keepalive_interval > 0) {
+		newpeer->rtcp_keepalive_interval = config->keepalive_interval * RIST_CLOCK;
+	}
+
+	if (config->session_timeout > 0) {
+		newpeer->session_timeout = config->session_timeout * RIST_CLOCK;
 	}
 
 	/* Initialize socket */
@@ -3159,15 +3143,17 @@ int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_nack_type n
 	return 0;
 }
 
-void receiver_peer_events(struct rist_receiver *ctx)
+void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 {
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 	pthread_rwlock_wrlock(peerlist_lock);
 
 	for (struct rist_peer *p = ctx->common.PEERS; p != NULL; p = p->next) {
-		// TODO: check last time sent and skip it
 		if (p->send_keepalive) {
-			rist_peer_rtcp(NULL, p);
+			if (now > p->keepalive_next_time) {
+				p->keepalive_next_time = now + p->rtcp_keepalive_interval;
+				rist_peer_rtcp(NULL, p);
+			}
 		}
 	}
 
@@ -3270,11 +3256,9 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *) arg;
 	uint64_t now = timestampNTP_u64();
-	ctx->common.keepalive_next_time = now;
 	int max_oobperloop = 100;
 
 	uint64_t rist_nack_interval = (uint64_t)ctx->common.rist_max_jitter;
-	uint64_t rist_keepalive_interval = (uint64_t)ctx->common.rist_keepalive_interval;
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting receiver protocol loop with %d ms timer\n", max_jitter_ms);
@@ -3309,10 +3293,7 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		evsocket_loop_single(ctx->common.evctx, max_jitter_ms);
 
 		// keepalive timer
-		if (now > ctx->common.keepalive_next_time) {
-			ctx->common.keepalive_next_time += rist_keepalive_interval;
-			receiver_peer_events(ctx);
-		}
+		receiver_peer_events(ctx, now);
 
 		// nacks timer
 		if (now > ctx->common.nacks_next_time) {

@@ -6,40 +6,6 @@
 #ifndef LIBRIST_H
 #define LIBRIST_H
 
-/* Track PROTOCOL and API changes */
-#define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (6)
-#define RIST_SUBVERSION (0)
-#define RIST_PEER_CONFIG_VERSION (0)
-
-/* Default peer config values */
-#define RIST_DEFAULT_VIRT_DST_PORT (1968)
-#define RIST_DEFAULT_RECOVERY_MODE RIST_RECOVERY_MODE_TIME
-#define RIST_DEFAULT_RECOVERY_MAXBITRATE (100000)
-#define RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN (0)
-#define RIST_DEFAULT_RECOVERY_LENGHT_MIN (1000)
-#define RIST_DEFAULT_RECOVERY_LENGHT_MAX (1000)
-#define RIST_DEFAULT_RECOVERY_REORDER_BUFFER (25)
-#define RIST_DEFAULT_RECOVERY_RTT_MIN (50)
-#define RIST_DEFAULT_RECOVERY_RTT_MAX (500)
-#define RIST_DEFAULT_BUFFER_BLOAT_MODE RIST_BUFFER_BLOAT_MODE_OFF
-#define RIST_DEFAULT_BUFFER_BLOAT_LIMIT	(6)
-#define RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT (20)
-
-/* Rist URL parameter names */
-#define RIST_URL_PARAM_BUFFER_SIZE    "buffer"
-#define RIST_URL_PARAM_SECRET         "secret"
-#define RIST_URL_PARAM_AES_TYPE       "aes-type"
-#define RIST_URL_PARAM_BANDWIDTH      "bandwidth"
-#define RIST_URL_PARAM_RET_BANDWIDTH  "return-bandwidth"
-#define RIST_URL_PARAM_REORDER_BUFFER "reorder-buffer"
-#define RIST_URL_PARAM_RTT            "rtt"
-#define RIST_URL_PARAM_COMPRESSION    "compression"
-#define RIST_URL_PARAM_CNAME          "cname"
-#define RIST_URL_PARAM_VIRT_DST_PORT  "virt_dst_port"
-#define RIST_URL_PARAM_WEIGHT         "weight"
-#define RIST_URL_PARAM_MIFACE         "miface"
-
 #include <stdint.h>
 #include <stdlib.h>
 
@@ -82,6 +48,55 @@
 #endif /* defined(_WIN32) || defined(__CYGWIN__) */
 
 __BEGIN_DECLS
+
+/* Used for cname, miface and shared secret */
+#define RIST_MAX_STRING_SHORT 128
+/* Used for url/address */
+#define RIST_MAX_STRING_LONG 256
+
+/* Track PROTOCOL and API changes */
+#define RIST_PROTOCOL_VERSION (2)
+#define RIST_API_VERSION (6)
+#define RIST_SUBVERSION (0)
+#define RIST_PEER_CONFIG_VERSION (0)
+
+/* Default peer config values */
+#define RIST_DEFAULT_VIRT_SRC_PORT (1971)
+#define RIST_DEFAULT_VIRT_DST_PORT (1968)
+#define RIST_DEFAULT_RECOVERY_MODE RIST_RECOVERY_MODE_TIME
+#define RIST_DEFAULT_RECOVERY_MAXBITRATE (100000)
+#define RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN (0)
+#define RIST_DEFAULT_RECOVERY_LENGHT_MIN (1000)
+#define RIST_DEFAULT_RECOVERY_LENGHT_MAX (1000)
+#define RIST_DEFAULT_RECOVERY_REORDER_BUFFER (25)
+#define RIST_DEFAULT_RECOVERY_RTT_MIN (50)
+#define RIST_DEFAULT_RECOVERY_RTT_MAX (500)
+#define RIST_DEFAULT_BUFFER_BLOAT_MODE RIST_BUFFER_BLOAT_MODE_OFF
+#define RIST_DEFAULT_BUFFER_BLOAT_LIMIT	(6)
+#define RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT (20)
+#define RIST_DEFAULT_VERBOSE_LEVEL RIST_LOG_WARN
+#define RIST_DEFAULT_PROFILE RIST_PROFILE_MAIN
+
+/* Rist URL parameter names (per peer) */
+#define RIST_URL_PARAM_BUFFER_SIZE    "buffer"
+#define RIST_URL_PARAM_SECRET         "secret"
+#define RIST_URL_PARAM_AES_TYPE       "aes-type"
+#define RIST_URL_PARAM_BANDWIDTH      "bandwidth"
+#define RIST_URL_PARAM_RET_BANDWIDTH  "return-bandwidth"
+#define RIST_URL_PARAM_REORDER_BUFFER "reorder-buffer"
+#define RIST_URL_PARAM_RTT            "rtt"
+#define RIST_URL_PARAM_COMPRESSION    "compression"
+#define RIST_URL_PARAM_CNAME          "cname"
+#define RIST_URL_PARAM_VIRT_DST_PORT  "virt_dst_port"
+#define RIST_URL_PARAM_WEIGHT         "weight"
+#define RIST_URL_PARAM_MIFACE         "miface"
+#define RIST_URL_PARAM_SESS_TIMEOUT   "session-timeout"
+#define RIST_URL_PARAM_KEEPALIVE_INT  "keepalive-interval"
+/* Rist additional parameter names */
+#define RIST_PARAM_VIRT_SRC_PORT      "virt_src_port"
+#define RIST_PARAM_VIRT_DST_PORT      RIST_URL_PARAM_VIRT_DST_PORT
+#define RIST_PARAM_PROFILE            "profile"
+#define RIST_PARAM_VERBOSE_LEVEL      "verbose-level"
 
 enum rist_nack_type {
 	RIST_NACK_RANGE = 0,
@@ -151,8 +166,8 @@ struct rist_peer_config {
 	// treated like an IP address or hostname
 	int address_family; 
 	int initiate_conn;
-	const char address[256];
-	const char miface[128];
+	const char address[RIST_MAX_STRING_LONG];
+	const char miface[RIST_MAX_STRING_SHORT];
 	uint16_t physical_port;
 
 	/* The virtual destination port is not used for simple profile */
@@ -167,12 +182,12 @@ struct rist_peer_config {
 	uint32_t recovery_reorder_buffer;
 	uint32_t recovery_rtt_min;
 	uint32_t recovery_rtt_max;
-
+	
 	/* Load balancing weight (use 0 for duplication) */
 	uint32_t weight;
 
 	/* Encryption */
-	const char secret[128];
+	const char secret[RIST_MAX_STRING_SHORT];
 	int key_size;
 	uint32_t key_rotation;
 
@@ -180,12 +195,16 @@ struct rist_peer_config {
 	int compression;
 
 	/* cname identifier for rtcp packets */
-	const char cname[128];
+	const char cname[RIST_MAX_STRING_SHORT];
 
 	/* Congestion control */
 	enum rist_buffer_bloat_mode buffer_bloat_mode;
 	uint32_t buffer_bloat_limit;
 	uint32_t buffer_bloat_hard_limit;
+
+	/* Connection options */
+	uint32_t session_timeout;
+	uint32_t keepalive_interval;
 
 };
 
@@ -204,7 +223,7 @@ RIST_API int rist_sender_create(struct rist_sender **ctx, enum rist_profile prof
 				uint32_t flow_id, enum rist_log_level log_level);
 
  /**
- * @brief Assign dynamic authentiation handler
+ * @brief Assign dynamic authentication handler
  *
  * Whenever a new peer is connected, @a connect_cb is called.
  * Whenever a new peer is disconnected, @a disconn_cb is called.
@@ -245,28 +264,6 @@ RIST_API int rist_sender_peer_create(struct rist_sender *ctx,
  */
 RIST_API int rist_sender_peer_destroy(struct rist_sender *ctx,
 		struct rist_peer *peer);
-
-/**
- * @brief Set RIST retry timeout
- *
- * Set time interleaving retries during the protocol handshake
- *
- * @param ctx RIST sender context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_session_timeout_set(struct rist_sender *ctx, int t);
-
-/**
- * @brief Set RIST keep-alive timeout
- *
- * Set keep-alive timeout
- *
- * @param ctx RIST sender context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_keepalive_timeout_set(struct rist_sender *ctx, int t);
 
 /**
  * @brief Set RIST max jitter
@@ -413,28 +410,6 @@ RIST_API int rist_receiver_peer_create(struct rist_receiver *ctx,
  */
 RIST_API int rist_receiver_peer_destroy(struct rist_receiver *ctx,
 		struct rist_peer *peer);
-
-/**
- * @brief Set RIST retry timeout
- *
- * Set time interleaving retries during the protocol handshake
- *
- * @param ctx RIST receiver context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_session_timeout_set(struct rist_receiver *ctx, int t);
-
-/**
- * @brief Set RIST keep-alive timeout
- *
- * Set keep-alive timeout
- *
- * @param ctx RIST receiver context
- * @param t timeout in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_keepalive_timeout_set(struct rist_receiver *ctx, int t);
 
 /**
  * @brief Set RIST max jitter
