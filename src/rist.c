@@ -966,9 +966,9 @@ nack_loop_continue:
 static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx, 
 		const struct rist_peer_config *config)
 {
-	if (!config->key_size) { 
-		if (config->key_rotation != 128 && config->key_size != 192 && config->key_size != 256) {
-			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length\n");
+	if (config->key_size) { 
+		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
 		if (!config->secret || !strlen(config->secret)) {
@@ -2981,9 +2981,9 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
-	if (!config->key_size) { 
-		if (config->key_rotation != 128 && config->key_size != 192 && config->key_size != 256) {
-			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length\n");
+	if (config->key_size) { 
+		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
 		if (!config->secret || !strlen(config->secret)) {
