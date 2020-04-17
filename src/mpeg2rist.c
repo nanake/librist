@@ -159,7 +159,7 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint16_t virt_src_port = 1971;
 	uint16_t virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
-	uint8_t encryption_type = 1;
+	uint8_t encryption_type = 0;
 	enum rist_recovery_mode recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
 	uint32_t recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
 	uint32_t recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
