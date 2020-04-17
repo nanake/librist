@@ -3424,7 +3424,7 @@ int rist_sender_destroy(struct rist_sender *ctx)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
-	while (ctx->common.shutdown != 2) {
+	while (ctx->sender_thread && ctx->common.shutdown != 2) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
 	}
@@ -3441,7 +3441,7 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
-	while (ctx->common.shutdown != 2) {
+	while (ctx->receiver_thread && ctx->common.shutdown != 2) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
 	}
