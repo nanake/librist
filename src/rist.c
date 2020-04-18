@@ -346,7 +346,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		size_t idx_initial = seq % f->receiver_queue_max;
 		f->receiver_queue_output_idx = idx_initial;
 		msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-			"[INIT] Storing first packet seq %"PRIu32", idx %zu, offset %"PRId64" ms\n", seq, idx_initial, peer->flow->time_offset/RIST_CLOCK);
+			"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n", 
+			seq, idx_initial, source_time, peer->flow->time_offset/RIST_CLOCK);
 		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port);
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
@@ -958,7 +959,7 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 	strncpy(&p->miface[0], config->miface, RIST_MAX_STRING_SHORT);
 	strncpy(&p->cname[0], config->cname, RIST_MAX_STRING_SHORT);
 
-	if (!config->key_size) { 
+	if (config->key_size) { 
 		p->key_secret.key_size = config->key_size;
 		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		p->key_secret.key_rotation = config->key_rotation;
@@ -2981,7 +2982,7 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	strncpy(&newpeer->miface[0], config->miface, RIST_MAX_STRING_SHORT);
 	strncpy(&newpeer->cname[0], config->cname, RIST_MAX_STRING_SHORT);
 
-	if (!config->key_size) { 
+	if (config->key_size) { 
 		newpeer->key_secret.key_size = config->key_size;
 		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		newpeer->key_secret.key_rotation = config->key_rotation;
