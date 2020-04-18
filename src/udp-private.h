@@ -281,6 +281,52 @@ RIST_PRIV uint64_t timestampNTP_u64(void);
 RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
 RIST_PRIV uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp);
 
+static inline uint32_t get_rtp_ts_clock(uint8_t ptype) {
+	uint32_t clock = 0;
+	switch(ptype) {
+		case RTP_PTYPE_MPEGTS:
+		case 14: // MPA
+		case 25: // CelB
+		case 26: // JPEG
+		case 28: // nv
+		case 31: // H261
+		case 32: // MPV
+		case 34: // H263
+			clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
+			break;
+		case 0: // PCMU
+		case 3: // GSM
+		case 4: // G723
+		case 5: // DVI4
+		case 7: // LPC
+		case 8: // PCMA
+		case 9: // G722
+		case 12: // QCELP
+		case 13: // CN
+		case 15: // G728
+		case 18: // G729
+			clock = 8000;
+			break;
+		case 16: // DVI4
+			clock = 11025;
+			break;
+		case 6: // DVI4
+			clock = 16000;
+			break;
+		case 17: // DVI4
+			clock = 22050;
+			break;
+		case 10: // L16
+		case 11: // L16
+			clock = 44100;
+			break;
+		default:
+			clock = 0;
+			break;
+	}
+	return clock;
+}
+
 __END_DECLS
 
 #endif

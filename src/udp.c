@@ -53,16 +53,10 @@ uint64_t timestampNTP_u64(void)
 
 uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 {
-	if (0 && !advanced) {
-		uint64_t seconds = (i_ntp >> 32) & 0xFFFFFFFF;
-		// NTP fraction is 232ps based
-		uint64_t fraction = i_ntp & 0xFFFFFFFF;
-		fraction = 1000000 * fraction / 4294967296ULL; // microseconds
-		uint64_t i_pts = seconds * 1000000 + fraction;
-
-		lldiv_t q = lldiv(i_pts, 1000000);
-		return q.quot * (int64_t)RTP_PTYPE_MPEGTS_CLOCKHZ
-				+ q.rem * (int64_t)RTP_PTYPE_MPEGTS_CLOCKHZ / 1000000;
+	if (!advanced) {
+		i_ntp *= RTP_PTYPE_MPEGTS_CLOCKHZ;
+		i_ntp = i_ntp >> 32;
+		return (uint32_t)i_ntp;
 	}
 	else
 	{
@@ -74,66 +68,27 @@ uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 
 uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp)
 {
-	if (1 || ptype == RTP_PTYPE_RIST) {
+	uint64_t i_ntp;
+	if (ptype == RTP_PTYPE_RIST) {
 		// Convert rtp to 64 bit and shift it 16 bits
 		uint64_t part2 = (uint64_t)i_rtp;
 		part2 = part2 << 16;
 		// rebuild source_time (lower and upper 16 bits)
 		uint64_t part3 = (uint64_t)(time_extension & 0xffff);
 		uint64_t part1 = ((uint64_t)(time_extension & 0xffff0000)) << 32;
-		uint64_t i_ntp = part1 | part2 | part3;
+		i_ntp = part1 | part2 | part3;
 		//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
-		return i_ntp;
 	} else {
-		// Convert from other clocks to NTP clock (65536Hz)
-		uint64_t clock = 0;
-		switch(ptype) {
-			case RTP_PTYPE_MPEGTS:
-			case 14: // MPA
-			case 25: // CelB
-			case 26: // JPEG
-			case 28: // nv
-			case 31: // H261
-			case 32: // MPV
-			case 34: // H263
-				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
-				break;
-			case 0: // PCMU
-			case 3: // GSM
-			case 4: // G723
-			case 5: // DVI4
-			case 7: // LPC
-			case 8: // PCMA
-			case 9: // G722
-			case 12: // QCELP
-			case 13: // CN
-			case 15: // G728
-			case 18: // G729
-				clock = 8000;
-				break;
-			case 16: // DVI4
-				clock = 11025;
-				break;
-			case 6: // DVI4
-				clock = 16000;
-				break;
-			case 17: // DVI4
-				clock = 22050;
-				break;
-			case 10: // L16
-			case 11: // L16
-				clock = 44100;
-			break;
-			default:
+		int32_t clock = get_rtp_ts_clock(ptype);
+		if (RIST_UNLIKELY(!clock)){
 				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
 				// Insert a new timestamp (not ideal but better than failing)
 				i_rtp = htobe32(timestampRTP_u32(0, timestampNTP_u64()));
-			break;
 		}
-		lldiv_t q = lldiv(i_rtp, clock);
-		return q.quot * (int64_t)RTP_PTYPE_RIST_CLOCKHZ
-				+ q.rem * (int64_t)RTP_PTYPE_RIST_CLOCKHZ / clock;
+		i_ntp = (uint64_t)i_rtp << 32;
+		i_ntp /= clock;
 	}
+	return i_ntp;
 }
 
 void rist_clean_sender_enqueue(struct rist_sender *ctx)
