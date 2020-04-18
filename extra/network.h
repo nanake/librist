@@ -1,4 +1,7 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* Copyright © 2006-2007 Rémi Denis-Courmont
+ * Authors: Laurent Aimar <fenrir@videolan.org>
+ *          Rémi Denis-Courmont
+ * librist. Copyright 2019 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
