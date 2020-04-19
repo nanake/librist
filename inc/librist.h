@@ -87,13 +87,13 @@ __BEGIN_DECLS
 #define RIST_URL_PARAM_RTT            "rtt"
 #define RIST_URL_PARAM_COMPRESSION    "compression"
 #define RIST_URL_PARAM_CNAME          "cname"
-#define RIST_URL_PARAM_VIRT_DST_PORT  "virt_dst_port"
+#define RIST_URL_PARAM_VIRT_DST_PORT  "virt-dst-port"
 #define RIST_URL_PARAM_WEIGHT         "weight"
 #define RIST_URL_PARAM_MIFACE         "miface"
 #define RIST_URL_PARAM_SESS_TIMEOUT   "session-timeout"
 #define RIST_URL_PARAM_KEEPALIVE_INT  "keepalive-interval"
 /* Rist additional parameter names */
-#define RIST_PARAM_VIRT_SRC_PORT      "virt_src_port"
+#define RIST_PARAM_VIRT_SRC_PORT      "virt-src-port"
 #define RIST_PARAM_VIRT_DST_PORT      RIST_URL_PARAM_VIRT_DST_PORT
 #define RIST_PARAM_PROFILE            "profile"
 #define RIST_PARAM_VERBOSE_LEVEL      "verbose-level"
