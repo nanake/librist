@@ -263,6 +263,7 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 		flow->stats_instant.cur_ips = (flow->stats_instant.total_ips / flow->stats_instant.avg_count);
 	}
 
+	// TODO: use the new setting per peer called session_timeout instead
 	// TODO: STALE_FLOW_TIME or buffer size in us ... which ever is greater
 	if ((flow->stats_total.last_recv_ts != 0) && (timestampNTP_u64() - flow->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME)) {
 		if ((timestampNTP_u64() - flow->stats_total.last_recv_ts) < (1.5*(uint64_t)STALE_FLOW_TIME)) {
