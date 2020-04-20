@@ -21,7 +21,7 @@ int parse_url(char *url, struct network_url *parsed_url)
 {
 	char *hostname, *cut, *p, *portstr = NULL;
 	char *listening = NULL;
-	long int port;
+	long int port = 0;
 	int ret;
 	struct addrinfo *ai, *orig;
 	struct sockaddr *res = NULL;
@@ -1014,8 +1014,6 @@ int udp_Open(const char *psz_bind, int i_bind,
 									psz_server, i_server, miface, gai_strerror(errno));
 							continue;
 						}
-					} else {
-						val = ret;
 					}
 				}
 			} else {
