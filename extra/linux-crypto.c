@@ -3,6 +3,7 @@
  * Linux Crypto API, based on libkcapi
  * Author: Stephan Mueller <smueller@chronox.de>
  * Modified for librist by: Gijs Peskens <gijs@in2ip.nl>
+ * Modified for librist by: Sergio Ammirata <sergio@ammirata.net>
  */
 
 #include "linux-crypto.h"
@@ -161,12 +162,14 @@ int linux_crypto_init(struct linux_crypto **_ctx) {
     };
     ctx->sockfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
     if (ctx->sockfd == -1) {
-        printf("Failed to set up socket!\n");
-        return ctx->sockfd;
+        fprintf(stderr, "Failed to set up socket!\n");
+		free(ctx);
+        return -1;
     }
     ret = bind(ctx->sockfd, (struct sockaddr *)&sa, sizeof(sa));
     if (ret == -1) {
-        printf("Failed to bind to socket!\n");
+        fprintf(stderr, "Failed to bind to socket!\n");
+		free(ctx);
         return ret;
     }
 
@@ -184,14 +187,14 @@ int linux_crypto_set_key(const uint8_t *key, int keylen, struct linux_crypto *ct
 
     ret = setsockopt(ctx->sockfd, SOL_ALG, ALG_SET_KEY, key, keylen);
     if (ret < 0) {
-        printf("Errno is %d\n", -errno);
-        printf("Failed to set key!\n");
-        exit(-1);
+        fprintf(stderr, "Errno is %d\n", -errno);
+        fprintf(stderr, "Failed to set key!\n");
+        return -1;
     }
 
 	ctx->cryptofd = accept(ctx->sockfd, NULL, 0);
     if ( ctx->cryptofd == -1) {
-        printf("Failed to accept socket!\n");
+        fprintf(stderr, "Failed to accept socket!\n");
         return ctx->cryptofd;
     }
     return ret;

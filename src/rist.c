@@ -963,6 +963,9 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		p->key_secret.key_size = config->key_size;
 		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		p->key_secret.key_rotation = config->key_rotation;
+		linux_crypto_init(&p->cryptoctx);
+		if (p->cryptoctx)
+			msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Crypto AES-NI found and activated\n");
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -1709,6 +1712,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 {
 	peer->key_secret.key_size = peer_src->key_secret.key_size;
 	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
+	peer->cryptoctx = peer_src->cryptoctx;
 	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], RIST_MAX_STRING_SHORT);
 	strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 	strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
@@ -1913,8 +1917,10 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 #ifndef __linux
 				aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
 #else
-				if (!peer->cryptoctx) linux_crypto_init(&peer->cryptoctx);
-				linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx);
+				if (peer->cryptoctx)
+					linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx);
+				else
+					aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
 #endif
 			}
 
@@ -1938,7 +1944,11 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			aes_decrypt_ctr((const void *) (recv_buf + gre_size), ret - gre_size, (void *) (recv_buf + gre_size),
 				k->aes_key_sched, k->key_size, IV);
 #else
-			linux_crypto_decrypt((void *)(recv_buf + gre_size), ret - gre_size, IV, peer->cryptoctx);
+			if (peer->cryptoctx)
+				linux_crypto_decrypt((void *)(recv_buf + gre_size), ret - gre_size, IV, peer->cryptoctx);
+			else
+				aes_decrypt_ctr((const void *) (recv_buf + gre_size), ret - gre_size, (void *) (recv_buf + gre_size),
+					k->aes_key_sched, k->key_size, IV);
 #endif
 		} else if (has_seq) {
 			// Key bit is not set, that means the other side does not want to send
@@ -2960,17 +2970,17 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 {
 	if (config->key_size) { 
 		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
-			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
+			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
 		if (!config->secret || !strlen(config->secret)) {
-			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
+			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
 			return NULL;
 		}
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Using %d bits secret key\n", config->key_size);
+		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Using %d bits secret key\n", config->key_size);
 	}
 	else {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Encryption is disabled for this peer\n");
+		msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Encryption is disabled for this peer\n");
 	}
 
 	/* Initialize peer */
@@ -2986,6 +2996,9 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		newpeer->key_secret.key_size = config->key_size;
 		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		newpeer->key_secret.key_rotation = config->key_rotation;
+		linux_crypto_init(&newpeer->cryptoctx);
+		if (newpeer->cryptoctx)
+			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Crypto AES-NI found and activated\n");
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -3206,6 +3219,9 @@ static void rist_receiver_destroy_local(struct rist_receiver *ctx)
 				peer->sd = -1;
 			}
 
+			if (peer->cryptoctx)
+				free(peer->cryptoctx);
+
 			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing up peer memory allocation\n");
 			free(peer);
 			peer = nextpeer;
@@ -3378,6 +3394,10 @@ static void rist_sender_destroy_local(struct rist_sender *ctx)
 			udp_Close(peer->sd);
 			peer->sd = -1;
 		}
+
+		if (peer->cryptoctx)
+			free(peer->cryptoctx);
+
 		free(peer);
 	}
 
