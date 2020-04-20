@@ -17,6 +17,7 @@
 #include "lz4/lz4.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
+#include <assert.h>
 #ifdef __linux
 #include "linux-crypto.h"
 #endif
@@ -204,6 +205,7 @@ int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t)
 
 static void init_peer_settings(struct rist_peer *peer)
 {
+	assert(peer->receiver_ctx != NULL);
 	if (peer->receiver_mode) {
 		uint32_t recovery_maxbitrate_mbps = peer->config.recovery_maxbitrate < 1000 ? 1 : peer->config.recovery_maxbitrate / 1000;
 		// Initial value for some variables
@@ -237,6 +239,7 @@ static void init_peer_settings(struct rist_peer *peer)
 			peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.buffer_bloat_mode, peer->config.buffer_bloat_limit, peer->config.buffer_bloat_hard_limit);
 	}
 	else {
+		assert(peer->sender_ctx != NULL);
 		struct rist_sender *ctx = peer->sender_ctx;
 		/* Global context settings */
 		if (peer->config.recovery_maxbitrate > ctx->recovery_maxbitrate_max) {
@@ -1220,6 +1223,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 		uint32_t flow_id, uint16_t src_port, uint16_t dst_port, const uint8_t *payload, 
 		size_t payload_len, uint32_t nack_seq_msb)
 {
+	assert(peer->sender_ctx != NULL);
 	intptr_t sender_id = peer->sender_ctx->id;
 
 	if (peer->receiver_mode) {
@@ -1246,7 +1250,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 			msg(0, sender_id, RIST_LOG_ERROR, "[NACK] Non-Rist nack packet (%s).\n", rtcp_nack->name);
 			return; /* Ignore app-type not RIST */
 		}
-		uint16_t nrecords =	nrecords = ntohs(rtcp->len) - 2;
+		uint16_t nrecords =	ntohs(rtcp->len) - 2;
 		//msg(0, sender_id, RIST_LOG_ERROR, "[ERROR] Nack (RbRR), %d record(s)\n", nrecords);
 		for (i = 0; i < nrecords; i++) {
 			uint16_t missing;
@@ -1263,7 +1267,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 	} else if (rtcp->ptype == PTYPE_NACK_BITMASK) {
 		struct rist_rtcp_nack_bitmask *rtcp_nack = (struct rist_rtcp_nack_bitmask *) payload;
 		(void)rtcp_nack;
-		uint16_t nrecords =	nrecords = ntohs(rtcp->len) - 2;
+		uint16_t nrecords =	ntohs(rtcp->len) - 2;
 		//msg(0, sender_id, RIST_LOG_ERROR, "[ERROR] Nack (BbRR), %d record(s)\n", nrecords);
 		for (i = 0; i < nrecords; i++) {
 			uint16_t missing;
@@ -1300,6 +1304,7 @@ static struct rist_peer *rist_find_rtcp_peer(struct rist_receiver *ctx, struct r
 static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, struct rist_buffer *payload)
 {
+	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
@@ -1406,6 +1411,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t flow_id,
 		uint64_t source_time, struct rist_buffer *payload, bool retry)
 {
+	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (peer->state_peer < RIST_PEER_STATE_CONNECT || peer->state_local < RIST_PEER_STATE_CONNECT) {
@@ -1481,6 +1487,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, uint16_t src_port, uint16_t dst_port)
 {
+	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (peer->flow && peer->advanced) {
@@ -1524,7 +1531,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
 	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
-	uint8_t *pkt = payload->data;
+	uint8_t *pkt;
 	uint8_t  ptype;
 	uint16_t processed_bytes = 0;
 	uint16_t records;
@@ -3272,7 +3279,7 @@ static void rist_receiver_destroy_local(struct rist_receiver *ctx)
 static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *) arg;
-	uint64_t now = timestampNTP_u64();
+	uint64_t now;
 	int max_oobperloop = 100;
 
 	uint64_t rist_nack_interval = (uint64_t)ctx->common.rist_max_jitter;
