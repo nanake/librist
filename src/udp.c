@@ -530,18 +530,18 @@ void rist_populate_cname(struct rist_peer *peer)
 	}
 	/* Set the CNAME Identifier as host@ip:port and fallback to hostname if needed */
 	char hostname[RIST_MAX_HOSTNAME];
-	struct sockaddr peer_sockaddr;
-	peer_sockaddr.sa_family = AF_UNSPEC;
-	int name_length = sizeof(peer_sockaddr);
+	struct sockaddr_storage peer_sockaddr;
+	int name_length = 0;
 	socklen_t peer_socklen = 0;
 	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
 	if (ret_hostname == -1) {
 		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost");
 	}
-	int ret_sockname = getsockname(fd, &peer_sockaddr, &peer_socklen);
-	if (ret_sockname == 0 && peer_sockaddr.sa_family != AF_UNSPEC) 
+
+	int ret_sockname = getsockname(fd, (struct sockaddr *)&peer_sockaddr, &peer_socklen);
+	if (ret_sockname == 0)
 	{
-		struct sockaddr *peer = &peer_sockaddr;
+		struct sockaddr *peer = (struct sockaddr *)&peer_sockaddr;
 		// TODO: why is this returning non-sense?
 		if (peer->sa_family == AF_INET) {
 			struct sockaddr_in *xin = (struct sockaddr_in*)&peer_sockaddr;
