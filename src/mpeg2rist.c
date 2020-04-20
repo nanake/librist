@@ -116,7 +116,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	oob_block.payload = message;
 	oob_block.payload_len = ret;
 	rist_sender_oob_write(ctx, &oob_block);
-	return 1;
+	return 0;
 }
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
