@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <errno.h>
 #include <stdint.h>
+#include <assert.h>
 #ifdef __linux
 #include <linux-crypto.h>
 #endif
@@ -212,6 +213,8 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	size_t len, gre_len;
 	size_t hdr_len = 0;
 	size_t ret = 0;
+
+	assert(payload != NULL);
 
 	//if (p->receiver_mode)
 	//	msg(receiver_id, sender_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and rtp_seq %"PRIu16" payload is %d\n", 
@@ -527,17 +530,18 @@ void rist_populate_cname(struct rist_peer *peer)
 	}
 	/* Set the CNAME Identifier as host@ip:port and fallback to hostname if needed */
 	char hostname[RIST_MAX_HOSTNAME];
-	struct sockaddr_storage peer_sockaddr;
-	int name_length = 0;
+	struct sockaddr peer_sockaddr;
+	peer_sockaddr.sa_family = AF_UNSPEC;
+	int name_length = sizeof(peer_sockaddr);
 	socklen_t peer_socklen = 0;
 	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
 	if (ret_hostname == -1) {
 		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost");
 	}
-	int ret_sockname = getsockname(fd, (struct sockaddr *)&peer_sockaddr, &peer_socklen);
-	if (ret_sockname == 0)
+	int ret_sockname = getsockname(fd, &peer_sockaddr, &peer_socklen);
+	if (ret_sockname == 0 && peer_sockaddr.sa_family != AF_UNSPEC) 
 	{
-		struct sockaddr *peer = (struct sockaddr *)&peer_sockaddr;
+		struct sockaddr *peer = &peer_sockaddr;
 		// TODO: why is this returning non-sense?
 		if (peer->sa_family == AF_INET) {
 			struct sockaddr_in *xin = (struct sockaddr_in*)&peer_sockaddr;
@@ -892,7 +896,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 		peer = selected_peer_by_weight;
 		uint8_t *payload = buffer->data;
 		rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate);
-		duplicate = true;
+		//duplicate = true;
 		buffer->seq = ctx->common.seq;
 		buffer->seq_rtp = ctx->common.seq_rtp;
 		ctx->weight_counter--;
