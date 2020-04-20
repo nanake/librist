@@ -1308,7 +1308,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
-		// TODO: copy settings from special rtcp packet if it exists instead of peer parent
+		// TODO: copy settings from special rtcp packet if it exists instead of peer parent (advanced mode)
 	}
 
 	// Check to see if this peer's flowid changed
@@ -1342,7 +1342,6 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 		}
 		// Reset the peer parameters
 		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
-		peer->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
 		peer->flow = NULL;
 	}
 
