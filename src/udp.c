@@ -531,8 +531,9 @@ void rist_populate_cname(struct rist_peer *peer)
 	/* Set the CNAME Identifier as host@ip:port and fallback to hostname if needed */
 	char hostname[RIST_MAX_HOSTNAME];
 	struct sockaddr_storage peer_sockaddr;
+	peer_sockaddr.ss_family = AF_UNSPEC;
 	int name_length = 0;
-	socklen_t peer_socklen = 0;
+	socklen_t peer_socklen = sizeof(peer_sockaddr);
 	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
 	if (ret_hostname == -1) {
 		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost");
@@ -545,11 +546,14 @@ void rist_populate_cname(struct rist_peer *peer)
 		// TODO: why is this returning non-sense?
 		if (peer->sa_family == AF_INET) {
 			struct sockaddr_in *xin = (struct sockaddr_in*)&peer_sockaddr;
-			name_length = snprintf(identifier, RIST_MAX_HOSTNAME, "%s@%s:%u", hostname,
-							inet_ntoa(xin->sin_addr), ntohs(xin->sin_port));
-			if (name_length >= RIST_MAX_HOSTNAME)
-				identifier[RIST_MAX_HOSTNAME-1] = 0;
-		} else if (peer->sa_family == AF_INET6) {
+			char *addr = inet_ntoa(xin->sin_addr);
+			if (strcmp(addr, "0.0.0.0") != 0) {
+				name_length = snprintf(identifier, RIST_MAX_HOSTNAME, "%s@%s:%u", hostname,
+										addr, ntohs(xin->sin_port));
+				if (name_length >= RIST_MAX_HOSTNAME)
+					identifier[RIST_MAX_HOSTNAME-1] = 0;
+			}
+		}/* else if (peer->sa_family == AF_INET6) {
 			struct sockaddr_in6 *xin6 = (void*)peer;
 			char str[INET6_ADDRSTRLEN];
 			inet_ntop(xin6->sin6_family, &xin6->sin6_addr, str, sizeof(struct in6_addr));
@@ -557,7 +561,7 @@ void rist_populate_cname(struct rist_peer *peer)
 							str, ntohs(xin6->sin6_port));
 			if (name_length >= RIST_MAX_HOSTNAME)
 				identifier[RIST_MAX_HOSTNAME-1] = 0;
-		}
+		}*/
 	}
 
 	if (name_length == 0)
