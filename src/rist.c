@@ -206,6 +206,7 @@ int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t)
 static void init_peer_settings(struct rist_peer *peer)
 {
 	if (peer->receiver_mode) {
+		assert(peer->receiver_ctx != NULL);
 		uint32_t recovery_maxbitrate_mbps = peer->config.recovery_maxbitrate < 1000 ? 1 : peer->config.recovery_maxbitrate / 1000;
 		// Initial value for some variables
 		peer->recovery_buffer_ticks =
