@@ -10,9 +10,9 @@
 #ifdef __linux
 
 struct linux_crypto {
-    int sockfd;
-    int cryptofd;
-    struct kcapi_handle *handle;
+	int sockfd;
+	int cryptofd;
+	struct kcapi_handle *handle;
 };
 
 
@@ -66,17 +66,17 @@ int32_t _linux_crypto_send_crypt(struct linux_crypto *ctx,
 	*type = enc;
 
 	/* set IV */
-    header = CMSG_NXTHDR(&msg, header);
-    if (RIST_UNLIKELY(!header)) {
-        ret = -EFAULT;
-        goto out;
-    }
-    header->cmsg_level = SOL_ALG;
-    header->cmsg_type = ALG_SET_IV;
-    header->cmsg_len = iv_msg_size;
-    alg_iv = (void*)CMSG_DATA(header);
-    alg_iv->ivlen = 16;
-    memcpy(alg_iv->iv, iv, 16);
+	header = CMSG_NXTHDR(&msg, header);
+	if (RIST_UNLIKELY(!header)) {
+		ret = -EFAULT;
+		goto out;
+	}
+	header->cmsg_level = SOL_ALG;
+	header->cmsg_type = ALG_SET_IV;
+	header->cmsg_len = iv_msg_size;
+	alg_iv = (void*)CMSG_DATA(header);
+	alg_iv->ivlen = 16;
+	memcpy(alg_iv->iv, iv, 16);
 
 
 	ret = sendmsg(ctx->cryptofd, &msg, 0);
@@ -120,7 +120,7 @@ int32_t _linux_crypto_process(struct linux_crypto *ctx,
 	int32_t totallen = 0;
 	int32_t ret;
 
-    struct iovec iov;
+	struct iovec iov;
 
 	if (RIST_UNLIKELY(!ctx->cryptofd)) {
 		return -1;
@@ -130,13 +130,13 @@ int32_t _linux_crypto_process(struct linux_crypto *ctx,
 		uint32_t inprocess = inlen;
 		uint32_t outprocess = outlen;
 
-        iov.iov_base = (void*)(uintptr_t)in;
-        iov.iov_len = inprocess;
-        ret = _linux_crypto_send_crypt(ctx, &iov, 1, enc, iv);
-        if (RIST_UNLIKELY(0 > ret)) {
-            return ret;
-        }
-        ret = _linux_crypto_read(ctx, out, outprocess);
+		iov.iov_base = (void*)(uintptr_t)in;
+		iov.iov_len = inprocess;
+		ret = _linux_crypto_send_crypt(ctx, &iov, 1, enc, iv);
+		if (RIST_UNLIKELY(0 > ret)) {
+			return ret;
+		}
+		ret = _linux_crypto_read(ctx, out, outprocess);
 
 		if (RIST_UNLIKELY(ret < 0))
 			return ret;
@@ -153,58 +153,58 @@ int32_t _linux_crypto_process(struct linux_crypto *ctx,
 
 int linux_crypto_init(struct linux_crypto **_ctx) {
 
-    struct linux_crypto *ctx = calloc(1, sizeof(*ctx));
-    int ret;
-    struct sockaddr_alg sa = {
-        .salg_family = AF_ALG,
-        .salg_type = "skcipher", /* this selects the symmetric cipher */
-        .salg_name = "ctr(aes)" /* this is the cipher name */
-    };
-    ctx->sockfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
-    if (ctx->sockfd == -1) {
-        fprintf(stderr, "Failed to set up socket!\n");
+	struct linux_crypto *ctx = calloc(1, sizeof(*ctx));
+	int ret;
+	struct sockaddr_alg sa = {
+		.salg_family = AF_ALG,
+		.salg_type = "skcipher", /* this selects the symmetric cipher */
+		.salg_name = "ctr(aes)" /* this is the cipher name */
+	};
+	ctx->sockfd = socket(AF_ALG, SOCK_SEQPACKET, 0);
+	if (ctx->sockfd == -1) {
+		fprintf(stderr, "Failed to set up socket!\n");
 		free(ctx);
-        return -1;
-    }
-    ret = bind(ctx->sockfd, (struct sockaddr *)&sa, sizeof(sa));
-    if (ret == -1) {
-        fprintf(stderr, "Failed to bind to socket!\n");
+		return -1;
+	}
+	ret = bind(ctx->sockfd, (struct sockaddr *)&sa, sizeof(sa));
+	if (ret == -1) {
+		fprintf(stderr, "Failed to bind to socket!\n");
 		free(ctx);
-        return ret;
-    }
+		return ret;
+	}
 
-    *_ctx = ctx;
-    return 0;
+	*_ctx = ctx;
+	return 0;
 
 }
 
 int linux_crypto_set_key(const uint8_t *key, int keylen, struct linux_crypto *ctx) {
-    int ret;
+		int ret;
 
 	if (ctx->cryptofd) {
 		close(ctx->cryptofd);
 	}
 
-    ret = setsockopt(ctx->sockfd, SOL_ALG, ALG_SET_KEY, key, keylen);
-    if (ret < 0) {
-        fprintf(stderr, "Errno is %d\n", -errno);
-        fprintf(stderr, "Failed to set key!\n");
-        return -1;
-    }
+	ret = setsockopt(ctx->sockfd, SOL_ALG, ALG_SET_KEY, key, keylen);
+	if (ret < 0) {
+		fprintf(stderr, "Errno is %d\n", -errno);
+		fprintf(stderr, "Failed to set key!\n");
+		return -1;
+	}
 
 	ctx->cryptofd = accept(ctx->sockfd, NULL, 0);
-    if ( ctx->cryptofd == -1) {
-        fprintf(stderr, "Failed to accept socket!\n");
-        return ctx->cryptofd;
-    }
-    return ret;
+	if ( ctx->cryptofd == -1) {
+		fprintf(stderr, "Failed to accept socket!\n");
+		return ctx->cryptofd;
+	}
+	return ret;
 }
 
 int linux_crypto_decrypt(uint8_t buf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
-    return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 0, iv, 0);
+	return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 0, iv, 0);
 }
 int linux_crypto_encrypt(uint8_t buf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
-    return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 1, iv, 0);
+	return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 1, iv, 0);
 }
 
 #endif
