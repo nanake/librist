@@ -57,7 +57,7 @@ __BEGIN_DECLS
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (6)
-#define RIST_SUBVERSION (1)
+#define RIST_SUBVERSION (2)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */
@@ -78,25 +78,24 @@ __BEGIN_DECLS
 #define RIST_DEFAULT_PROFILE RIST_PROFILE_MAIN
 
 /* Rist URL parameter names (per peer) */
-#define RIST_URL_PARAM_BUFFER_SIZE    "buffer"
-#define RIST_URL_PARAM_SECRET         "secret"
-#define RIST_URL_PARAM_AES_TYPE       "aes-type"
-#define RIST_URL_PARAM_BANDWIDTH      "bandwidth"
-#define RIST_URL_PARAM_RET_BANDWIDTH  "return-bandwidth"
-#define RIST_URL_PARAM_REORDER_BUFFER "reorder-buffer"
-#define RIST_URL_PARAM_RTT            "rtt"
-#define RIST_URL_PARAM_COMPRESSION    "compression"
-#define RIST_URL_PARAM_CNAME          "cname"
-#define RIST_URL_PARAM_VIRT_DST_PORT  "virt-dst-port"
-#define RIST_URL_PARAM_WEIGHT         "weight"
-#define RIST_URL_PARAM_MIFACE         "miface"
-#define RIST_URL_PARAM_SESS_TIMEOUT   "session-timeout"
-#define RIST_URL_PARAM_KEEPALIVE_INT  "keepalive-interval"
+#define RIST_URL_PARAM_BUFFER_SIZE     "buffer"
+#define RIST_URL_PARAM_SECRET          "secret"
+#define RIST_URL_PARAM_AES_TYPE        "aes-type"
+#define RIST_URL_PARAM_BANDWIDTH       "bandwidth"
+#define RIST_URL_PARAM_RET_BANDWIDTH   "return-bandwidth"
+#define RIST_URL_PARAM_REORDER_BUFFER  "reorder-buffer"
+#define RIST_URL_PARAM_RTT             "rtt"
+#define RIST_URL_PARAM_COMPRESSION     "compression"
+#define RIST_URL_PARAM_CNAME           "cname"
+#define RIST_URL_PARAM_VIRT_DST_PORT   "virt-dst-port"
+#define RIST_URL_PARAM_WEIGHT          "weight"
+#define RIST_URL_PARAM_MIFACE          "miface"
+#define RIST_URL_PARAM_SESSION_TIMEOUT "session-timeout"
+#define RIST_URL_PARAM_KEEPALIVE_INT   "keepalive-interval"
 /* Rist additional parameter names */
-#define RIST_PARAM_VIRT_SRC_PORT      "virt-src-port"
-#define RIST_PARAM_VIRT_DST_PORT      RIST_URL_PARAM_VIRT_DST_PORT
-#define RIST_PARAM_PROFILE            "profile"
-#define RIST_PARAM_VERBOSE_LEVEL      "verbose-level"
+#define RIST_URL_PARAM_VIRT_SRC_PORT   "virt-src-port"
+#define RIST_URL_PARAM_PROFILE         "profile"
+#define RIST_URL_PARAM_VERBOSE_LEVEL   "verbose-level"
 
 enum rist_nack_type {
 	RIST_NACK_RANGE = 0,

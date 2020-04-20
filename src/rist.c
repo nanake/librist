@@ -148,7 +148,7 @@ static int parse_url_options(const char* url, 	struct rist_peer_config *output_p
 					int temp = atoi( val );
 					if (temp >= 0)
 						output_peer_config->weight = temp;
-				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SESS_TIMEOUT ) == 0) {
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SESSION_TIMEOUT ) == 0) {
 					int temp = atoi( val );
 					if (temp > 0)
 						output_peer_config->session_timeout = temp;
