@@ -417,7 +417,7 @@ int main(int argc, char *argv[])
 			data_block.payload_len = r;
 			data_block.virt_src_port = virt_src_port;
 			data_block.ts_ntp = 0; // delegate this to the library in this case
-			w = rist_sender_data_write(ctx, &data_block);
+			w = rist_sender_data_write(ctx, &data_block, 0);
 			(void) w;
 		}
 	}
