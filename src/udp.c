@@ -402,7 +402,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 }
 
 /* This function is used by receiver for all and by sender only for rist-data and oob-data */
-int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate)
+int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate, int16_t seq_rtp, int16_t use_seq)
 {
 	intptr_t receiver_id = p->receiver_ctx ? p->receiver_ctx->id : 0;
 	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
@@ -422,8 +422,12 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	if (!duplicate)
 		ctx->seq++;
 
-	if (!duplicate && payload_type == RIST_PAYLOAD_TYPE_DATA_RAW)
-		ctx->seq_rtp++;
+	if (!duplicate && payload_type == RIST_PAYLOAD_TYPE_DATA_RAW) {
+		if (!use_seq) 
+			ctx->seq_rtp++;
+		else
+			ctx->seq_rtp = seq_rtp;
+	}
 
 	size_t ret = 0;
 	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000)) {
@@ -717,7 +721,7 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 	}
 
 	// We use direct send from receiver to sender (no fifo to keep track of seq/idx)
-	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, false);
+	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, false, 0, 0);
 }
 
 void rist_send_sender_rtcp(struct rist_peer *peer)
@@ -826,7 +830,7 @@ void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
 	}
 }
 
-int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port)
+int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, int64_t seq_rtp)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;
 
@@ -839,7 +843,10 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 
 	/* insert into sender fifo queue */
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(data, len, payload_type, 0, datagram_time, src_port, dst_port);
+	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(data, len, payload_type, seq_rtp, datagram_time, src_port, dst_port);
+	if (seq_rtp >= 0) {
+		ctx->sender_queue[ctx->sender_queue_write_index]->use_seq = 1;
+	}
 	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
@@ -881,7 +888,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 
 		if (peer->config.weight == 0) {
 			uint8_t *payload = buffer->data;
-			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate);
+			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq, buffer->use_seq);
 			duplicate = true;
 			buffer->seq = ctx->common.seq;
 			buffer->seq_rtp = ctx->common.seq_rtp;
@@ -899,7 +906,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 	if (selected_peer_by_weight) {
 		peer = selected_peer_by_weight;
 		uint8_t *payload = buffer->data;
-		rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate);
+		rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq_rtp, buffer->use_seq);
 		//duplicate = true;
 		buffer->seq = ctx->common.seq;
 		buffer->seq_rtp = ctx->common.seq_rtp;

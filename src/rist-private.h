@@ -91,6 +91,7 @@ struct rist_buffer {
 	uint16_t src_port;
 	uint16_t dst_port;
 	uint64_t source_time;
+	int8_t use_seq;
 	uint32_t seq;
 	uint16_t seq_rtp;
 	uint64_t time;

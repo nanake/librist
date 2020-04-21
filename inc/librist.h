@@ -144,6 +144,7 @@ struct rist_data_block {
 	uint16_t virt_dst_port;
 	struct rist_peer *peer;
 	uint32_t flow_id;
+	/* Get's populated by librist with the rtp_seq on output, can be used on input to tell librist which rtp_seq to use */
 	uint64_t seq;
 	uint32_t flags;
 };
@@ -330,10 +331,11 @@ RIST_API int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob
  *
  * @param ctx RIST sender context
  * @param data_block pointer to the rist_data_block structure
+ * @param use_rtp_seq use seq from data_block to populate RTP SEQ field and propagate the same SEQ downstream
  * the ts_ntp will be populated by the lib if a value of 0 is passed
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
+RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block, int use_rtp_seq);
 
 /**
  * @brief Destroy RIST sender
@@ -355,6 +357,17 @@ RIST_API int rist_sender_destroy(struct rist_sender *ctx);
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id);
+
+/**
+ * @brief Change the flow_id value
+ *
+ * Change the flow_id value
+ *
+ * @param ctx RIST sender context
+ * @param flow_id new flow_id
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id);
 
 /**
  * Create a RIST receiver instance

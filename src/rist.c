@@ -2222,7 +2222,7 @@ protocol_bypass:
 	}
 }
 
-int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block)
+int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block, int use_rtp_seq)
 {
 	// max protocol overhead for data is gre-header plus gre-reduced-mode-header plus rtp-header
 	// 16 + 4 + 12 = 32
@@ -2234,7 +2234,10 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 	}
 
 	uint64_t ts_ntp = data_block->ts_ntp == 0 ? timestampNTP_u64() : data_block->ts_ntp;
-	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port);
+	int64_t seq_rtp = -1;
+	if (use_rtp_seq)
+		seq_rtp = data_block->seq;
+	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port, seq_rtp);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
 		msg(0, ctx->id, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
@@ -2308,7 +2311,7 @@ static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
 
 		uint8_t *payload = oob_buffer->data;
 		rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
-					oob_buffer->size, 0, 0, 0, false);
+					oob_buffer->size, 0, 0, 0, false, 0, 0);
 		ctx->oob_queue_bytesize -= oob_buffer->size;
 		ctx->oob_queue_read_index++;
 	}
@@ -2401,7 +2404,7 @@ static void sender_send_data(struct rist_sender *ctx, int maxcount)
 			if (buffer->type == RIST_PAYLOAD_TYPE_RTCP) {
 				// TODO can we ever have a null or dead buffer->peer?
 				uint8_t *payload = buffer->data;
-				rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, false);
+				rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, false, 0, 0);
 				buffer->seq = ctx->common.seq;
 				buffer->seq_rtp = ctx->common.seq_rtp;
 			}
@@ -2635,6 +2638,15 @@ fail:
 int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id)
 {
 	*flow_id = ctx->adv_flow_id;
+	return 0;
+}
+
+int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id)
+{
+	ctx->adv_flow_id = flow_id;
+	for (int i =0; i < ctx->peer_lst_len; i++) {
+		ctx->peer_lst[i]->adv_flow_id = flow_id;
+	}
 	return 0;
 }
 
@@ -3457,3 +3469,5 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 
 	return 0;
 }
+
+
