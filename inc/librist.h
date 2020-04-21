@@ -130,6 +130,11 @@ enum rist_buffer_bloat_mode {
 	RIST_BUFFER_BLOAT_MODE_AGGRESSIVE = 2
 };
 
+enum rist_data_block_flags {
+	RIST_DATA_FLAGS_USE_SEQ = 1,
+	RIST_DATA_FLAGS_NEED_FREE = 2,
+};
+
 struct rist_receiver;
 struct rist_sender;
 struct rist_peer;
@@ -331,11 +336,10 @@ RIST_API int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob
  *
  * @param ctx RIST sender context
  * @param data_block pointer to the rist_data_block structure
- * @param use_rtp_seq use seq from data_block to populate RTP SEQ field and propagate the same SEQ downstream
  * the ts_ntp will be populated by the lib if a value of 0 is passed
  * @return number of written bytes on success, -1 in case of error.
  */
-RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block, int use_rtp_seq);
+RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
 
 /**
  * @brief Destroy RIST sender

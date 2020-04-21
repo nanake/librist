@@ -2222,7 +2222,7 @@ protocol_bypass:
 	}
 }
 
-int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block, int use_rtp_seq)
+int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block)
 {
 	// max protocol overhead for data is gre-header plus gre-reduced-mode-header plus rtp-header
 	// 16 + 4 + 12 = 32
@@ -2235,7 +2235,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 
 	uint64_t ts_ntp = data_block->ts_ntp == 0 ? timestampNTP_u64() : data_block->ts_ntp;
 	int64_t seq_rtp = -1;
-	if (use_rtp_seq)
+	if (data_block->flags & RIST_DATA_FLAGS_USE_SEQ)
 		seq_rtp = data_block->seq;
 	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port, seq_rtp);
 	// Wake up data/nack output thread when data comes in
