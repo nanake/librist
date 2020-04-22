@@ -27,7 +27,9 @@ __BEGIN_DECLS
 #include "network.h"
 #include "libevsocket.h"
 #include "aes.h"
+#ifdef __linux
 #include "linux-crypto.h"
+#endif
 #include <errno.h>
 
 #define UINT16_SIZE (UINT16_MAX + 1)

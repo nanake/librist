@@ -965,6 +965,7 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 			return NULL;
 		}
 		if (!config->secret || !strlen(config->secret)) {
+
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
 			return NULL;
 		}
@@ -987,9 +988,11 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 		p->key_secret.key_size = config->key_size;
 		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		p->key_secret.key_rotation = config->key_rotation;
+#ifdef __linux
 		linux_crypto_init(&p->cryptoctx);
 		if (p->cryptoctx)
 			msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Crypto AES-NI found and activated\n");
+#endif
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -1744,7 +1747,9 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 {
 	peer->key_secret.key_size = peer_src->key_secret.key_size;
 	peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
+#ifdef __linux
 	peer->cryptoctx = peer_src->cryptoctx;
+#endif
 	strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], RIST_MAX_STRING_SHORT);
 	strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 	strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
@@ -3041,9 +3046,11 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		newpeer->key_secret.key_size = config->key_size;
 		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		newpeer->key_secret.key_rotation = config->key_rotation;
+#ifdef __linux
 		linux_crypto_init(&newpeer->cryptoctx);
 		if (newpeer->cryptoctx)
 			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Crypto AES-NI found and activated\n");
+#endif
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -3264,8 +3271,10 @@ static void rist_receiver_destroy_local(struct rist_receiver *ctx)
 				peer->sd = -1;
 			}
 
+#ifdef __linux
 			if (peer->cryptoctx)
 				free(peer->cryptoctx);
+#endif
 
 			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing up peer memory allocation\n");
 			free(peer);
@@ -3440,8 +3449,10 @@ static void rist_sender_destroy_local(struct rist_sender *ctx)
 			peer->sd = -1;
 		}
 
+#ifdef __linux
 		if (peer->cryptoctx)
 			free(peer->cryptoctx);
+#endif
 
 		free(peer);
 	}

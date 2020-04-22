@@ -6,8 +6,8 @@
  * Modified for librist by: Sergio Ammirata <sergio@ammirata.net>
  */
 
-#include "linux-crypto.h"
 #ifdef __linux
+#include "linux-crypto.h"
 
 struct linux_crypto {
 	int sockfd;
