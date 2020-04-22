@@ -2980,6 +2980,7 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	peer->config.buffer_bloat_mode = settings->buffer_bloat_mode;
 	peer->config.buffer_bloat_limit = buffer_bloat_limit;
 	peer->config.buffer_bloat_hard_limit = buffer_bloat_hard_limit;
+	peer->config.weight = settings->weight;
 
 	init_peer_settings(peer);
 }
