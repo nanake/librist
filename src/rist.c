@@ -290,6 +290,7 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 	b->dst_port = dst_port;
 	b->last_retry_request = 0;
 	b->transmit_count = 0;
+	b->use_seq = 0;
 
 	return b;
 }

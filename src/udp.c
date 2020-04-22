@@ -843,9 +843,10 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 
 	/* insert into sender fifo queue */
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(data, len, payload_type, seq_rtp, datagram_time, src_port, dst_port);
+	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(data, len, payload_type, 0, datagram_time, src_port, dst_port);
 	if (seq_rtp >= 0) {
 		ctx->sender_queue[ctx->sender_queue_write_index]->use_seq = 1;
+		ctx->sender_queue[ctx->sender_queue_write_index]->seq = (uint32_t)seq_rtp;
 	}
 	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
