@@ -866,7 +866,11 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 	struct rist_peer *selected_peer_by_weight = NULL;
 	uint32_t max_remainder = 0;
 	bool duplicate = false;
+	int peercnt;
 
+peer_select:
+
+	peercnt = 0;
 	for (peer = ctx->common.PEERS; peer; peer = peer->next) {
 
 		if (peer->listening || !peer->is_data || peer->dead)
@@ -880,6 +884,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 			peer->w_count = peer->config.weight;
 			continue;
 		}
+		peercnt++;
 
 		/*************************************/
 		/* * * * * * * * * * * * * * * * * * */
@@ -915,7 +920,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 		peer->w_count--;
 	}
 
-	if (ctx->weight_counter == 0 || !selected_peer_by_weight) {
+	if (ctx->total_weight > 0 && (ctx->weight_counter == 0 || !selected_peer_by_weight)) {
 		peer = ctx->common.PEERS;
 		ctx->weight_counter = ctx->total_weight;
 		for (; peer; peer = peer->next) {
@@ -923,6 +928,8 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 				continue;
 			peer->w_count = peer->config.weight;
 		}
+		if (!selected_peer_by_weight && peercnt > 0)
+			goto peer_select;
 	}
 }
 
