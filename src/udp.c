@@ -867,7 +867,8 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 	uint32_t max_remainder = 0;
 	bool duplicate = false;
 	int peercnt;
-
+	bool looped = false;
+	
 peer_select:
 
 	peercnt = 0;
@@ -893,7 +894,7 @@ peer_select:
 		/* * * * * * * * * * * * * * * * * * */
 		/*************************************/
 
-		if (peer->config.weight == 0) {
+		if (peer->config.weight == 0 && !looped) {
 			if (peer->listening) {
 				struct rist_peer *child = peer->child;
 				while (child) {
@@ -923,6 +924,7 @@ peer_select:
 			}
 		}
 	}
+	looped = true;
 
 	if (selected_peer_by_weight) {
 		peer = selected_peer_by_weight;
