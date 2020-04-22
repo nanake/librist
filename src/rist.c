@@ -479,6 +479,26 @@ static inline void peer_append(struct rist_peer *p)
 		pthread_rwlock_unlock(peerlist_lock);
 		return;
 	}
+	if (p->parent) {
+		struct rist_peer *peer = p->parent;
+		if (!peer->child)
+			peer->child = p;
+		else
+		{
+			struct rist_peer *child = peer->child;
+			while (child)
+			{
+				if (!child->sibling_next)
+				{
+					child->sibling_next = p;
+					p->sibling_prev = child;
+					break;
+				}
+				child = child->sibling_next;
+			}
+		}
+		++peer->child_alive_count;
+	}
 	while (plist) {
 		if (!plist->next) {
 			p->prev = plist;
@@ -1591,7 +1611,12 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 			{
 				peer->stats_sender_instant.received++;
 				if (peer->dead) {
+					pthread_rwlock_t *peerlist_lock = &get_cctx(peer)->peerlist_lock;
+					pthread_rwlock_wrlock(peerlist_lock);
 					peer->dead = false;
+					if (peer->parent)
+						++peer->parent->child_alive_count;
+					pthread_rwlock_unlock(peerlist_lock);
 					msg(receiver_id, sender_id, RIST_LOG_INFO,
 						"[INFO] Peer %d was dead and it is now alive again\n", peer->adv_peer_id);
 				}

@@ -378,6 +378,10 @@ struct rist_peer {
 
 	/* For keeping track of the connection that initiated a peer */
 	struct rist_peer *parent;
+	struct rist_peer *sibling_prev;
+	struct rist_peer *sibling_next;
+	struct rist_peer *child;
+	uint32_t child_alive_count;
 
 	/* Flow for incoming traffic */
 	struct rist_flow *flow;

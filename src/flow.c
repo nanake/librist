@@ -177,7 +177,10 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	{
 		msg(0, peer->sender_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
 			peer->adv_peer_id);
+		bool current_state = peer->dead;
 		peer->dead = true;
+		if (current_state != peer->dead && peer->parent)
+			--peer->parent->child_alive_count;
 		return;
 	}
 

@@ -873,10 +873,11 @@ peer_select:
 	peercnt = 0;
 	for (peer = ctx->common.PEERS; peer; peer = peer->next) {
 
-		if (peer->listening || !peer->is_data || peer->dead)
+		if (!peer->is_data || peer->parent)
 			continue;
 
-		if (peer->state_local != RIST_PEER_STATE_CONNECT) {
+		if (peer->state_local != RIST_PEER_STATE_CONNECT || peer->dead
+			|| (peer->listening && !peer->child_alive_count)) {
 			ctx->weight_counter -= peer->config.weight;
 			if (ctx->weight_counter <= 0) {
 				ctx->weight_counter = ctx->total_weight;
@@ -893,11 +894,23 @@ peer_select:
 		/*************************************/
 
 		if (peer->config.weight == 0) {
-			uint8_t *payload = buffer->data;
-			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq, buffer->use_seq);
-			duplicate = true;
-			buffer->seq = ctx->common.seq;
-			buffer->seq_rtp = ctx->common.seq_rtp;
+			if (peer->listening) {
+				struct rist_peer *child = peer->child;
+				while (child) {
+					uint8_t *payload = buffer->data;
+					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq, buffer->use_seq);
+					duplicate = true;
+					buffer->seq = ctx->common.seq;
+					buffer->seq_rtp = ctx->common.seq_rtp;
+					child = child->sibling_next;
+				}
+			} else {
+				uint8_t *payload = buffer->data;
+				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq, buffer->use_seq);
+				duplicate = true;
+				buffer->seq = ctx->common.seq;
+				buffer->seq_rtp = ctx->common.seq_rtp;
+			}
 		} else {
 			/* Election of next peer */
 			// printf("peer election: considering %p, count=%d (wc: %d)\n",
@@ -911,13 +924,25 @@ peer_select:
 
 	if (selected_peer_by_weight) {
 		peer = selected_peer_by_weight;
-		uint8_t *payload = buffer->data;
-		rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq_rtp, buffer->use_seq);
-		//duplicate = true;
-		buffer->seq = ctx->common.seq;
-		buffer->seq_rtp = ctx->common.seq_rtp;
-		ctx->weight_counter--;
-		peer->w_count--;
+		if (peer->listening) {
+			struct rist_peer *child = peer->child;
+			while (child) {
+				uint8_t *payload = buffer->data;
+				rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq, buffer->use_seq);
+				duplicate = true;
+				buffer->seq = ctx->common.seq;
+				buffer->seq_rtp = ctx->common.seq_rtp;
+				child = child->sibling_next;
+			}
+		} else {
+			uint8_t *payload = buffer->data;
+			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, duplicate, buffer->seq_rtp, buffer->use_seq);
+			//duplicate = true;
+			buffer->seq = ctx->common.seq;
+			buffer->seq_rtp = ctx->common.seq_rtp;
+			ctx->weight_counter--;
+			peer->w_count--;
+		}
 	}
 
 	if (ctx->total_weight > 0 && (ctx->weight_counter == 0 || !selected_peer_by_weight)) {
