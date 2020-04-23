@@ -9,6 +9,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <getopt.h>
+#include <assert.h>
 
 struct rist_sender_args {
 	char* cname;
