@@ -57,7 +57,7 @@ __BEGIN_DECLS
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (6)
-#define RIST_SUBVERSION (4)
+#define RIST_SUBVERSION (5)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */
@@ -539,7 +539,9 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
  * Use this API to parse a generic URL string and turn it into a meaninful peer_config structure
  *
  * @param url a pointer to a url to be parsed, i.e. rist://myserver.net:1234?buffer=100&cname=hello
- * @param[out] peer_config a pointer to a the rist_peer_config structure (NULL is allowed)
+ * @param[out] peer_config a pointer to a the rist_peer_config structure (NULL is allowed).
+ * When passing NULL, the library will allocate a new rist_peer_config structure with the latest
+ * default values and it expects the application to free it when it is done using it.
  * @return 0 on success or non-zero on error. The value returned is actually the number
  * of parameters that are valid
  */

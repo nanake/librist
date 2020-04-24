@@ -586,23 +586,22 @@ int rist_parse_address(const char *url, const struct rist_peer_config **peer_con
 	if (*peer_config == NULL)
 	{
 		// Default options on new struct
-		struct rist_peer_config output_peer_config = {
-			.version = RIST_PEER_CONFIG_VERSION,
-			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
-			.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
-			.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE,
-			.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN,
-			.recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN,
-			.recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX,
-			.recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER,
-			.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN,
-			.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX,
-			.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE,
-			.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT,
-			.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT
-		};
-		ret = parse_url_options(url, &output_peer_config);
-		*peer_config = &output_peer_config;
+		struct rist_peer_config *output_peer_config = calloc(1, sizeof(struct rist_peer_config));
+		output_peer_config->version = RIST_PEER_CONFIG_VERSION;
+		output_peer_config->virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
+		output_peer_config->recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
+		output_peer_config->recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
+		output_peer_config->recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
+		output_peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
+		output_peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
+		output_peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
+		output_peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
+		output_peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
+		output_peer_config->buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
+		output_peer_config->buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
+		output_peer_config->buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
+		ret = parse_url_options(url, output_peer_config);
+		*peer_config = output_peer_config;
 	}
 	else
 	{
