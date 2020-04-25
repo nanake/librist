@@ -378,7 +378,7 @@ RIST_API int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id);
  *
  * @param[out] ctx a context representing the receiver instance
  * @param profile RIST profile
- * @param loglevel Level of log messages to display
+ * @param log_level Level of log messages to display
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_create(struct rist_receiver **ctx, enum rist_profile profile,
