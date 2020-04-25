@@ -39,7 +39,7 @@ uint64_t timestampNTP_u64(void)
 
 	timespec_t ts;
 #ifdef __APPLE__
-  	clock_gettime_osx(&ts);
+	clock_gettime_osx(&ts);
 #else
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 #endif
@@ -152,6 +152,8 @@ static uint32_t rand_u32(void)
 
 static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 {
+	RIST_MARK_UNUSED(peer);
+
 	bool new_nonce = false;
 
 	if (!key->gre_nonce) {
@@ -212,7 +214,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	uint8_t *data;
 	size_t len, gre_len;
 	size_t hdr_len = 0;
-	size_t ret = 0;
+	ssize_t ret = 0;
 
 	assert(payload != NULL);
 
@@ -286,7 +288,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 					"[ERROR] Compression failed (%d), not sending\n", clen);
 			}
 			else {
-				if (clen < payload_len) {
+				if ((size_t)clen < payload_len) {
 					payload_len = clen;
 					payload = cbuf;
 					payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
@@ -455,10 +457,14 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		}
 	}
 
-	if (ret >= 0)
-		return 0;
-	else
-		return -1;
+	// TODO:
+	// This should return something meaningful, however ret is always >= 0 by virtue of being unsigned.
+	/*if (ret >= 0)
+	 *	return 0;
+	 * else
+	 *	return -1;
+	 */
+	return 0;
 }
 
 int rist_set_url(struct rist_peer *peer)
@@ -545,9 +551,9 @@ void rist_populate_cname(struct rist_peer *peer)
 	int ret_sockname = getsockname(fd, (struct sockaddr *)&peer_sockaddr, &peer_socklen);
 	if (ret_sockname == 0)
 	{
-		struct sockaddr *peer = (struct sockaddr *)&peer_sockaddr;
+		struct sockaddr *xsa = (struct sockaddr *)&peer_sockaddr;
 		// TODO: why is this returning non-sense?
-		if (peer->sa_family == AF_INET) {
+		if (xsa->sa_family == AF_INET) {
 			struct sockaddr_in *xin = (struct sockaddr_in*)&peer_sockaddr;
 			char *addr = inet_ntoa(xin->sin_addr);
 			if (strcmp(addr, "0.0.0.0") != 0) {
@@ -556,7 +562,7 @@ void rist_populate_cname(struct rist_peer *peer)
 				if (name_length >= RIST_MAX_HOSTNAME)
 					identifier[RIST_MAX_HOSTNAME-1] = 0;
 			}
-		}/* else if (peer->sa_family == AF_INET6) {
+		}/* else if (xsa->sa_family == AF_INET6) {
 			struct sockaddr_in6 *xin6 = (void*)peer;
 			char str[INET6_ADDRSTRLEN];
 			inet_ntop(xin6->sin6_family, &xin6->sin6_addr, str, sizeof(struct in6_addr));

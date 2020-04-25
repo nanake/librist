@@ -318,7 +318,7 @@ int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint
 	clock_gettime(CLOCK_REALTIME, &timeToWait);
 	timeToWait.tv_nsec += ms * 1000000UL;
 	timeToWait.tv_nsec %= 1000000000UL;
-	timeToWait.tv_sec += timeToWait.tv_nsec < (ms * 1000000UL) ? 1 : 0;
+	timeToWait.tv_sec += timeToWait.tv_nsec < (ms * 1000000L) ? 1 : 0;
 	return pthread_cond_timedwait(cond, mutex, &timeToWait);
 #else
 	timespec_t ts;

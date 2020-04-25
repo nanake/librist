@@ -117,6 +117,7 @@ int32_t _linux_crypto_process(struct linux_crypto *ctx,
 				  uint8_t *out, uint32_t outlen,
 				  int access,const uint8_t *iv, int enc)
 {
+	RIST_MARK_UNUSED(access);
 	int32_t totallen = 0;
 	int32_t ret;
 

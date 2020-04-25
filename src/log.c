@@ -72,12 +72,17 @@ void msg(intptr_t receiver_ctx, intptr_t sender_ctx, int level, const char *form
 
 	va_list args;
 	va_start(args, format);
-	vasprintf(&str_content, format, args);
+	{
+		int ret = vasprintf(&str_content, format, args);
+		(void)ret;
+	}
 	va_end(args);
 	int udplen = asprintf(&str_udp, "%d.%6.6d|%ld.%ld|%d|%s", (int)tv.tv_sec,
 		(int)tv.tv_usec, receiver_ctx, sender_ctx, level, str_content);
-
-	write(stats_fd, str_udp, udplen + 1);
+	{
+		ssize_t ret = write(stats_fd, str_udp, udplen + 1);
+		(void)ret;
+	}
 	if (stats_socket > 0) {
 		udp_Write(stats_socket, str_udp, udplen);
 	}

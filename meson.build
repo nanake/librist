@@ -4,13 +4,16 @@
 
 project('rist', 'c',
 	version: '0.1',
-	default_options: ['c_std=c99'])
+	default_options: ['c_std=c99', 'warning_level=3'])
 
 cc = meson.get_compiler('c')
 
 deps = []
+platform_files = []
+inc = include_directories('inc', 'extra')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
+add_global_arguments(['-Wshadow', '-Werror', '-pedantic-errors'], language: 'c')
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
@@ -22,6 +25,7 @@ if host_machine.system() == 'linux'
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
+	platform_files += 'extra/linux-crypto.c'
 endif
 
 librist = library('rist',
@@ -42,12 +46,14 @@ librist = library('rist',
 	'extra/lz4/lz4frame.c',
 	'extra/lz4/lz4hc.c',
 	'extra/lz4/xxhash.c',
-	'extra/linux-crypto.c',
-	include_directories: include_directories('inc', 'extra'),
+	platform_files,
+	include_directories: inc,
 	dependencies: deps,
 	install: true)
 
 install_headers('inc/librist.h')
+
+subdir('test')
 
 pkg_mod = import('pkgconfig')
 pkg_mod.generate(

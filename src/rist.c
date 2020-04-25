@@ -109,11 +109,11 @@ static int parse_url_options(const char* url, 	struct rist_peer_config *output_p
 						output_peer_config->recovery_length_max = temp;
 					}
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MIFACE ) == 0) {
-					strncpy((void *)output_peer_config->miface, val, 128);
+					strncpy((void *)output_peer_config->miface, val, 128-1);
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET ) == 0) {
-					strncpy((void *)output_peer_config->secret, val, 128);
+					strncpy((void *)output_peer_config->secret, val, 128-1);
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CNAME ) == 0) {
-					strncpy((void *)output_peer_config->cname, val, 128);
+					strncpy((void *)output_peer_config->cname, val, 128-1);
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_TYPE ) == 0) {
 					int temp = atoi( val );
 					if (temp == 0 || temp == 128 || temp == 192 || temp == 256) {
@@ -163,9 +163,9 @@ static int parse_url_options(const char* url, 	struct rist_peer_config *output_p
 				}
 			}
 		}
-		strncpy((void *)output_peer_config->address, url, clean_url_len > RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG : clean_url_len);
+		strncpy((void *)output_peer_config->address, url, clean_url_len >= RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG-1 : clean_url_len);
 	} else {
-		strncpy((void *)output_peer_config->address, url, RIST_MAX_STRING_LONG);
+		strncpy((void *)output_peer_config->address, url, RIST_MAX_STRING_LONG-1);
 	}
 
 	if (ret != 0)
@@ -571,6 +571,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 
 int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_block **oob_block)
 {
+	RIST_MARK_UNUSED(oob_block);
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_receiver_oob_read call!\n");
 		return -1;
@@ -831,7 +832,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 		return;
 	}
 
-	int maxcounter = RIST_MAX_NACKS;
+	const size_t maxcounter = RIST_MAX_NACKS;
 
 	/* Now loop through missing queue and process items */
 	struct rist_missing_buffer *mb = f->missing;
@@ -1042,7 +1043,7 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
-		if (!config->secret || !strlen(config->secret)) {
+		if (!strlen(config->secret)) {
 
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
 			return NULL;
@@ -1329,6 +1330,11 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 		uint32_t flow_id, uint16_t src_port, uint16_t dst_port, const uint8_t *payload, 
 		size_t payload_len, uint32_t nack_seq_msb)
 {
+	RIST_MARK_UNUSED(flow_id);
+	RIST_MARK_UNUSED(src_port);
+	RIST_MARK_UNUSED(dst_port);
+
+	assert(payload_len >= sizeof(struct rist_rtcp_hdr));
 	assert(peer->sender_ctx != NULL);
 	intptr_t sender_id = peer->sender_ctx->id;
 
@@ -1396,6 +1402,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 
 static struct rist_peer *rist_find_rtcp_peer(struct rist_receiver *ctx, struct rist_flow *f, uint16_t data_port)
 {
+	RIST_MARK_UNUSED(ctx);
 	uint16_t rtcp_port = data_port + 1;
 	for (size_t i = 0; i < f->peer_lst_len; i++) {
 		if (!f->peer_lst[i]->is_rtcp)
@@ -1410,6 +1417,7 @@ static struct rist_peer *rist_find_rtcp_peer(struct rist_receiver *ctx, struct r
 static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, struct rist_buffer *payload)
 {
+	RIST_MARK_UNUSED(seq);
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
@@ -1592,6 +1600,10 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, uint16_t src_port, uint16_t dst_port)
 {
+	RIST_MARK_UNUSED(flow_id);
+	RIST_MARK_UNUSED(src_port);
+	RIST_MARK_UNUSED(dst_port);
+
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
@@ -1682,6 +1694,8 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					msg(receiver_id, sender_id, RIST_LOG_DEBUG, "[DEBUG] Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
 					break;
 				}
+				// TODO: if a fallthrough is intentional here we need something like //- fallthrough
+				break;
 			case PTYPE_NACK_BITMASK:
 				rist_sender_recv_nack(peer, flow_id, payload->src_port, payload->dst_port, pkt, bytes_left, nack_seq_msb);
 				break;
@@ -1747,7 +1761,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 
 void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 {
-	(void)evctx;
+	RIST_MARK_UNUSED(evctx);
 	struct rist_peer *peer = (struct rist_peer *)arg;
 	//struct rist_common_ctx *ctx = get_cctx(peer);
 
@@ -1802,9 +1816,9 @@ static inline bool equal_address(uint16_t family, struct sockaddr *A_, struct ri
 
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
-	(void)evctx;
-	(void)fd;
-	(void)revents;
+	RIST_MARK_UNUSED(evctx);
+	RIST_MARK_UNUSED(fd);
+	RIST_MARK_UNUSED(revents);
 	struct rist_peer *peer = (struct rist_peer *) arg;
 	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
 	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
@@ -1880,8 +1894,10 @@ static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t max
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
-	(void) evctx;
-	(void) revents;
+	RIST_MARK_UNUSED(evctx);
+	RIST_MARK_UNUSED(revents);
+	RIST_MARK_UNUSED(fd);
+
 	struct rist_peer *peer = (struct rist_peer *) arg;
 	if (peer->shutdown) {
 		return;
@@ -1894,7 +1910,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	pthread_rwlock_t *peerlist_lock = &cctx->peerlist_lock;
 	socklen_t addrlen = peer->address_len;
-	int ret = -1;
+	int recv_bufsize = -1;
 	uint16_t family = AF_INET;
 	struct sockaddr_in addr4;
 	struct sockaddr_in6 addr6;
@@ -1907,18 +1923,18 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
 	if (peer->address_family == AF_INET6) {
-		ret = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
+		recv_bufsize = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
 		family = AF_INET6;
 		addr = (struct sockaddr *) &addr6;
 	} else {
-		ret = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
+		recv_bufsize = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
 		addr = (struct sockaddr *) &addr4;
 	}
 
-	if (ret <= 0) {
+	if (recv_bufsize <= 0) {
 		// TODO: should we close these sockets? who reopens them?
 #if defined (__unix__) || defined(__APPLE__)
-		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Peer recvfrom returned zero bytes (%d), closing socket (%d)\n", ret, peer->sd);
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Peer recvfrom returned zero bytes (%d), closing socket (%d)\n", recv_bufsize, peer->sd);
 		//udp_Close(peer->sd);
 #else
 		int neterror = WSAGetLastError();
@@ -1927,28 +1943,30 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		// TODO: we can leverage this error to report on the GUI that we are not reaching the other side
 		if (neterror != WSAECONNRESET) {
 			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Peer recvfrom returned zero bytes (%d), closing socket (%d), error %d\n",
-				ret, peer->sd, neterror);
+				recv_bufsize, peer->sd, neterror);
 		}
 #endif
 		return;
 	}
 
 	struct rist_key *k = &peer->key_secret;
-	struct rist_gre *gre;
-	uint32_t seq;
+	struct rist_gre *gre = NULL;
+	uint32_t seq = 0;
 	uint32_t time_extension = 0;
-	struct rist_protocol_hdr *proto_hdr;
+	struct rist_protocol_hdr *proto_hdr = NULL;
 	uint8_t peer_id = 0;
 	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
-	size_t gre_size;
+	size_t gre_size = 0;
 	uint8_t advanced = 0;
+	uint32_t flow_id = 0;
+	bool retry = false;
 
 	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
 
 		// Make sure we have enought bytes
-		if (ret < sizeof(*gre)) {
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Packet too small: %d bytes, ignoring ...\n", ret);
+		if (recv_bufsize < (int)sizeof(struct rist_gre)) {
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 			return;
 		}
 
@@ -2060,13 +2078,13 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			// Decrypt everything
 			k->used_times++;
 #ifndef __linux
-			aes_decrypt_ctr((const void *) (recv_buf + gre_size), ret - gre_size, (void *) (recv_buf + gre_size),
+			aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 				k->aes_key_sched, k->key_size, IV);
 #else
 			if (peer->cryptoctx)
-				linux_crypto_decrypt((void *)(recv_buf + gre_size), ret - gre_size, IV, peer->cryptoctx);
+				linux_crypto_decrypt((void *)(recv_buf + gre_size), recv_bufsize - gre_size, IV, peer->cryptoctx);
 			else
-				aes_decrypt_ctr((const void *) (recv_buf + gre_size), ret - gre_size, (void *) (recv_buf + gre_size),
+				aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 					k->aes_key_sched, k->key_size, IV);
 #endif
 		} else if (has_seq) {
@@ -2120,8 +2138,13 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			// Restore normal payload type
 			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 		}
+		// Make sure we have enought bytes
+		if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
 		/* Map the first subheader and rtp payload area to our structure */
-		proto_hdr = (void *)(recv_buf + gre_size);
+		proto_hdr = (struct rist_protocol_hdr *)(recv_buf + gre_size);
 		payload.src_port = be16toh(proto_hdr->src_port);
 		payload.dst_port = be16toh(proto_hdr->dst_port);
 	}
@@ -2130,14 +2153,14 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		// Simple profile support (not too elegant, but simple profile should not be used anymore)
 		seq = 0;
 		gre_size = 0;
-		ret += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
-		/* Map the first subheader and rtp payload area to our structure */
-		proto_hdr = (void *)recv_buf;
+		recv_bufsize += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
 		// Make sure we have enought bytes
-		if (ret < sizeof(*proto_hdr)) {
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Packet too small: %d bytes, ignoring ...\n", ret);
+		if (recv_bufsize < (int)sizeof(struct rist_protocol_hdr)) {
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 			return;
 		}
+		/* Map the first subheader and rtp payload area to our structure */
+		proto_hdr = (struct rist_protocol_hdr *)recv_buf;
 	}
 
 	/* Double check for a valid rtp header */
@@ -2148,8 +2171,6 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		return;
 	}
 
-	uint32_t flow_id = 0;
-	bool retry = false;
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
 
@@ -2162,7 +2183,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			flow_id ^= 1UL;
 			retry = true;
 		}
-		payload.size = ret - gre_size - sizeof(*proto_hdr);
+		payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
 		payload.data = (void *)(recv_buf + gre_size + sizeof(*proto_hdr));
 		if (!advanced)
 			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
@@ -2170,7 +2191,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		// remap the rtp payload to the correct rtcp header
 		struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)(&proto_hdr->rtp);
 		flow_id = be32toh(rtcp->ssrc);
-		payload.size = ret - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
+		payload.size = recv_bufsize - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
 		payload.data = (void *)(recv_buf + gre_size + RIST_GRE_PROTOCOL_REDUCED_SIZE);
 		// Null this pointer to prevent code use below 
 		// as only the first 8 bytes have valid data for RTCP packets
@@ -2204,7 +2225,7 @@ protocol_bypass:
 					// Do nothing ...TODO: check for port changes?
 				break;
 				case RIST_PAYLOAD_TYPE_DATA_OOB:
-					payload.size = ret - gre_size;
+					payload.size = recv_bufsize - gre_size;
 					payload.data = (void *)(recv_buf + gre_size);
 					rist_recv_oob_data(p, &payload);
 				break;
@@ -2360,6 +2381,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 
 int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob_block **oob_block)
 {
+	RIST_MARK_UNUSED(oob_block);
 	if (!ctx) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] ctx is null on rist_sender_oob_read call!\n");
 		return -1;
@@ -2757,7 +2779,7 @@ int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id)
 int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id)
 {
 	ctx->adv_flow_id = flow_id;
-	for (int i =0; i < ctx->peer_lst_len; i++) {
+	for (size_t i =0; i < ctx->peer_lst_len; i++) {
 		ctx->peer_lst[i]->adv_flow_id = flow_id;
 	}
 	return 0;
@@ -2866,6 +2888,8 @@ free_ctx_and_ret:
 
 static int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 {
+	RIST_MARK_UNUSED(ctx);
+	RIST_MARK_UNUSED(peer);
 	// TODO: test remove from sender list and peer linked list and
 	// perform proper cleanup
 
@@ -2994,7 +3018,7 @@ int rist_receiver_peer_destroy(struct rist_receiver *ctx, struct rist_peer *peer
 static int rist_auth_handler(struct rist_common_ctx *ctx,
 		int (*conn_cb)(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
 		int (*disconn_cb)(void *arg, struct rist_peer *peer),
- 		void *arg)
+		void *arg)
 {
 	ctx->auth.conn_cb = conn_cb;
 	ctx->auth.disconn_cb = disconn_cb;
@@ -3105,7 +3129,7 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
-		if (!config->secret || !strlen(config->secret)) {
+		if (!strlen(config->secret)) {
 			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Invalid secret passphrase\n");
 			return NULL;
 		}
@@ -3422,19 +3446,21 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 
 	while (!ctx->common.shutdown) {
 		now  = timestampNTP_u64();
-
-		// stats timer
-		struct rist_flow *f = ctx->common.FLOWS;
-		while (f) {
-			if (now > f->stats_next_time) {
-				f->stats_next_time += f->recovery_buffer_ticks; // equal to the buffer size
-				// we move the f cursor inside because we can detect and delete stale flows
-				// inside, thus skipping it
-				f = rist_receiver_flow_statistics(ctx, f);
-			}
-			else
-			{
-				f = f->next;
+		// Limit scope of `struct rist_flow *f` for clarity since it is used again later in this loop.
+		{
+			// stats timer
+			struct rist_flow *f = ctx->common.FLOWS;
+			while (f) {
+				if (now > f->stats_next_time) {
+					f->stats_next_time += f->recovery_buffer_ticks; // equal to the buffer size
+					// we move the f cursor inside because we can detect and delete stale flows
+					// inside, thus skipping it
+					f = rist_receiver_flow_statistics(ctx, f);
+				}
+				else
+				{
+					f = f->next;
+				}
 			}
 		}
 

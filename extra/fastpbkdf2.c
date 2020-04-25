@@ -55,15 +55,21 @@ static inline void write32_be(uint32_t n, uint8_t out[4])
 #endif
 }
 
-static inline void write64_be(uint64_t n, uint8_t out[8])
-{
-#if defined(__GNUC__) &&  __GNUC__ >= 4 && __BYTE_ORDER == __LITTLE_ENDIAN
-	*(uint64_t *)(out) = __builtin_bswap64(n);
-#else
-	write32_be((n >> 32) & 0xffffffff, out);
-	write32_be(n & 0xffffffff, out + 4);
-#endif
-}
+/*
+ * NOTE: This function is unused currently, but it is left incase it is needed in the
+ *       future
+ */
+
+/* static inline void write64_be(uint64_t n, uint8_t out[8])
+ * {
+ * #if defined(__GNUC__) &&  __GNUC__ >= 4 && __BYTE_ORDER == __LITTLE_ENDIAN
+ * 	*(uint64_t *)(out) = __builtin_bswap64(n);
+ * #else
+ * 	write32_be((n >> 32) & 0xffffffff, out);
+ * 	write32_be(n & 0xffffffff, out + 4);
+ * #endif
+ * }
+ */
 
 /* --- Optional OpenMP parallelisation of consecutive blocks --- */
 #ifdef WITH_OPENMP

@@ -27,7 +27,7 @@ int parse_url(char *url, struct network_url *parsed_url)
 	struct sockaddr *res = NULL;
 
 	if (!url) {
-		snprintf(parsed_url->error, sizeof(parsed_url->error), "Blank url: %s", url);
+		snprintf(parsed_url->error, sizeof(parsed_url->error), "Invalid URL: (null)");
 		goto err;
 	} else if (strstr(url, " ") != NULL) {
 		snprintf(parsed_url->error, sizeof(parsed_url->error), "Invalid space in url: %s", url);
@@ -515,6 +515,7 @@ static unsigned int udp_GetIntfIndex(const char *miface)
 static int udp_Subscribe(int fd, const char *miface,
 						 const struct sockaddr *grp, socklen_t grplen)
 {
+	RIST_MARK_UNUSED(miface);
 /* MCAST_JOIN_GROUP was introduced to OS X in v10.7, but it doesn't work,
  * so ignore it to use the same code as on 10.5 or 10.6 */
 #if defined (MCAST_JOIN_GROUP) && !defined (__APPLE__)

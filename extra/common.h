@@ -52,6 +52,8 @@ struct __attribute__((packed)) sname sbody;
 # define RIST_UNLIKELY(p) (!!(p))
 #endif
 
+#define RIST_MARK_UNUSED(unused_param) ((void)(unused_param))
+
 #ifdef __GNUC__
 # define RIST_FALLTHROUGH __attribute__((fallthrough))
 #endif

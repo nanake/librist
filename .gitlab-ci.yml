@@ -1,0 +1,31 @@
+stages:
+  - build
+  - test
+
+.debian-amd64-common:
+    image: registry.videolan.org/dav1d-debian-unstable:20200306210534
+    stage: build
+    tags:
+        - docker
+        - amd64
+
+build-debian:
+    extends: .debian-amd64-common
+    tags:
+        - docker
+        - avx2
+        - amd64
+    script:
+        - meson build --buildtype release
+        - ninja -C build
+        - cd build && meson test -v
+
+test-debian:
+    stage: test
+    extends:
+        - .debian-amd64-common
+    needs: ["build-debian"]
+    script:
+        - meson build --buildtype release
+        - ninja -C build
+        - cd build && time meson test -v
