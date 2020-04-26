@@ -3185,7 +3185,7 @@ int rist_sender_oob_set(struct rist_sender *ctx,
 	return 0;
 }
 
-int rist_receiver_oob_set(struct rist_receiver *ctx, 
+int rist_receiver_oob_callback_set(struct rist_receiver *ctx, 
 		int (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {

@@ -56,8 +56,8 @@ __BEGIN_DECLS
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (6)
-#define RIST_SUBVERSION (5)
+#define RIST_API_VERSION (7)
+#define RIST_SUBVERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */
@@ -76,6 +76,8 @@ __BEGIN_DECLS
 #define RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT (20)
 #define RIST_DEFAULT_VERBOSE_LEVEL RIST_LOG_WARN
 #define RIST_DEFAULT_PROFILE RIST_PROFILE_MAIN
+#define RIST_DEFAULT_SESSION_TIMEOUT (60000)
+#define RIST_DEFAULT_KEEPALIVE_INTERVAL (1000)
 
 /* Rist URL parameter names (per peer) */
 #define RIST_URL_PARAM_BUFFER_SIZE     "buffer"
@@ -449,7 +451,7 @@ RIST_API int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t);
  * @param arg is an the extra argument passed to the `oob_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_oob_set(struct rist_receiver *ctx, 
+RIST_API int rist_receiver_oob_callback_set(struct rist_receiver *ctx, 
 		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 
