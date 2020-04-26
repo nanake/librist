@@ -952,7 +952,12 @@ LZ4_streamHC_t* LZ4_createStreamHC(void)
 {
     LZ4_streamHC_t* const LZ4_streamHCPtr = (LZ4_streamHC_t*)ALLOC(sizeof(LZ4_streamHC_t));
     if (LZ4_streamHCPtr==NULL) return NULL;
-    LZ4_initStreamHC(LZ4_streamHCPtr, sizeof(*LZ4_streamHCPtr));  /* full initialization, malloc'ed buffer can be full of garbage */
+    /* full initialization, malloc'ed buffer can be full of garbage */
+    if(LZ4_initStreamHC(LZ4_streamHCPtr, sizeof(*LZ4_streamHCPtr)) == NULL) {
+        // LZ4_initStreamHC errored, free memory and return NULL
+        free(LZ4_streamHCPtr);
+        return NULL;
+    }
     return LZ4_streamHCPtr;
 }
 

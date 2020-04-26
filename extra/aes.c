@@ -368,12 +368,13 @@ int aes_encrypt_ccm(const uint8_t payload[], uint32_t payload_len, const uint8_t
 	if (assoc_len > 32768 /* = 2^15 */)
 		return(FALSE);
 
+	// Prepare the key for usage.
+	if(aes_key_setup(key_str, key, keysize) == FALSE)
+		return(FALSE);
+
 	buf = (uint8_t*)malloc(payload_len + assoc_len + 48 /*Round both payload and associated data up a block size and add an extra block.*/);
 	if (! buf)
 		return(FALSE);
-
-	// Prepare the key for usage.
-	aes_key_setup(key_str, key, keysize);
 
 	// Format the first block of the formatted data.
 	payload_len_store_size = AES_BLOCK_SIZE - 1 - nonce_len;
@@ -424,12 +425,13 @@ int aes_decrypt_ccm(const uint8_t ciphertext[], uint32_t ciphertext_len, const u
 	if (ciphertext_len <= mac_len)
 		return(FALSE);
 
+	// Prepare the key for usage.
+	if (aes_key_setup(key_str, key, keysize) == FALSE)
+		return(FALSE);
+
 	buf = (uint8_t*)malloc(assoc_len + ciphertext_len /*ciphertext_len = plaintext_len + mac_len*/ + 48);
 	if (! buf)
 		return(FALSE);
-
-	// Prepare the key for usage.
-	aes_key_setup(key_str, key, keysize);
 
 	// Copy the plaintext and MAC to the output buffers.
 	*plaintext_len = ciphertext_len - mac_len;
@@ -550,7 +552,7 @@ uint32_t SubWord(uint32_t word)
 // Performs the action of generating the keys that will be used in every round of
 // encryption. "key" is the user-supplied input key, "w" is the output key schedule,
 // "keysize" is the length in bits of "key", must be 128, 192, or 256.
-void aes_key_setup(const uint8_t key[], uint32_t w[], int keysize)
+int aes_key_setup(const uint8_t key[], uint32_t w[], int keysize)
 {
 	int Nb=4,Nr,Nk,idx;
 	uint32_t temp,Rcon[]={0x01000000,0x02000000,0x04000000,0x08000000,0x10000000,0x20000000,
@@ -561,7 +563,7 @@ void aes_key_setup(const uint8_t key[], uint32_t w[], int keysize)
 		case 128: Nr = 10; Nk = 4; break;
 		case 192: Nr = 12; Nk = 6; break;
 		case 256: Nr = 14; Nk = 8; break;
-		default: return;
+		default: return(FALSE);
 	}
 
 	for (idx=0; idx < Nk; ++idx) {
@@ -577,6 +579,7 @@ void aes_key_setup(const uint8_t key[], uint32_t w[], int keysize)
 			temp = SubWord(temp);
 		w[idx] = w[idx-Nk] ^ temp;
 	}
+	return(TRUE);
 }
 
 /////////////////

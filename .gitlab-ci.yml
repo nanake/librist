@@ -1,16 +1,17 @@
 stages:
   - build
+  - analyze
   - test
 
-.debian-amd64-common:
-    image: registry.videolan.org/dav1d-debian-unstable:20200306210534
+.ubuntu-amd64-bionic:
+    image: registry.hub.docker.com/unpause/videolan-base-bionic:latest
     stage: build
     tags:
         - docker
         - amd64
 
-build-debian:
-    extends: .debian-amd64-common
+build-ubuntu:
+    extends: .ubuntu-amd64-bionic
     tags:
         - docker
         - avx2
@@ -18,13 +19,27 @@ build-debian:
     script:
         - meson build --buildtype release --werror
         - ninja -C build
-        - cd build && meson test -v
 
-test-debian:
+analyze-ubuntu:
+    stage: analyze
+    extends:
+        - .ubuntu-amd64-bionic
+    needs: ["build-ubuntu"]
+    script:
+        - curl -L https://github.com/danmar/cppcheck/archive/1.90.tar.gz > 1.90.tar.gz
+        - tar xzf 1.90.tar.gz
+        - cd cppcheck-1.90
+        - make -j$(nproc)
+        - cd ..
+        - PATH=$PATH:$(pwd)/cppcheck-1.90
+        - meson build --buildtype release --werror -Dstatic_analyze=true
+        - ninja -C build analyze
+
+test-ubuntu:
     stage: test
     extends:
-        - .debian-amd64-common
-    needs: ["build-debian"]
+        - .ubuntu-amd64-bionic
+    needs: ["build-ubuntu"]
     script:
         - meson build --buildtype release --werror
         - ninja -C build

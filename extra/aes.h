@@ -21,9 +21,9 @@
 // AES
 ///////////////////
 // Key setup must be done before any AES en/de-cryption functions can be used.
-void aes_key_setup(const uint8_t key[],       // The key, must be 128, 192, or 256 bits
-                   uint32_t w[],              // Output key schedule to be used later
-                   int keysize);              // Bit length of the key, 128, 192, or 256
+int aes_key_setup(const uint8_t key[],       // The key, must be 128, 192, or 256 bits
+                  uint32_t w[],              // Output key schedule to be used later
+                  int keysize);              // Bit length of the key, 128, 192, or 256
 
 void aes_encrypt(const uint8_t in[],          // 16 bytes of plaintext
                  uint8_t out[],               // 16 bytes of ciphertext

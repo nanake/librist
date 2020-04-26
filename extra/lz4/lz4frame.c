@@ -1313,6 +1313,9 @@ static void LZ4F_updateDict(LZ4F_dctx* dctx,
         return;
     }
 
+    // NOTE: Removing this will throw a clang-analyze error that may be a false positive.
+    if (dctx->tmpOutBuffer == NULL || dctx->dict == NULL) return;
+
     if (withinTmp) { /* copy relevant dict portion in front of tmpOut within tmpOutBuffer */
         size_t const preserveSize = (size_t)(dctx->tmpOut - dctx->tmpOutBuffer);
         size_t copySize = 64 KB - dctx->tmpOutSize;

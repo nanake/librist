@@ -62,3 +62,13 @@ pkg_mod.generate(
 	name: 'librist',
 	description: 'Reliable Internet Stream Transport (RIST)',
 )
+
+if get_option('static_analyze')
+	run_target('cppcheck', command : ['cppcheck',
+									  '--quiet',
+									  '--std=c99',
+									  '--suppressions-list=' + join_paths(meson.source_root(), 'configs/cppcheck-suppressions.txt'),
+									  '--project=' + join_paths(meson.build_root(),
+									  'compile_commands.json')])
+	run_target('analyze', command: ['bash', join_paths(meson.source_root(), 'scripts/analyze.sh')])
+endif

@@ -300,7 +300,7 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 		return NULL;
 	}
 
-	if (len > 0)
+	if (buf != NULL && len > 0)
 	{
 		b->data = malloc(len + RIST_MAX_PAYLOAD_OFFSET);
 		if (!b->data) {
@@ -1943,8 +1943,8 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	socklen_t addrlen = peer->address_len;
 	int recv_bufsize = -1;
 	uint16_t family = AF_INET;
-	struct sockaddr_in addr4;
-	struct sockaddr_in6 addr6;
+	struct sockaddr_in addr4 = {0};
+	struct sockaddr_in6 addr6 = {0};
 	struct sockaddr *addr;
 	struct rist_peer *p = peer;
 	uint8_t *recv_buf = cctx->buf.recv;
