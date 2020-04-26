@@ -13,7 +13,7 @@ platform_files = []
 inc = include_directories('inc', 'extra')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
-add_global_arguments(['-Wshadow', '-Werror', '-pedantic-errors'], language: 'c')
+add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]

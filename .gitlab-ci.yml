@@ -16,7 +16,7 @@ build-debian:
         - avx2
         - amd64
     script:
-        - meson build --buildtype release
+        - meson build --buildtype release --werror
         - ninja -C build
         - cd build && meson test -v
 
@@ -26,6 +26,6 @@ test-debian:
         - .debian-amd64-common
     needs: ["build-debian"]
     script:
-        - meson build --buildtype release
+        - meson build --buildtype release --werror
         - ninja -C build
         - cd build && time meson test -v
