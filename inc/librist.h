@@ -294,7 +294,7 @@ RIST_API int rist_sender_jitter_max_set(struct rist_sender *ctx, int t);
  * @param arg is an the extra argument passed to the `oob_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_sender_oob_set(struct rist_sender *ctx, 
+RIST_API int rist_sender_oob_callback_set(struct rist_sender *ctx, 
 		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg);
 

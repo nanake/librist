@@ -3238,7 +3238,7 @@ int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
 	return rist_auth_handler(&ctx->common, conn_cb, disconn_cb, arg);
 }
 
-int rist_sender_oob_set(struct rist_sender *ctx, 
+int rist_sender_oob_callback_set(struct rist_sender *ctx, 
 		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
 		void *arg)
 {
