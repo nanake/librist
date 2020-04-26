@@ -104,7 +104,7 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
-	if (rist_sender_oob_set(ctx, cb_recv_oob, ctx) == -1) {
+	if (rist_sender_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
 		fprintf(stderr, "Could not add enable out-of-band data\n");
 		exit(1);
 	}
