@@ -497,8 +497,7 @@ int rist_set_url(struct rist_peer *peer)
 		((struct sockaddr_in *)&peer->u.address)->sin_family = AF_INET;
 		memcpy(&peer->u.address, &parsed_url.u.address, peer->address_len);
 	}
-
-	if (parsed_url.address_family == AF_INET6) {
+	else if (parsed_url.address_family == AF_INET6) {
 		peer->address_len = sizeof(struct sockaddr_in6);
 		((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
 		memcpy(&peer->u.address, &parsed_url.u.address, peer->address_len);
@@ -581,7 +580,7 @@ void rist_create_socket(struct rist_peer *peer)
 	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
 	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
-	if(rist_set_url(peer)) {
+	if(!peer->address_family && rist_set_url(peer)) {
 		return;
 	}
 

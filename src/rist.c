@@ -955,6 +955,79 @@ nack_loop_continue:
 
 }
 
+static int rist_set_manual_sockdata(struct rist_peer *peer, const struct rist_peer_config *config)
+{
+	peer->address_family = config->address_family;
+	peer->listening = !config->initiate_conn;
+	const char *hostname = config->address;
+	struct addrinfo *ai, *orig;
+	struct sockaddr *res = NULL;
+	int ret;
+	if ((!hostname || !*hostname) && peer->listening) {
+		if (peer->address_family == AF_INET) {
+			fprintf(stderr, "[INIT] No hostname specified: listening to 0.0.0.0");
+			peer->address_len = sizeof(struct sockaddr_in);
+			((struct sockaddr_in *)&peer->u.address)->sin_family = AF_INET;
+			((struct sockaddr_in *)&peer->u.address)->sin_addr.s_addr = INADDR_ANY;
+		} else {
+			fprintf(stderr, "[INIT] No hostname specified: listening to [::0]");
+			peer->address_len = sizeof(struct sockaddr_in);
+			((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
+			((struct sockaddr_in6 *)&peer->u.address)->sin6_addr = in6addr_any;
+		}
+	} else {
+		ret = getaddrinfo(hostname, NULL, NULL, &orig);
+		if (ret != 0) {
+			fprintf(stderr, "Error trying to resolve hostname %s", hostname);
+			goto err;
+		}
+		for (ai = orig; ai != NULL; ai = ai->ai_next) {
+			if (peer->address_family == AF_LOCAL) {
+				peer->address_family = ai->ai_family;
+				((struct sockaddr_in *)&peer->u.address)->sin_family = ai->ai_family;
+			}
+			if (peer->address_family == ai->ai_family) {
+				res = ai->ai_addr;
+				if (ai->ai_family == AF_INET) {
+					peer->address_len = sizeof(struct sockaddr_in);
+					((struct sockaddr_in *)&peer->u.address)->sin_family = AF_INET;
+					memcpy(&peer->u.address, res, peer->address_len);
+					break;
+				}
+				if (ai->ai_family == AF_INET6) {
+					peer->address_len = sizeof(struct sockaddr_in6);
+					((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
+					memcpy(&peer->u.address, res, peer->address_len);
+					break;
+				}
+			}
+			// This loops until it finds the last non-null entry
+		}
+		freeaddrinfo(orig);
+		if (!res || (peer->address_family == AF_LOCAL)) {
+			fprintf(stderr, "Could not resolve hostname");
+			goto err;
+		}
+	}
+	if (config->address_family == AF_INET) {
+		((struct sockaddr_in*)&peer->u.address)->sin_port = htons(config->physical_port);
+	}
+	else if (config->address_family == AF_INET6) {
+		((struct sockaddr_in6*)&peer->u.address)->sin6_port = htons(config->physical_port);
+	}
+	if (peer->listening) {
+		peer->local_port = config->physical_port;
+	}
+	else {
+		peer->remote_port = config->physical_port;
+	}
+
+err:
+	peer->address_family = AF_LOCAL;
+	peer->address_len = 0;
+	return -1;
+}
+
 static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx, 
 		const struct rist_peer_config *config)
 {
@@ -982,6 +1055,8 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 
 	strncpy(&p->miface[0], config->miface, RIST_MAX_STRING_SHORT);
 	strncpy(&p->cname[0], config->cname, RIST_MAX_STRING_SHORT);
+	if (config->address_family)
+		rist_set_manual_sockdata(p, config);
 
 	if (config->key_size) { 
 		p->key_secret.key_size = config->key_size;
@@ -3040,6 +3115,8 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 	strncpy(&newpeer->miface[0], config->miface, RIST_MAX_STRING_SHORT);
 	strncpy(&newpeer->cname[0], config->cname, RIST_MAX_STRING_SHORT);
+	if (config->address_family)
+		rist_set_manual_sockdata(newpeer, config);
 
 	if (config->key_size) { 
 		newpeer->key_secret.key_size = config->key_size;
