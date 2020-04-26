@@ -343,7 +343,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_receiver_oob_set(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_receiver_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
