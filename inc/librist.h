@@ -173,8 +173,8 @@ struct rist_peer_config {
 	// treated like an IP address or hostname
 	int address_family; 
 	int initiate_conn;
-	const char address[RIST_MAX_STRING_LONG];
-	const char miface[RIST_MAX_STRING_SHORT];
+	char address[RIST_MAX_STRING_LONG];
+	char miface[RIST_MAX_STRING_SHORT];
 	uint16_t physical_port;
 
 	/* The virtual destination port is not used for simple profile */
@@ -194,7 +194,7 @@ struct rist_peer_config {
 	uint32_t weight;
 
 	/* Encryption */
-	const char secret[RIST_MAX_STRING_SHORT];
+	char secret[RIST_MAX_STRING_SHORT];
 	int key_size;
 	uint32_t key_rotation;
 
@@ -202,7 +202,7 @@ struct rist_peer_config {
 	int compression;
 
 	/* cname identifier for rtcp packets */
-	const char cname[RIST_MAX_STRING_SHORT];
+	char cname[RIST_MAX_STRING_SHORT];
 
 	/* Congestion control */
 	enum rist_buffer_bloat_mode buffer_bloat_mode;
