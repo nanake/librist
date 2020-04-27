@@ -50,6 +50,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -l | --bloat-limit NACK_COUNT                                   * | Buffer bloat min nack count for random discard      |\n"
 "       -L | --bloat-hardlimit NACK_COUNT                               * | Buffer bloat max nack count for hard limit discard  |\n"
 "       -W | --max-bitrate Kbps                                         * | rist recovery max bitrate (Kbit/s)                  |\n"
+"		-J | --json														  | JSON Formatted stats output							|\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --recovery-type time      \\\n"
@@ -92,6 +93,7 @@ static struct option long_options[] = {
 	{ "cname",           required_argument, NULL, 'C' },
 	{ "verbose-level",   required_argument, NULL, 'v' },
 	{ "help",            no_argument,       NULL, 'h' },
+	{ "json",            no_argument,       NULL, 'J' },
 	{ 0, 0, 0, 0 },
 };
 
@@ -170,6 +172,13 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
+static int cb_stats(void *arg, struct rist_stats *rist_stats) {
+	const char* json = stats_to_json(rist_stats);
+	fprintf(stderr, "%s\n\n", json);
+	free(rist_stats);
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
 	int option_index;
@@ -180,6 +189,7 @@ int main(int argc, char *argv[])
 	char *cname = NULL;
 	char c;
 	int enable_data_callback = 1;
+	int json_out = 0;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint8_t encryption_type = 0;
@@ -211,7 +221,7 @@ int main(int argc, char *argv[])
 		addr[i] = NULL;
 	}
 
-	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h:J", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url[0] = strdup(optarg);
@@ -293,6 +303,9 @@ int main(int argc, char *argv[])
 		case 'v':
 			loglevel = atoi(optarg);
 		break;
+		case 'J':
+			json_out = 1;
+		break;
 		case 'h':
 			/* Fall through */
 		default:
@@ -353,6 +366,9 @@ int main(int argc, char *argv[])
 			fprintf(stderr, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
+	}
+	if (json_out) {
+		rist_receiver_set_stats_cb(ctx, 1000, cb_stats, NULL);
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
