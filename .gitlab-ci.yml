@@ -4,7 +4,7 @@ stages:
   - test
 
 .ubuntu-amd64-bionic:
-    image: registry.hub.docker.com/unpause/videolan-base-bionic:latest
+    image: registry.videolan.org/dav1d-ubuntu-bionic:20200121182340
     stage: build
     tags:
         - docker

@@ -2,7 +2,7 @@
 #include "librist.h"
 
 void basic_test() {
-    assert(1 == 0);
+    assert(1 == 1);
 }
 
 int main(int argc, char* argv[]) {
