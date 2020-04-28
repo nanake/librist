@@ -1116,6 +1116,9 @@ static struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *c
 	if (config->session_timeout > 0) {
 		p->session_timeout = config->session_timeout * RIST_CLOCK;
 	}
+	else {
+		p->session_timeout = config->recovery_length_max * RIST_CLOCK;
+	}
 
 	/* Initialize socket */
 	rist_create_socket(p);
@@ -2697,11 +2700,11 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 				// TODO: print warning if the peer is dead?, i.e. no stats
 				if (!peer->dead)
 				{
-					if (peer->is_rtcp == true && peer->last_rtcp_received - timestampNTP_u64() > peer->session_timeout &&
-						peer->stats_sender_total.received > 0)
+					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout &&
+						peer->last_rtcp_received > 0)
 					{
-						msg(0, peer->sender_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
-							peer->adv_peer_id);
+						msg(0, peer->sender_ctx->id, RIST_LOG_WARN, 
+							"[WARNING] Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
 						bool current_state = peer->dead;
 						peer->dead = true;
 						peer->peer_data->dead = true;
@@ -3225,6 +3228,9 @@ static struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 	if (config->session_timeout > 0) {
 		newpeer->session_timeout = config->session_timeout * RIST_CLOCK;
+	}
+	else {
+		newpeer->session_timeout = config->recovery_length_max * RIST_CLOCK;
 	}
 
 	/* Initialize socket */
