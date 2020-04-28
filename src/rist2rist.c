@@ -10,6 +10,7 @@
 #include <unistd.h>
 #include <getopt.h>
 #include <assert.h>
+#include <signal.h>
 
 struct rist_sender_args {
 	char* cname;
@@ -216,7 +217,10 @@ int main (int argc, char **argv) {
 	client_args.flow_id = 0;
 	int json_out = 0;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
-	
+	struct sigaction act;
+	act.sa_handler = intHandler;
+	sigaction(SIGINT, &act, NULL);
+
 	int option_index;
 	char c;
 	while ((c = getopt_long(argc, argv, "u:o:e:C:h:v:t:", long_options, &option_index)) != -1) {
