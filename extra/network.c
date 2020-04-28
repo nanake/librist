@@ -1087,8 +1087,11 @@ retry:
 size_t udp_Write(int fd, const void *buf, size_t len)
 {
 	int ret = -1;
+	int retries = 0;
 
 retry:
+	if (++retries > 5)
+		return -1;
 	ret = send(fd, buf, len, 0);
 	if (ret == -1) {
 		switch (errno) {
@@ -1107,11 +1110,18 @@ retry:
 			/* try again */
 			goto retry;
 		break;
+		case ECONNREFUSED:
+			// Ignore, we do not care if no one is listening
+		break;
 		case ENOTCONN:
 			fprintf(stderr, "socket %d is not connected\n", fd);
 		break;
 		default:
-			fprintf(stderr, "socket %d error: %s\n", fd, gai_strerror(errno));
+			if (errno < 135) { //sys_nerr
+				fprintf(stderr, "socket %d error: %d / %s\n", fd, errno, strerror(errno));
+			} else {
+				fprintf(stderr, "socket %d error: %d / %s\n", fd, errno, gai_strerror(errno));
+			}
 		break;
 		}
 	}

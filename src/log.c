@@ -11,14 +11,8 @@
 
 static int loglevel = RIST_LOG_WARN;
 
-#if defined(__unix__)
-static int stats_fd = STDERR_FILENO;
-#elif defined(_WIN32)
+// Default is no stats printed
 static int stats_fd = -1;
-#else
-static int stats_fd = 2;
-#endif
-
 static int stats_socket = 0;
 
 void set_loglevel(int level)
@@ -30,24 +24,24 @@ int rist_set_stats_fd(int fd)
 {
 	if (fd > -1) {
 		stats_fd = fd;
-		fprintf(stderr, "Statistic custom file handle set, #%d\n", stats_fd);
+		fprintf(stderr, "Logs custom file handle set, #%d\n", stats_fd);
 	}
 
 	return 0;
 }
 
-int rist_set_stats_socket(int port)
+int rist_set_stats_socket(char * hostname, int port)
 {
 	if (!port) {
-		fprintf(stderr, "Invalid Statistic socket port %d requested\n", port);
+		fprintf(stderr, "Invalid logs socket port %d requested\n", port);
 		return -1;
 	}
 
 	if (!stats_socket) {
-		stats_socket = udp_Connect("127.0.0.1", port, -1, 0, NULL);
-		fprintf(stderr, "Statistic socket created on port %d (#%d)\n", port, stats_socket);
+		stats_socket = udp_Connect(hostname, port, -1, 0, NULL);
+		fprintf(stderr, "Logs socket created on %s : %d (#%d)\n", hostname, port, stats_socket);
 	} else {
-		fprintf(stderr, "Sorry, statistic socket was already created on port %d (#%d)\n", port, stats_socket);
+		fprintf(stderr, "Sorry, logs socket was already created, socket #%d\n", stats_socket);
 	}
 
 	return 0;

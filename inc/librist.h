@@ -57,7 +57,7 @@ __BEGIN_DECLS
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (7)
-#define RIST_SUBVERSION (0)
+#define RIST_SUBVERSION (1)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */
@@ -548,6 +548,18 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
  * of parameters that are valid
  */
 RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
+
+/**
+ * @brief Set custom file descriptor and target ip:port to be used for printing logs
+ *
+ * Set fd or configure remote udp address:port to print librist logs
+ *
+ * @param fd file descriptor to be used for statistics (default is no logs or -1, 2 is stderr)
+ * @param address ipaddress:port combination to send the logs using udp (NULL to disable)
+ *
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_logs_set(int fd, char *address);
 
 __END_DECLS
 

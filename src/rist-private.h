@@ -512,6 +512,10 @@ RIST_PRIV void rist_print_inet_info(char *prefix, struct rist_peer *peer);
 RIST_PRIV void rist_peer_rtcp(struct evsocket_ctx *ctx, void *arg);
 RIST_PRIV void rist_populate_cname(struct rist_peer *peer);
 
+/* defined in log.c */
+RIST_PRIV int rist_set_stats_fd(int fd);
+RIST_PRIV int rist_set_stats_socket(char * hostname, int port);
+
 /* Get common context */
 RIST_PRIV struct rist_common_ctx *get_cctx(struct rist_peer *peer);
 

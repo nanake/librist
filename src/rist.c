@@ -44,6 +44,37 @@ typedef struct rist_url_param {
 	char *val;
 } rist_url_param_t;
 
+
+int rist_logs_set(int fd, char *address)
+{
+	char * url = NULL;
+	int ret = rist_set_stats_fd(fd);
+	if (ret)
+		fprintf(stderr, "[ERROR] Could not set file descriptor to %d\n", fd);
+
+	if (address)
+	{
+		struct network_url parsed_url;
+		url = strdup(address);
+		if (parse_url(url, &parsed_url)) {
+			msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s / %s\n", parsed_url.error, address);
+			ret = -1;
+		}
+		else
+		{
+			if (rist_set_stats_socket(parsed_url.hostname, parsed_url.port)) {
+				msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not set socket to: hostname-> %s, port-> %d\n",
+					parsed_url.hostname, parsed_url.port);
+				ret = -1;
+			}
+		}
+	}
+
+	if (url)
+		free(url);
+	return ret;
+}
+
 static inline char* find(const char *str, char value)
 {
 	str = strchr( str, value );
