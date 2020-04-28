@@ -3671,11 +3671,17 @@ int rist_sender_destroy(struct rist_sender *ctx)
 		return -1;
 	}
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
+	msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
+	uint64_t start_time = timestampNTP_u64();
 	while (ctx->sender_thread && ctx->common.shutdown != 2) {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
+		msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
+		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
+		{
+			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+			assert(0);
+		}
 	}
 	rist_sender_destroy_local(ctx);
 
@@ -3690,9 +3696,15 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
+	uint64_t start_time = timestampNTP_u64();
 	while (ctx->receiver_thread && ctx->common.shutdown != 2) {
 		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for protocol loop to exit\n");
 		usleep(5000);
+		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
+		{
+			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+			assert(0);
+		}
 	}
 	rist_receiver_destroy_local(ctx);
 
