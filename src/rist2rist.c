@@ -19,6 +19,7 @@ struct rist_sender_args {
 	enum rist_log_level loglevel;
 	uint8_t encryption_type;
 	uint32_t flow_id;
+	int json_out;
 };
 
 struct rist_cb_arg {
@@ -38,6 +39,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -C | --cname identifier                  | Manually configured identifier                         |\n"
 "       -v | --verbose-level                     | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                              | Show this help                                         |\n"
+"		-J | --json								 | JSON Formatted stats output							  |\n"
 ;
 
 static struct option long_options[] = {
@@ -46,8 +48,10 @@ static struct option long_options[] = {
 { "encryption-password", required_argument, NULL, 'p' },
 { "encryption-type", required_argument, NULL, 't' },
 { "cname",           required_argument, NULL, 'N' },
-{ "verbose-level",           required_argument, NULL, 'l' },
+{ "verbose-level",   required_argument, NULL, 'l' },
 { "help",            no_argument,       NULL, 'h' },
+{ "json",            no_argument,       NULL, 'J' },
+
 { 0, 0, 0, 0 },
 };
 
@@ -88,6 +92,13 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
+static int cb_stats(void *arg, struct rist_stats *rist_stats) {
+	const char* json = stats_to_json(rist_stats);
+	fprintf(stderr, "%s\n", json);
+	free(rist_stats);
+	return 0;
+}
+
 static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 	struct rist_sender *ctx;
 	printf("CName: %s\n", setup->cname);
@@ -107,6 +118,10 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 	if (rist_sender_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
 		fprintf(stderr, "Could not add enable out-of-band data\n");
 		exit(1);
+	}
+
+	if (setup->json_out) {
+		rist_sender_stats_callback_set(ctx, 1000, cb_stats, NULL);
 	}
 
 	// Applications defaults and/or command line options
@@ -199,6 +214,7 @@ int main (int argc, char **argv) {
 	client_args.encryption_type = 0;
 	client_args.shared_secret = NULL;
 	client_args.flow_id = 0;
+	int json_out = 0;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	
 	int option_index;
@@ -223,6 +239,9 @@ int main (int argc, char **argv) {
 		case 'l':
 			loglevel =atoi(optarg);
 			break;
+		case 'J':
+			json_out = 1;
+			break;
 		case 'h':
 			//
 		default:
@@ -234,6 +253,7 @@ int main (int argc, char **argv) {
 	client_args.loglevel = loglevel;
 	client_args.shared_secret = shared_secret;
 	client_args.outputurl = outputurl;
+	client_args.json_out = json_out;
 
 	struct rist_receiver *receiver_ctx;
 
@@ -267,6 +287,10 @@ int main (int argc, char **argv) {
 
 	if (cname != NULL) {
 		strncpy((void *)&app_peer_config.cname[0], cname, 128);
+	}
+
+	if (json_out) {
+		rist_receiver_stats_callback_set(receiver_ctx, 1000, cb_stats, NULL);
 	}
 
 	// URL overrides (also cleans up the URL)

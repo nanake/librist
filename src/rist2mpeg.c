@@ -368,7 +368,7 @@ int main(int argc, char *argv[])
 		}
 	}
 	if (json_out) {
-		rist_receiver_set_stats_cb(ctx, 1000, cb_stats, NULL);
+		rist_receiver_stats_callback_set(ctx, 1000, cb_stats, NULL);
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {

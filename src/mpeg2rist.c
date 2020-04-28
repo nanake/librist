@@ -51,6 +51,8 @@ static struct option long_options[] = {
 { "cname",           required_argument, NULL, 'C' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
+{ "json",            no_argument,       NULL, 'J' },
+
 { 0, 0, 0, 0 },
 };
 
@@ -84,6 +86,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -C | --cname identifier                | Manually configured identifier                         |\n"
 "       -v | --verbose-level value             | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                            | Show this help                                         |\n"
+"		-J | --json														  | JSON Formatted stats output							|\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --recovery-type time      \\\n"
@@ -136,6 +139,13 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
+static int cb_stats(void *arg, struct rist_stats *rist_stats) {
+	const char* json = stats_to_json(rist_stats);
+	fprintf(stderr, "%s\n", json);
+	free(rist_stats);
+	return 0;
+}
+
 static int signalReceived = 0;
 static void intHandler(int signal) {
 	fprintf(stderr, "Signal %d received\n", signal);
@@ -154,6 +164,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char *address[PEER_COUNT];
+	int json_out = 0;
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
@@ -180,7 +191,7 @@ int main(int argc, char *argv[])
 		weight[i] = 0;
 	}
 
-	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:N:C:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:N:C:h:J:", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url = strdup(optarg);
@@ -276,6 +287,9 @@ int main(int argc, char *argv[])
 		case 'v':
 			loglevel = atoi(optarg);
 		break;
+		case 'J':
+			json_out = 1;
+		break;
 		case 'h':
 			/* Fall through */
 		default:
@@ -348,6 +362,10 @@ int main(int argc, char *argv[])
 	if (rist < 0) {
 		fprintf(stderr, "Could not initialize rist auth handler\n");
 		exit(1);
+	}
+
+	if (json_out) {
+		rist_sender_stats_callback_set(ctx, 1000, cb_stats, NULL);
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
