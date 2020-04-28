@@ -1297,10 +1297,6 @@ void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_band
 			f->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
 			f->stats_instant.max_ips = 0ULL;
 			f->stats_instant.avg_count = 0UL;
-			f->stats_total.cur_ips = 0ULL;
-			f->stats_total.min_ips = 0xFFFFFFFFFFFFFFFFULL;
-			f->stats_total.max_ips = 0ULL;
-			f->stats_total.avg_count = 0UL;
 		} else {
 			f->stats_instant.cur_ips = now - f->last_ipstats_time;
 			/* Set new min */
@@ -1312,9 +1308,7 @@ void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_band
 
 			/* Avg calculation */
 			f->stats_instant.total_ips += f->stats_instant.cur_ips;
-			f->stats_total.total_ips += f->stats_instant.cur_ips;
 			f->stats_instant.avg_count++;
-			f->stats_total.avg_count++;
 		}
 		f->last_ipstats_time = now;
 	}
@@ -1740,6 +1734,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 			case PTYPE_SDES:
 			{
 				peer->stats_sender_instant.received++;
+				peer->last_rtcp_received = timestampNTP_u64();
 				if (peer->dead) {
 					pthread_rwlock_t *peerlist_lock = &get_cctx(peer)->peerlist_lock;
 					pthread_rwlock_wrlock(peerlist_lock);
@@ -2666,7 +2661,7 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	int max_nacksperloop = RIST_MAX_NACKS;
 
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
-	uint64_t rist_stats_interval = (uint64_t)1000 * (uint64_t)RIST_CLOCK; // 1 second
+	uint64_t rist_stats_interval = ctx->common.stats_report_time; // 1 second
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting master sender loop at %d ms max jitter\n",
 				max_jitter_ms);
@@ -2674,6 +2669,7 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	uint64_t now  = timestampNTP_u64();
 	ctx->common.nacks_next_time = now;
 	ctx->stats_next_time = now;
+	ctx->checks_next_time = now;
 	while(!ctx->common.shutdown) {
 
 		// Conditional 5ms sleep that is woken by data coming in
@@ -2689,6 +2685,34 @@ static PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 
 		now  = timestampNTP_u64();
 
+		/* marks peer as dead, run every second */
+		if (now > ctx->checks_next_time)
+		{
+			ctx->checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
+			pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
+			pthread_rwlock_wrlock(peerlist_lock);
+			for (size_t j = 0; j < ctx->peer_lst_len; j++)
+			{
+				struct rist_peer *peer = ctx->peer_lst[j];
+				// TODO: print warning if the peer is dead?, i.e. no stats
+				if (!peer->dead)
+				{
+					if (peer->is_rtcp == true && peer->last_rtcp_received - timestampNTP_u64() > peer->session_timeout &&
+						peer->stats_sender_total.received > 0)
+					{
+						msg(0, peer->sender_ctx->id, RIST_LOG_WARN, "[WARNING] Peer with id %zu is dead, stopping stream ...\n",
+							peer->adv_peer_id);
+						bool current_state = peer->dead;
+						peer->dead = true;
+						peer->peer_data->dead = true;
+						if (current_state != peer->peer_data->dead && peer->peer_data->parent)
+							--peer->peer_data->parent->child_alive_count;
+					}
+				}
+			}
+			pthread_rwlock_unlock(peerlist_lock);
+		}
+		
 		// stats timer
 		if (now > ctx->stats_next_time) {
 			ctx->stats_next_time += rist_stats_interval;
@@ -2749,6 +2773,7 @@ static int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profil
 		profile = RIST_PROFILE_MAIN;
 	}
 	ctx->profile = profile;
+	ctx->stats_report_time = 0;
 
 	if (pthread_rwlock_init(&ctx->peerlist_lock, NULL) != 0) {
 		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->peerlist_lock\n");
@@ -2838,7 +2863,7 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 		ctx = NULL;
 		return -1;
 	}
-
+	ctx->common.stats_report_time = (uint64_t)1000 * (uint64_t)RIST_CLOCK;
 	ctx->id = (intptr_t)ctx;
 	//ctx->common.seq = 9159579;
 	//ctx->common.seq = RIST_SERVER_QUEUE_BUFFERS - 25000;
@@ -3482,10 +3507,33 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 			// stats timer
 			struct rist_flow *f = ctx->common.FLOWS;
 			while (f) {
+				if (now > f->checks_next_time) {
+					f->checks_next_time += f->recovery_buffer_ticks;
+					// TODO: use the new setting per peer called session_timeout instead
+					// TODO: STALE_FLOW_TIME or buffer size in us ... which ever is greater
+					if ((f->stats_total.last_recv_ts != 0) && (timestampNTP_u64() - f->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME))
+					{
+						if ((timestampNTP_u64() - f->stats_total.last_recv_ts) < (1.5 * (uint64_t)STALE_FLOW_TIME))
+						{
+							struct rist_flow *next = f->next;
+							// Do nothing
+							msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
+								"\t************** STALE FLOW:%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 ", Deleting! ***************\n",
+								timestampNTP_u64(),
+								f->stats_total.last_recv_ts,
+								timestampNTP_u64() - f->stats_total.last_recv_ts,
+								(uint64_t)STALE_FLOW_TIME);
+							pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
+							pthread_rwlock_wrlock(peerlist_lock);
+							rist_delete_flow(ctx, f);
+							pthread_rwlock_unlock(peerlist_lock);
+							f = next;
+							continue;
+						}
+					}
+				} 
 				if (now > f->stats_next_time) {
-					f->stats_next_time += f->recovery_buffer_ticks; // equal to the buffer size
-					// we move the f cursor inside because we can detect and delete stale flows
-					// inside, thus skipping it
+					f->stats_next_time += f->stats_report_time; 
 					f = rist_receiver_flow_statistics(ctx, f);
 				}
 				else
@@ -3651,4 +3699,32 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 	return 0;
 }
 
-
+int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg)
+{
+	if (stats_cb == NULL) {
+		return -1;
+	}
+	ctx->common.stats_callback = stats_cb;
+	ctx->common.stats_callback_argument = arg;
+	if (statsinterval != 0) {
+		ctx->common.stats_report_time = statsinterval * RIST_CLOCK;
+	}
+	return 0;
+}
+int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg)
+{
+	if (stats_cb == NULL) {
+		return -1;
+	}
+	ctx->common.stats_callback = stats_cb;
+	ctx->common.stats_callback_argument = arg;
+	if (statsinterval != 0) {
+		ctx->common.stats_report_time = statsinterval * RIST_CLOCK;
+		struct rist_flow *f = ctx->common.FLOWS;
+		while (f) {
+			f->stats_report_time = statsinterval * RIST_CLOCK;
+			f = f->next;
+		}
+	}
+	return 0;
+}

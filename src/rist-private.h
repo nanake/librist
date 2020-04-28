@@ -71,6 +71,8 @@ __BEGIN_DECLS
 	(byte & 0x02 ? '1' : '0'), \
 	(byte & 0x01 ? '1' : '0')
 
+#define STALE_FLOW_TIME (60L * 1000L * RIST_CLOCK) /* in milliseconds */
+
 enum rist_peer_state {
 	RIST_PEER_STATE_IDLE = 0,
 	RIST_PEER_STATE_PING = 1,
@@ -169,7 +171,8 @@ struct rist_flow {
 
 	bool receiver_queue_has_items;
 	size_t receiver_queue_size;        /* size in bytes */
-	uint64_t recovery_buffer_ticks;  /* size in ticks */
+	uint64_t recovery_buffer_ticks;    /* size in ticks */
+	uint64_t stats_report_time; 	   /* in ticks */
 	size_t receiver_queue_output_idx;  /* next packet to output */
 	size_t receiver_queue_max;
 
@@ -180,6 +183,7 @@ struct rist_flow {
 	struct rist_peer_flow_stats stats_instant;
 	struct rist_peer_flow_stats stats_total;
 	uint64_t stats_next_time;
+	uint64_t checks_next_time;
 
 	/* Missing queue max size */
 	uint32_t missing_counter_max;
@@ -246,6 +250,7 @@ struct rist_common_ctx {
 
 	/* timers */
 	uint64_t nacks_next_time;
+	uint64_t stats_report_time;
 
 	enum rist_profile profile;
 	uint8_t cname[RIST_MAX_HOSTNAME];
@@ -268,6 +273,10 @@ struct rist_common_ctx {
 	int (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
+
+	int (*stats_callback)(void *arg, struct rist_stats *stats);
+	void *stats_callback_argument;
+
 	pthread_rwlock_t oob_queue_lock;
 	struct rist_buffer *oob_queue[RIST_OOB_QUEUE_BUFFERS]; /* oob queue */
 	size_t oob_queue_bytesize;
@@ -331,6 +340,7 @@ struct rist_sender {
 	uint64_t last_datagram_time;
 	bool simulate_loss;
 	uint64_t stats_next_time;
+	uint64_t checks_next_time;
 	uint32_t session_timeout;
 
 	/* retry queue */
@@ -488,6 +498,7 @@ struct rist_peer {
 	uint32_t rtcp_keepalive_interval;
 	uint64_t keepalive_next_time;
 	uint32_t session_timeout;
+	uint64_t last_rtcp_received;
 
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];
@@ -504,6 +515,7 @@ RIST_PRIV struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8
 RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void empty_receiver_queue(struct rist_flow *f);
+RIST_PRIV void rist_flush_missing_flow_queue(struct rist_flow *flow);
 
 /* defined in rist.c */
 RIST_PRIV void rist_fsm_recv_connect(struct rist_peer *peer);

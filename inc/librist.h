@@ -137,6 +137,11 @@ enum rist_data_block_flags {
 	RIST_DATA_FLAGS_NEED_FREE = 2,
 };
 
+enum rist_stats_type {
+	RIST_STATS_SENDER_PEER,
+	RIST_STATS_RECEIVER_FLOW
+};
+
 struct rist_receiver;
 struct rist_sender;
 struct rist_peer;
@@ -215,6 +220,132 @@ struct rist_peer_config {
 
 };
 
+struct rist_stats_sender_peer {
+	/* cname */
+	char cname[RIST_MAX_STRING_SHORT];
+	/* internal peer id */
+	uint32_t peer_id;
+	/* avg bandwidth calculation */
+	size_t bandwidth;
+	/* bandwidth devoted to retries */
+	size_t retry_bandwidth;
+	/* num sent packets  (TODO: excluding retries?!?) */
+	uint64_t sent;
+	/* num received packets TODO ???*/
+	uint64_t received;
+	/* retransmitted packets */
+	uint64_t retransmitted;
+	/* packets skipped due to bufferbloat protection */
+	uint32_t bloat_skipped;
+	/* retransmits skipped */
+	uint32_t retransmit_skipped;
+	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + retransmit_skipped + retransmitted */
+	double quality;
+	/* current RTT */
+	uint32_t rtt;
+	/* avg rtt last 8 calculations */
+	uint32_t avg_rtt;
+	/* TODO ??? */
+	size_t retry_buffer_size;
+	/* TODO ??? */
+	uint32_t cooldown_time;
+};
+
+struct rist_stats_receiver_flow_peer {
+	/* cname */
+	char cname[RIST_MAX_STRING_SHORT];
+
+	uint32_t flow_id;
+	/* dead peer 0/1 */
+	uint32_t dead;
+
+	/* peer num within flow peer list */
+	uint32_t peer_num;
+	uint32_t flow_peer_list_len;
+
+	/* peer id */
+	uint32_t peer_id;
+	/* received packets */
+	uint32_t received;
+	/* missing, including reordered */
+	uint32_t missing;
+	/* Q = (received * 100.0) / received + missing */
+	double quality;
+	/* total recovered packets */
+	uint32_t recovered_total;
+	/* recovered without nacks sent (reordered) */
+	uint32_t recovered_no_nack;
+	/* recovered after N nacks */
+	uint32_t recovered_one_nack;
+	uint32_t recovered_two_nacks;
+	uint32_t recovered_three_nacks;
+	uint32_t recovered_more_nacks;
+	/* ??? TODO */
+	uint32_t recovered_average;
+	uint32_t recovered_slope;
+	uint32_t recovered_slope_inverse;
+	/* reordered packets */
+	uint32_t reordered;
+	/* duplicate packets received */
+	uint32_t duplicates;
+	/* retries ??? TODO */
+	uint32_t retries;
+	uint64_t recovery_buffer_length;
+	/* missing queue */
+	uint32_t missing_queue;
+	uint32_t missing_queue_max;
+	/* current rtt */
+	uint32_t rtt;
+	/* avg rtt over last 8 stat intervals */
+	uint32_t avg_rtt;
+	/* bitrate */
+	uint32_t bitrate;
+	/* average bitrate */
+	uint32_t avg_bitrate;
+};
+
+struct rist_stats_receiver_flow {
+	uint32_t flow_id;
+	uint64_t received;
+	/* missing, including reordered */
+	uint32_t missing;
+	/* Q = (received * 100.0) / received + missing */
+	double quality;
+	/* total recovered packets */
+	uint32_t recovered_total;
+	/* recovered without nacks sent (reordered) */
+	uint32_t recovered_no_nack;
+	/* recovered after N nacks */
+	uint32_t recovered_one_nack;
+	uint32_t recovered_two_nacks;
+	uint32_t recovered_three_nacks;
+	uint32_t recovered_more_nacks;
+	/* lost packets */
+	uint32_t lost;
+	/* reordered packets */
+	uint32_t reordered;
+	/* duplicate packets received */
+	uint32_t duplicates;
+	/* retries ??? TODO */
+	uint32_t retries;
+	/* ??? */
+	uint64_t min_inter_packet_spacing;
+	uint64_t cur_inter_packet_spacing;
+	uint64_t max_inter_packet_spacing;
+
+	uint32_t peer_list_len;
+
+	struct rist_stats_receiver_flow_peer peers[1];
+};
+
+struct rist_stats {
+	enum rist_stats_type stats_type;
+	union {
+		struct rist_stats_sender_peer rist_stats_sender_peer;
+		struct rist_stats_receiver_flow rist_stats_receiver_flow;
+	} stats;
+};
+
 /**
  * @brief Create Sender
  *
@@ -229,7 +360,7 @@ struct rist_peer_config {
 RIST_API int rist_sender_create(struct rist_sender **ctx, enum rist_profile profile,
 				uint32_t flow_id, enum rist_log_level log_level);
 
- /**
+/**
  * @brief Assign dynamic authentication handler
  *
  * Whenever a new peer is connected, @a connect_cb is called.
@@ -561,6 +692,25 @@ RIST_API int rist_parse_address(const char *url, const struct rist_peer_config *
  */
 RIST_API int rist_logs_set(int fd, char *address);
 
+/**
+ * @brief Set callback for receiving stats structs
+ *
+ * @param ctx RIST Receiver context
+ * @param statsinterval interval between stats reporting
+ * @param stats_cb Callback function that will be called
+ * @param arg extra arguments for callback function
+ */
+RIST_API int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg);
+
+/**
+ * @brief Set callback for receiving stats structs
+ *
+ * @param ctx RIST Sender context
+ * @param statsinterval interval between stats reporting
+ * @param stats_cb Callback function that will be called
+ * @param arg extra arguments for callback function
+ */
+RIST_API int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg);
 __END_DECLS
 
 #endif
