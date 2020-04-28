@@ -332,6 +332,12 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* Turn on stderr (2) logs */
+	if (rist_logs_set(STDERR_FILENO, NULL) != 0) {
+		fprintf(stderr, "Could not set logging\n");
+		exit(1);
+	}
+
 	struct rist_sender *ctx;
 	if (rist_sender_create(&ctx, profile, 0, loglevel) != 0) {
 		fprintf(stderr, "Could not create rist sender context\n");

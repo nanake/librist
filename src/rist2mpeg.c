@@ -330,6 +330,12 @@ int main(int argc, char *argv[])
 			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
+	/* Turn on stderr (2) logs */
+	if (rist_logs_set(STDERR_FILENO, NULL) != 0) {
+		fprintf(stderr, "Could not set logging\n");
+		exit(1);
+	}
+
 	struct rist_receiver *ctx;
 
 	if (rist_receiver_create(&ctx, profile, loglevel) != 0) {
