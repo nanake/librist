@@ -418,7 +418,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	if (!retry) {
 		uint32_t current_seq = seq - 1;
 		if (f->short_seq)
-			current_seq = (uint16_t)current_seq;
+			current_seq = current_seq & (UINT16_MAX);
 
 		// We would just need to check if the current_seq is larger than the last_seq_found and
 		// not too far from it.
