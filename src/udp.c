@@ -1120,11 +1120,6 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 
 void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
 {
-	// Even though all the checks are on the dequeue function, we leave this one here
-	// to prevent the flodding of our fifo .. It is only based on the date of the
-	// last queued item with the same seq.
-	// This is a safety check to protect against buggy or non compliant receivers that request the
-	// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
 	uint64_t now = timestampNTP_u64();
 	size_t idx = rist_sender_index_get(ctx, seq, peer);
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
@@ -1132,10 +1127,16 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	{
 		if (buffer->last_retry_request != 0)
 		{
+			// Even though all the checks are on the dequeue function, we leave this one here
+			// to prevent the flodding of our fifo .. It is only based on the date of the
+			// last queued item with the same seq.
+			// This is a safety check to protect against buggy or non compliant receivers that request the
+			// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
 			uint64_t delta = 2 * (now - buffer->last_retry_request) / RIST_CLOCK;
-			//msg(0, ctx->id, RIST_LOG_WARN,
-			//	"[ERROR] Nack request for seq %"PRIu32" with delta %"PRIu64" and rtt_min %"PRIu32"\n", 
-			//	buffer->seq, delta, peer->config.recovery_rtt_min);
+			if (ctx->common.debug)
+				msg(0, ctx->id, RIST_LOG_DEBUG,
+					"[DEBUG] Nack request for seq %"PRIu32" with delta %"PRIu64" and rtt_min %"PRIu32"\n", 
+					buffer->seq, delta, peer->config.recovery_rtt_min);
 			if (delta < peer->config.recovery_rtt_min)
 			{
 				msg(0, ctx->id, RIST_LOG_WARN,
@@ -1147,6 +1148,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 		}
 		else
 		{
+			if (ctx->common.debug)
+				msg(0, ctx->id, RIST_LOG_DEBUG,
+					"[DEBUG] First nack request for seq %"PRIu32"\n", buffer->seq);
 			buffer->last_retry_request = now;
 		}
 	}
