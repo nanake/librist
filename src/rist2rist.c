@@ -95,7 +95,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 	const char* json = stats_to_json(rist_stats);
-	fprintf(stderr, "%s\n", json);
+	fprintf(stderr, "%s\n\n", json);
 	free(rist_stats);
 	return 0;
 }
