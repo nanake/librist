@@ -1,15 +1,19 @@
 #include <assert.h>
 #include "librist.h"
+#include <stdarg.h>
+#include <stddef.h>
+#include <setjmp.h>
+#include <stdint.h>
+#include <cmocka.h>
 
-void basic_test() {
+static void basic_test(void** state) {
+    (void)state;
     assert(1 == 1);
 }
 
-int main(int argc, char* argv[]) {
-    (void)argc;
-    (void)argv;
-
-    basic_test();
-
-    return 0;
+int main(void) {
+    const struct CMUnitTest tests[] = {
+        cmocka_unit_test(basic_test)
+    };
+    return cmocka_run_group_tests(tests, NULL, NULL);
 }

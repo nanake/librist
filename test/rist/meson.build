@@ -3,7 +3,7 @@ risttest_sources = [
 ]
 
 risttest_deps = [
-
+    meson.get_compiler('c').find_library('cmocka')
 ]
 
 risttest_lib_deps = [
