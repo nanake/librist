@@ -38,9 +38,9 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -e | --encryption-password PWD           | Pre-shared encryption password                         |\n"
 "       -t | --encryption-type TYPE              | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)   |\n"
 "       -C | --cname identifier                  | Manually configured identifier                         |\n"
+"       -J | --json value                        | Print JSON stats (0 = disabled, 1 = enabled)           |\n"
 "       -v | --verbose-level                     | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                              | Show this help                                         |\n"
-"		-J | --json								 | JSON Formatted stats output							  |\n"
 ;
 
 static struct option long_options[] = {
@@ -49,9 +49,9 @@ static struct option long_options[] = {
 { "encryption-password", required_argument, NULL, 'p' },
 { "encryption-type", required_argument, NULL, 't' },
 { "cname",           required_argument, NULL, 'N' },
+{ "json",            required_argument, NULL, 'J' },
 { "verbose-level",   required_argument, NULL, 'l' },
 { "help",            no_argument,       NULL, 'h' },
-{ "json",            no_argument,       NULL, 'J' },
 
 { 0, 0, 0, 0 },
 };
@@ -215,7 +215,7 @@ int main (int argc, char **argv) {
 	client_args.encryption_type = 0;
 	client_args.shared_secret = NULL;
 	client_args.flow_id = 0;
-	int json_out = 0;
+	int json_out = 1;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	struct sigaction act;
 	act.sa_handler = intHandler;
@@ -241,10 +241,10 @@ int main (int argc, char **argv) {
 			cname = strdup(optarg); 
 			break;
 		case 'l':
-			loglevel =atoi(optarg);
+			loglevel = atoi(optarg);
 			break;
 		case 'J':
-			json_out = 1;
+			json_out = atoi(optarg);
 			break;
 		case 'h':
 			//

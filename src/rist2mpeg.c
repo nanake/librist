@@ -50,7 +50,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -l | --bloat-limit NACK_COUNT                                   * | Buffer bloat min nack count for random discard      |\n"
 "       -L | --bloat-hardlimit NACK_COUNT                               * | Buffer bloat max nack count for hard limit discard  |\n"
 "       -W | --max-bitrate Kbps                                         * | rist recovery max bitrate (Kbit/s)                  |\n"
-"		-J | --json														  | JSON Formatted stats output							|\n"
+"       -J | --json value                                                 | Print JSON stats (0 = disabled, 1 = enabled)        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --recovery-type time      \\\n"
@@ -64,6 +64,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --profile 1               \\\n"
 "       --gre-src-port 0          \\\n"
 "       --gre-dst-port 0          \\\n"
+"       --json 1                  \\\n"
 "       --verbose-level 2         \n";
 
 static struct option long_options[] = {
@@ -91,9 +92,9 @@ static struct option long_options[] = {
 	{ "gre-src-port",    required_argument, NULL, 'n' },
 	{ "gre-dst-port",    required_argument, NULL, 'N' },
 	{ "cname",           required_argument, NULL, 'C' },
+	{ "json",            required_argument, NULL, 'J' },
 	{ "verbose-level",   required_argument, NULL, 'v' },
 	{ "help",            no_argument,       NULL, 'h' },
-	{ "json",            no_argument,       NULL, 'J' },
 	{ 0, 0, 0, 0 },
 };
 
@@ -189,7 +190,7 @@ int main(int argc, char *argv[])
 	char *cname = NULL;
 	char c;
 	int enable_data_callback = 1;
-	int json_out = 0;
+	int json_out = 1;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint8_t encryption_type = 0;
@@ -304,7 +305,7 @@ int main(int argc, char *argv[])
 			loglevel = atoi(optarg);
 		break;
 		case 'J':
-			json_out = 1;
+			json_out = atoi(optarg);
 		break;
 		case 'h':
 			/* Fall through */

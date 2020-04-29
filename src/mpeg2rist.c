@@ -49,9 +49,9 @@ static struct option long_options[] = {
 { "gre-src-port",    required_argument, NULL, 'n' },
 { "gre-dst-port",    required_argument, NULL, 'N' },
 { "cname",           required_argument, NULL, 'C' },
+{ "json",            required_argument, NULL, 'J' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
-{ "json",            no_argument,       NULL, 'J' },
 
 { 0, 0, 0, 0 },
 };
@@ -84,9 +84,9 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -n | --gre-src-port port               | Reduced profile src port to forward                    |\n"
 "       -N | --gre-dst-port port               | Reduced profile dst port to forward                    |\n"
 "       -C | --cname identifier                | Manually configured identifier                         |\n"
+"       -J | --json value                      | Print JSON stats (0 = disabled, 1 = enabled)           |\n"
 "       -v | --verbose-level value             | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                            | Show this help                                         |\n"
-"		-J | --json														  | JSON Formatted stats output							|\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --recovery-type time      \\\n"
@@ -100,6 +100,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --profile 1               \\\n"
 "       --gre-src-port 1971       \\\n"
 "       --gre-dst-port 1968       \\\n"
+"       --json 1                  \\\n"
 "       --verbose-level 2         \n";
 
 static void usage(char *cmd)
@@ -164,7 +165,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char *address[PEER_COUNT];
-	int json_out = 0;
+	int json_out = 1;
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
@@ -288,7 +289,7 @@ int main(int argc, char *argv[])
 			loglevel = atoi(optarg);
 		break;
 		case 'J':
-			json_out = 1;
+			json_out = atoi(optarg);
 		break;
 		case 'h':
 			/* Fall through */
