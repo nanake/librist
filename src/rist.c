@@ -435,28 +435,43 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			else
 				diff = (UINT16_MAX - f->last_seq_found) + current_seq;
 		}
+		if (source_time > f->max_source_time)
+			f->max_source_time = source_time;
 		if (diff > peer->missing_counter_max) {
-			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-				"[ERROR] Received sequence %"PRIu32" is too far from last missing seq index %"PRIu32" > %"PRIu32", (%"PRIu32"/%"PRIu32")\n", 
-				current_seq, diff, peer->missing_counter_max,
-				f->last_seq_found, f->last_seq_output);
-			// Detect and correct discontinuties in seq by resetting the last_seq_found when it is
-			// too far from last_seq_output
-			uint32_t diff2 = 0;
-			if (f->last_seq_found >= f->last_seq_output) {
-				diff2 = f->last_seq_found - f->last_seq_output;
-			} else {
-				if (!f->short_seq)
-					diff2 = (UINT32_MAX - f->last_seq_found) + f->last_seq_output;
-				else
-					diff2 = (UINT16_MAX - f->last_seq_found) + f->last_seq_output;				
+			// This triggers false positives when there is packet reordering. 
+			// Use the timestamp as a secondary check and ignore packets in the past, i.e. reordered straglers
+			if (source_time < f->max_source_time) {
+				// Only print this message when they are older than 10% buffer size
+				if (((f->max_source_time - source_time) * 10) > f->recovery_buffer_ticks) {
+					uint64_t age = (f->max_source_time - source_time)/RIST_CLOCK;
+					msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
+						"[WARNING] Old out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
+						current_seq, age);
+				}
 			}
-			// TODO: should we use a different/faster criteria?
-			if (diff2 > peer->missing_counter_max) {
+			else {
 				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-					"[ERROR] Our output index %"PRIu32" and missing search index %"PRIu32" are too far from each other (%"PRIu32"), resetting the missing seach index\n",
-					f->last_seq_output, f->last_seq_found, diff2);
-				f->last_seq_found = seq;
+					"[ERROR] Received sequence %"PRIu32" is too far from last missing seq index %"PRIu32" > %"PRIu32", (%"PRIu32"/%"PRIu32")\n", 
+					current_seq, diff, peer->missing_counter_max,
+					f->last_seq_found, f->last_seq_output);
+				// Detect and correct discontinuties in seq by resetting the last_seq_found when it is
+				// too far from last_seq_output
+				uint32_t diff2 = 0;
+				if (f->last_seq_found >= f->last_seq_output) {
+					diff2 = f->last_seq_found - f->last_seq_output;
+				} else {
+					if (!f->short_seq)
+						diff2 = (UINT32_MAX - f->last_seq_found) + f->last_seq_output;
+					else
+						diff2 = (UINT16_MAX - f->last_seq_found) + f->last_seq_output;
+				}
+				// TODO: should we use a different/faster criteria?
+				if (diff2 > peer->missing_counter_max) {
+					msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
+						"[ERROR] Our output index %"PRIu32" and missing search index %"PRIu32" are too far from each other (%"PRIu32"), resetting the missing search index\n",
+						f->last_seq_output, f->last_seq_found, diff2);
+					f->last_seq_found = seq;
+				}
 			}
 			return 0;
 		}

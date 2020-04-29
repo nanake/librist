@@ -198,6 +198,7 @@ struct rist_flow {
 	intptr_t sender_id;
 	uint64_t last_ipstats_time;
 	uint64_t last_output_time;
+	uint64_t max_source_time;
 	int64_t time_offset;
 	bool authenticated;
 	uint32_t session_timeout;
