@@ -311,11 +311,10 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 		memcpy((uint8_t*)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
 	}
 
-	uint64_t now = timestampNTP_u64();
 	b->size = len;
 	b->source_time = source_time;
 	b->seq = seq;
-	b->time = now;
+	b->time = timestampNTP_u64();
 	b->type = type;
 	b->src_port = src_port;
 	b->dst_port = dst_port;
