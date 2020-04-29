@@ -266,10 +266,10 @@ RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
 RIST_PRIV int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len);
 RIST_PRIV void rist_send_sender_rtcp(struct rist_peer *peer);
-RIST_PRIV int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool duplicate, int16_t seq_rtp, int16_t use_seq);
-	RIST_PRIV size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
+RIST_PRIV int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_gre, uint32_t seq_rtp);
+RIST_PRIV size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer *buffer);
-RIST_PRIV int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, int64_t seq_rtp);
+RIST_PRIV int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp);
 RIST_PRIV void rist_clean_sender_enqueue(struct rist_sender *ctx);
 RIST_PRIV void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer);
 RIST_PRIV int rist_retry_dequeue(struct rist_sender *ctx);

@@ -2411,9 +2411,14 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 	}
 
 	uint64_t ts_ntp = data_block->ts_ntp == 0 ? timestampNTP_u64() : data_block->ts_ntp;
-	int64_t seq_rtp = -1;
+	uint32_t seq_rtp;
 	if (data_block->flags & RIST_DATA_FLAGS_USE_SEQ)
 		seq_rtp = data_block->seq;
+	else 
+		seq_rtp = ctx->common.seq_rtp++;
+	//When we support 32bit seq this should be changed
+	seq_rtp = seq_rtp & (UINT16_MAX);
+	
 	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port, seq_rtp);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
@@ -2489,7 +2494,7 @@ static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
 
 		uint8_t *payload = oob_buffer->data;
 		rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
-					oob_buffer->size, 0, 0, 0, false, 0, 0);
+					oob_buffer->size, 0, 0, 0, ctx->seq++, 0);
 		ctx->oob_queue_bytesize -= oob_buffer->size;
 		ctx->oob_queue_read_index++;
 	}
@@ -2582,7 +2587,7 @@ static void sender_send_data(struct rist_sender *ctx, int maxcount)
 			if (buffer->type == RIST_PAYLOAD_TYPE_RTCP) {
 				// TODO can we ever have a null or dead buffer->peer?
 				uint8_t *payload = buffer->data;
-				rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, false, 0, 0);
+				rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq++, 0);
 				buffer->seq = ctx->common.seq;
 				buffer->seq_rtp = ctx->common.seq_rtp;
 			}
