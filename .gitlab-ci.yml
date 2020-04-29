@@ -41,7 +41,7 @@ test-ubuntu:
         - .ubuntu-amd64-bionic
     needs: ["build-ubuntu"]
     script:
-        - curl -L https://cmocka.org/files/1.1/cmocka-1.1.5.tar.xz
+        - curl -L https://cmocka.org/files/1.1/cmocka-1.1.5.tar.xz > cmocka-1.1.5.tar.xz
         - tar xf cmocka-1.1.5.tar.xz
         - mkdir -p cmocka-1.1.5/build && cd cmocka-1.1.5/build
         - cmake ..
