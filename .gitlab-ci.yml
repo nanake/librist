@@ -48,6 +48,6 @@ test-ubuntu:
         - make -j$(nproc)
         - cd ../..
         - export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$(pwd)/cmocka-1.1.5/build/src
-        - meson build --buildtype release --werror
+        - meson build --buildtype release --werror -Dtest=true
         - ninja -C build
         - cd build && time meson test -v

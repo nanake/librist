@@ -1,1 +1,2 @@
 option('static_analyze', type : 'boolean', value : false)
+option('test', type : 'boolean', value : false)

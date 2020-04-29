@@ -54,7 +54,9 @@ librist = library('rist',
 
 install_headers('inc/librist.h')
 
-subdir('test')
+if get_option('test')
+	subdir('test')
+endif
 
 pkg_mod = import('pkgconfig')
 pkg_mod.generate(
