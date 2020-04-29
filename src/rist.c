@@ -1737,8 +1737,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					msg(receiver_id, sender_id, RIST_LOG_DEBUG, "[DEBUG] Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
 					break;
 				}
-				// TODO: if a fallthrough is intentional here we need something like //- fallthrough
-				break;
+				//fallthrough
 			case PTYPE_NACK_BITMASK:
 				rist_sender_recv_nack(peer, flow_id, payload->src_port, payload->dst_port, pkt, bytes_left, nack_seq_msb);
 				break;
