@@ -3536,17 +3536,17 @@ static PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					f->checks_next_time += f->recovery_buffer_ticks;
 					// TODO: use the new setting per peer called session_timeout instead
 					// TODO: STALE_FLOW_TIME or buffer size in us ... which ever is greater
-					if ((f->stats_total.last_recv_ts != 0) && (timestampNTP_u64() - f->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME))
+					if ((f->stats_total.last_recv_ts != 0) && (now - f->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME))
 					{
-						if ((timestampNTP_u64() - f->stats_total.last_recv_ts) < (1.5 * (uint64_t)STALE_FLOW_TIME))
+						if ((now- f->stats_total.last_recv_ts) < (1.5 * (uint64_t)STALE_FLOW_TIME))
 						{
 							struct rist_flow *next = f->next;
 							// Do nothing
 							msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 								"\t************** STALE FLOW:%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 ", Deleting! ***************\n",
-								timestampNTP_u64(),
+								now,
 								f->stats_total.last_recv_ts,
-								timestampNTP_u64() - f->stats_total.last_recv_ts,
+								now - f->stats_total.last_recv_ts,
 								(uint64_t)STALE_FLOW_TIME);
 							pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 							pthread_rwlock_wrlock(peerlist_lock);
