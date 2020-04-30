@@ -169,11 +169,7 @@ static int SetBroadcast(int s)
 
 static int SetReuseAddress(int s)
 {
-#if defined(SO_REUSEPORT)
-	return setsockopt(s, SOL_SOCKET, SO_REUSEPORT, (const char *)&(int){ 1 }, sizeof(int));
-#else
 	return setsockopt(s, SOL_SOCKET, SO_REUSEADDR, (const char *)&(int){ 1 }, sizeof(int));
-#endif
 }
 
 static inline bool udp_SockAddrIsMulticast(const struct sockaddr *addr, socklen_t len)
