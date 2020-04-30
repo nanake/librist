@@ -518,12 +518,32 @@ RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_e
 RIST_PRIV void empty_receiver_queue(struct rist_flow *f);
 RIST_PRIV void rist_flush_missing_flow_queue(struct rist_flow *flow);
 
-/* defined in rist.c */
+/* defined in rist-common.c */
 RIST_PRIV void rist_fsm_recv_connect(struct rist_peer *peer);
 RIST_PRIV void rist_shutdown_peer(struct rist_peer *peer);
 RIST_PRIV void rist_print_inet_info(char *prefix, struct rist_peer *peer);
 RIST_PRIV void rist_peer_rtcp(struct evsocket_ctx *ctx, void *arg);
 RIST_PRIV void rist_populate_cname(struct rist_peer *peer);
+/* needed after splitting up */
+RIST_PRIV PTHREAD_START_FUNC(sender_pthread_protocol, arg);
+RIST_PRIV PTHREAD_START_FUNC(receiver_pthread_protocol, arg);
+RIST_PRIV int rist_max_jitter_set(struct rist_common_ctx *ctx, int t);
+RIST_PRIV int parse_url_options(const char *url, struct rist_peer_config *output_peer_config);
+RIST_PRIV struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
+															const struct rist_peer_config *config);
+RIST_PRIV void rist_sender_destroy_local(struct rist_sender *ctx);
+RIST_PRIV void rist_receiver_destroy_local(struct rist_receiver *ctx);
+RIST_PRIV struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
+														  const struct rist_peer_config *config, bool b_rtcp);
+RIST_PRIV void rist_fsm_init_comm(struct rist_peer *peer);
+RIST_PRIV int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len);
+RIST_PRIV int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile);
+RIST_PRIV int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer);
+RIST_PRIV int rist_auth_handler(struct rist_common_ctx *ctx,
+								int (*conn_cb)(void *arg, const char *connecting_ip, uint16_t connecting_port, const char *local_ip, uint16_t local_port, struct rist_peer *peer),
+								int (*disconn_cb)(void *arg, struct rist_peer *peer),
+								void *arg);
+RIST_PRIV void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer);
 
 /* defined in log.c */
 RIST_PRIV int rist_set_stats_fd(int fd);
@@ -531,6 +551,54 @@ RIST_PRIV int rist_set_stats_socket(char * hostname, int port);
 
 /* Get common context */
 RIST_PRIV struct rist_common_ctx *get_cctx(struct rist_peer *peer);
+
+/*static inline in header file */
+static inline void peer_append(struct rist_peer *p)
+{
+	struct rist_peer **PEERS = &get_cctx(p)->PEERS;
+	pthread_rwlock_t *peerlist_lock = &get_cctx(p)->peerlist_lock;
+	pthread_rwlock_wrlock(peerlist_lock);
+	struct rist_peer *plist = *PEERS;
+	if (!plist)
+	{
+		*PEERS = p;
+		pthread_rwlock_unlock(peerlist_lock);
+		return;
+	}
+	if (p->parent)
+	{
+		struct rist_peer *peer = p->parent;
+		if (!peer->child)
+			peer->child = p;
+		else
+		{
+			struct rist_peer *child = peer->child;
+			while (child)
+			{
+				if (!child->sibling_next)
+				{
+					child->sibling_next = p;
+					p->sibling_prev = child;
+					break;
+				}
+				child = child->sibling_next;
+			}
+		}
+		++peer->child_alive_count;
+	}
+	while (plist)
+	{
+		if (!plist->next)
+		{
+			p->prev = plist;
+			plist->next = p;
+			pthread_rwlock_unlock(peerlist_lock);
+			return;
+		}
+		plist = plist->next;
+	}
+	pthread_rwlock_unlock(peerlist_lock);
+}
 
 __END_DECLS
 
