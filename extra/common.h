@@ -54,9 +54,11 @@ struct __attribute__((packed)) sname sbody;
 
 #define RIST_MARK_UNUSED(unused_param) ((void)(unused_param))
 
-#ifdef __GNUC__
-# define RIST_FALLTHROUGH __attribute__((fallthrough))
-#endif
+#if defined(__GNUC__) && __GNUC__ >= 7
+#define RIST_FALLTHROUGH __attribute__ ((fallthrough))
+#else
+#define RIST_FALLTHROUGH ((void)0)
+#endif /* __GNUC__ >= 7 */
 
 __END_DECLS
 
