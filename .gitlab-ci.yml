@@ -26,12 +26,6 @@ analyze-ubuntu:
         - .ubuntu-amd64-bionic
     needs: ["build-ubuntu"]
     script:
-        - curl -L https://github.com/danmar/cppcheck/archive/1.90.tar.gz > 1.90.tar.gz
-        - tar xzf 1.90.tar.gz
-        - cd cppcheck-1.90
-        - make -j$(nproc)
-        - cd ..
-        - export PATH=$PATH:$(pwd)/cppcheck-1.90
         - meson build --buildtype release --werror -Dstatic_analyze=true
         - ninja -C build analyze
 

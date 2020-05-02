@@ -71,9 +71,11 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	peer_stats->avg_rtt = avg_rtt;
 	peer_stats->retry_buffer_size = retry_buf_size;
 	peer_stats->cooldown_time = time_left;
-	
+
 	if (cctx->stats_callback != NULL)
 		cctx->stats_callback(cctx->stats_callback_argument, rist_stats);
+	else
+		free(rist_stats);
 
 	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
 }
@@ -282,6 +284,8 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
 		ctx->common.stats_callback(ctx->common.stats_callback_argument, rist_stats);
+	else
+		free(rist_stats);
 
 	memset(&flow->stats_instant, 0, sizeof(flow->stats_instant));
 	flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;

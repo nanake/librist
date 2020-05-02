@@ -697,7 +697,7 @@ RIST_API int rist_logs_set(int fd, char *address);
  *
  * @param ctx RIST Receiver context
  * @param statsinterval interval between stats reporting
- * @param stats_cb Callback function that will be called
+ * @param stats_cb Callback function that will be called. The stats pointer must be free()'d when you are finished.
  * @param arg extra arguments for callback function
  */
 RIST_API int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg);
@@ -707,7 +707,7 @@ RIST_API int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int sta
  *
  * @param ctx RIST Sender context
  * @param statsinterval interval between stats reporting
- * @param stats_cb Callback function that will be called
+ * @param stats_cb Callback function that will be called. The stats pointer must be free()'d when you are finished.
  * @param arg extra arguments for callback function
  */
 RIST_API int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg);
