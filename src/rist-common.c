@@ -1573,12 +1573,9 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 				peer->stats_sender_instant.received++;
 				peer->last_rtcp_received = timestampNTP_u64();
 				if (peer->dead) {
-					pthread_rwlock_t *peerlist_lock = &get_cctx(peer)->peerlist_lock;
-					pthread_rwlock_wrlock(peerlist_lock);
 					peer->dead = false;
 					if (peer->parent)
 						++peer->parent->child_alive_count;
-					pthread_rwlock_unlock(peerlist_lock);
 					msg(receiver_id, sender_id, RIST_LOG_INFO,
 						"[INFO] Peer %d was dead and it is now alive again\n", peer->adv_peer_id);
 				}
