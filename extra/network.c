@@ -160,7 +160,7 @@ err:
 	return -1;
 }
 
-#define UDP_SOCK_BUFSIZE (30 * 1024 * 1024)
+#define UDP_SOCK_BUFSIZE 0x80000
 
 static int SetBroadcast(int s)
 {
