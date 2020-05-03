@@ -60,6 +60,14 @@ struct __attribute__((packed)) sname sbody;
 #define RIST_FALLTHROUGH ((void)0)
 #endif /* __GNUC__ >= 7 */
 
+#ifdef _WIN32
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef signed int ssize_t;
+#endif
+#endif
+
 __END_DECLS
 
 #endif

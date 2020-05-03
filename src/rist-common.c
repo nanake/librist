@@ -22,14 +22,6 @@
 #include "linux-crypto.h"
 #endif
 
-#ifdef _WIN32
-#ifdef _WIN64
-typedef __int64 ssize_t;
-#else
-typedef signed int ssize_t;
-#endif
-#endif
-
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static PTHREAD_START_FUNC(receiver_pthread_dataout,arg);
