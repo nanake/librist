@@ -46,7 +46,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 static struct option long_options[] = {
 { "inurl",             required_argument, NULL, 'u' },
 { "outurl",             required_argument, NULL, 'o' },
-{ "encryption-password", required_argument, NULL, 'p' },
+{ "encryption-password", required_argument, NULL, 'e' },
 { "encryption-type", required_argument, NULL, 't' },
 { "cname",           required_argument, NULL, 'N' },
 { "statsinterval",   required_argument, NULL, 'S' },
@@ -223,7 +223,7 @@ int main (int argc, char **argv) {
 
 	int option_index;
 	char c;
-	while ((c = getopt_long(argc, argv, "u:o:e:C:h:v:t:S:", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "u:o:e:C:v:t:S:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			inputurl = strdup(optarg); 
@@ -231,7 +231,7 @@ int main (int argc, char **argv) {
 		case 'o':
 			outputurl = strdup(optarg); 
 			break;
-		case 'p':
+		case 'e':
 			shared_secret = strdup(optarg); 
 			break;
 		case 't':
