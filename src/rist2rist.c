@@ -97,6 +97,7 @@ static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 	const char* json = stats_to_json(rist_stats);
 	fprintf(stderr, "%s\n\n", json);
 	free(rist_stats);
+	free((void*)json);
 	return 0;
 }
 
@@ -205,7 +206,6 @@ int main (int argc, char **argv) {
 	char *inputurl = NULL;
 	char *cname = NULL;
 	char *outputurl = NULL;
-	char *shared_secret = NULL;
 	struct rist_cb_arg cb_arg;
 	struct rist_sender_args client_args;
 	cb_arg.client_args = &client_args;
@@ -217,7 +217,7 @@ int main (int argc, char **argv) {
 	client_args.flow_id = 0;
 	int statsinterval = 1000;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
-	struct sigaction act;
+	struct sigaction act = {0};
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
 
@@ -232,7 +232,7 @@ int main (int argc, char **argv) {
 			outputurl = strdup(optarg); 
 			break;
 		case 'e':
-			shared_secret = strdup(optarg); 
+			client_args.shared_secret = strdup(optarg); 
 			break;
 		case 't':
 			client_args.encryption_type = atoi(optarg);
@@ -255,7 +255,6 @@ int main (int argc, char **argv) {
 	}
 	client_args.cname = cname;
 	client_args.loglevel = loglevel;
-	client_args.shared_secret = shared_secret;
 	client_args.outputurl = outputurl;
 	client_args.statsinterval = statsinterval;
 
@@ -346,10 +345,14 @@ int main (int argc, char **argv) {
 
 	if (client_args.shared_secret)
 		free(client_args.shared_secret);
-	if (cname) {
+	if (cname)
 		free(cname);
-		free(client_args.cname);
-	}
+	if (inputurl)
+		free(inputurl);
+	if (outputurl)
+		free(outputurl);
+	
+
 
 	return 0;
 }
