@@ -480,7 +480,7 @@ int main(int argc, char *argv[])
 		{
 			const struct rist_data_block *b;
 			int ret = rist_receiver_data_read(ctx, &b, 5);
-			if (!ret && b && b->payload) cb_recv(&port_filter, b);
+			if (ret && b && b->payload) cb_recv(&port_filter, b);
 		}
 	}
 

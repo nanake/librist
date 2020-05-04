@@ -336,7 +336,7 @@ int main (int argc, char **argv) {
 		{
 			const struct rist_data_block *b;
 			int ret = rist_receiver_data_read(receiver_ctx, &b, 5);
-			if (!ret && b && b->payload) cb_recv(&cb_arg, b);
+			if (ret && b && b->payload) cb_recv(&cb_arg, b);
 		}
 	}
 
