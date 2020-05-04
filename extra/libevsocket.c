@@ -452,7 +452,11 @@ void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout)
 void evsocket_loop_finalize(struct evsocket_ctx *ctx)
 {
 	ctx_del(ctx);
-	ctx = NULL;
+	if (ctx->pfd)
+		free(ctx->pfd);
+	if (ctx->_array)
+		free(ctx->_array);
+	free(ctx);
 }
 
 void evsocket_fini(struct evsocket_ctx *ctx)

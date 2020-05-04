@@ -633,6 +633,7 @@ int rist_sender_destroy(struct rist_sender *ctx)
 			assert(0);
 		}
 	}
+	pthread_join(ctx->sender_thread, NULL);
 	rist_sender_destroy_local(ctx);
 
 	return 0;
@@ -658,6 +659,7 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 			assert(0);
 		}
 	}
+	pthread_join(ctx->receiver_thread, NULL);
 	rist_receiver_destroy_local(ctx);
 
 	return 0;
