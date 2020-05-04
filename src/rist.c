@@ -69,11 +69,23 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 	}
 
 	const struct rist_data_block *data_block = NULL;
+	/* We could enter the lock now, to read the counter. However performance penalties apply.
+	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
+	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
+	   risks are tolerable */
+	uint16_t num = ctx->dataout_fifo_queue_counter;
+	if (!num && timeout > 0) {
+		pthread_mutex_lock(&(ctx->mutex));
+		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
+		pthread_mutex_unlock(&(ctx->mutex));
+	}
 
 	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
 	if (ctx->dataout_fifo_queue_read_index != ctx->dataout_fifo_queue_write_index)
 	{
 		data_block = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
+		//Now we are inside the lock, so the counter is now guarenteed to remain the same
+		num = ctx->dataout_fifo_queue_counter;
 		ctx->dataout_fifo_queue_read_index = (ctx->dataout_fifo_queue_read_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
 		if (data_block)
 		{
@@ -85,16 +97,15 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 	}
 	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
 
-	if (data_block == NULL && timeout > 0)
+	if (RIST_UNLIKELY(data_block == NULL && num > 0))
 	{
-		pthread_mutex_lock(&(ctx->mutex));
-		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
-		pthread_mutex_unlock(&(ctx->mutex));
+		//I think this should never happen, should we consider this an error (-1 return code)?
+		num = 0;
 	}
 
 	*data_buffer = data_block;
 
-	return 0;
+	return num;
 }
 
 int rist_receiver_peer_create(struct rist_receiver *ctx,

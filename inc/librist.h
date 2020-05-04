@@ -652,7 +652,7 @@ RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist
  * @param ctx RIST receiver context
  * @param[out] data_block a pointer to the rist_data_block structure
  * @param timeout How long to wait for queue data (ms), 0 for no wait
- * @return 0 on success, -1 on error
+ * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
  */
 RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_block, int timeout);
 
