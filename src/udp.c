@@ -215,8 +215,25 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	size_t len, gre_len;
 	size_t hdr_len = 0;
 	ssize_t ret = 0;
+	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
+	   so we create a local pointer that points to the payload pointer, if we would either encrypt or compress we instead
+	   malloc and mempcy, to ensure our source stays clean. We only do this with RAW data as these buffers are the only
+	   assumed to be reused by retransmits */
+	uint8_t *_payload = NULL;
+	
+	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE 
+							&& payload_type == RIST_PAYLOAD_TYPE_DATA_RAW 
+							&& (k->key_size || p->compression));
 
 	assert(payload != NULL);
+
+	if (modifyingbuffer) {
+		_payload = malloc(payload_len + RIST_MAX_PAYLOAD_OFFSET);
+		_payload  = _payload + RIST_MAX_PAYLOAD_OFFSET;
+		memcpy(_payload, payload, payload_len);
+	} else {
+		_payload = payload;
+	}
 
 	//if (p->receiver_mode)
 	//	msg(receiver_id, sender_id, RIST_LOG_ERROR, "Sending seq %"PRIu32" and rtp_seq %"PRIu16" payload is %d\n", 
@@ -273,7 +290,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			}
 		}
 		// copy the rtp header data (needed for encryption)
-		memcpy(payload - hdr_len, hdr, hdr_len);
+		memcpy(_payload - hdr_len, hdr, hdr_len);
 	}
 
 	if (ctx->profile > RIST_PROFILE_SIMPLE) {
@@ -282,7 +299,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		if (p->compression) {
 			int clen;
 			void *cbuf = ctx->buf.dec;
-			clen = LZ4_compress_default((const char *)payload, cbuf, payload_len, RIST_MAX_PACKET_SIZE);
+			clen = LZ4_compress_default((const char *)_payload, cbuf, payload_len, RIST_MAX_PACKET_SIZE);
 			if (clen < 0) {
 				msg(receiver_id, sender_id, RIST_LOG_ERROR,
 					"[ERROR] Compression failed (%d), not sending\n", clen);
@@ -290,7 +307,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			else {
 				if ((size_t)clen < payload_len) {
 					payload_len = clen;
-					payload = cbuf;
+					_payload = cbuf;
 					payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
 				} else {
 					//msg(receiver_id, ctx->id, DEBUG,
@@ -347,14 +364,14 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			fprintf(stderr, "\n");
 	*/
 #ifndef __linux
-			aes_encrypt_ctr((const void *) (payload - hdr_len), hdr_len + payload_len, 
-				(void *) (payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+			aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
+				(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #else
 			if (p->cryptoctx)
-				linux_crypto_encrypt((void *) (payload - hdr_len), hdr_len + payload_len, IV, p->cryptoctx);
+				linux_crypto_encrypt((void *) (_payload - hdr_len), hdr_len + payload_len, IV, p->cryptoctx);
 			else
-				aes_encrypt_ctr((const void *) (payload - hdr_len), hdr_len + payload_len, 
-					(void *) (payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+				aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
+					(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #endif
 		} else {
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
@@ -379,13 +396,13 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 
 		// now copy the GRE header data
 		len = gre_len + hdr_len + payload_len;
-		data = payload - gre_len - hdr_len;
+		data = _payload - gre_len - hdr_len;
 		memcpy(data, header_buf, gre_len);
 	}
 	else
 	{
 		len =  hdr_len + payload_len - RIST_GRE_PROTOCOL_REDUCED_SIZE;
-		data = payload - hdr_len + RIST_GRE_PROTOCOL_REDUCED_SIZE;
+		data = _payload - hdr_len + RIST_GRE_PROTOCOL_REDUCED_SIZE;
 	}
 
 	// TODO: compare p->sender_ctx->sender_queue_read_index and p->sender_ctx->sender_queue_write_index
@@ -406,6 +423,10 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	} else {
 		rist_calculate_bitrate_sender(len, &p->bw);
 		p->stats_sender_instant.sent++;
+	}
+
+	if (modifyingbuffer) {
+		free(_payload - RIST_MAX_PAYLOAD_OFFSET);
 	}
 
 	return ret;
