@@ -3054,8 +3054,8 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 		}
 
 #ifdef __linux
-		if (peer->cryptoctx)
-			//free(peer->cryptoctx);
+		if (!peer->parent && peer->cryptoctx)
+			free(peer->cryptoctx);
 #endif
 		if (peer->url)
 			free(peer->url);
