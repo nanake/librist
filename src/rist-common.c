@@ -2871,7 +2871,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 
 #ifdef __linux
 			if (peer->cryptoctx)
-				//free(peer->cryptoctx);
+				free(peer->cryptoctx);
 #endif
 
 			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing up peer memory allocation\n");
@@ -3055,7 +3055,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 
 #ifdef __linux
 		if (peer->cryptoctx)
-			free(peer->cryptoctx);
+			//free(peer->cryptoctx);
 #endif
 		if (peer->url)
 			free(peer->url);
