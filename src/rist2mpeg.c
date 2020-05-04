@@ -118,7 +118,6 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	struct rist_port_filter *port_filter = (void *) arg;
 
 
-	printf("rtp_seq =%u\n",b->seq_rtp);
 	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
 		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
 		return -1;
