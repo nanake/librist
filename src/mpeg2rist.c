@@ -52,7 +52,6 @@ static struct option long_options[] = {
 { "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
-
 { 0, 0, 0, 0 },
 };
 
@@ -145,6 +144,7 @@ static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 	const char* json = stats_to_json(rist_stats);
 	fprintf(stderr, "%s\n\n", json);
 	free(rist_stats);
+	free((void*)json);
 	return 0;
 }
 
@@ -186,6 +186,7 @@ int main(int argc, char *argv[])
 	uint32_t buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
 	struct sigaction act;
 	act.sa_handler = intHandler;
+	act.sa_flags = 0;
 	sigaction(SIGINT, &act, NULL);
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
@@ -442,7 +443,9 @@ int main(int argc, char *argv[])
 			data_block.payload = buffer;
 			data_block.payload_len = r;
 			data_block.virt_src_port = virt_src_port;
+			data_block.virt_dst_port = 0;
 			data_block.ts_ntp = 0; // delegate this to the library in this case
+			data_block.flags = 0;
 			w = rist_sender_data_write(ctx, &data_block);
 			(void) w;
 		}
@@ -454,6 +457,13 @@ int main(int argc, char *argv[])
 		free(shared_secret);
 	if (cname)
 		free(cname);
-
+	if (url)
+		free(url);
+	if (miface)
+		free(miface);
+	for (int i=0; i < PEER_COUNT; i++) {
+		if (address[i])
+			free(address[i]);
+	}
 	return 0;
 }
