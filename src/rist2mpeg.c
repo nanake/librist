@@ -178,6 +178,7 @@ static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 	const char* json = stats_to_json(rist_stats);
 	fprintf(stderr, "%s\n\n", json);
 	free(rist_stats);
+	free((void*)json);
 	return 0;
 }
 
@@ -209,7 +210,7 @@ int main(int argc, char *argv[])
 	struct rist_port_filter port_filter;
 	port_filter.virt_src_port = 0;
 	port_filter.virt_dst_port = 0;
-	struct sigaction act;
+	struct sigaction act = {0};
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
 
@@ -489,6 +490,15 @@ int main(int argc, char *argv[])
 		free(shared_secret);
 	if (cname)
 		free(cname);
-
+	for (ssize_t i = 0; i < INPUT_COUNT; i++) {
+		if (url[i])
+			free(url[i]);
+		if (miface[i])
+			free(miface[i]);
+	}
+	for (ssize_t i = 0; i < OUTPUT_COUNT; i++) {
+		if (addr[i])
+			free(addr[i]);
+	}
 	return 0;
 }
