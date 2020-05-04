@@ -392,7 +392,15 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
 
-	ret = sendto(p->sd, data, len, 0, &(p->u.address), p->address_len);
+	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(seq % 1000)) {
+	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
+		ret = len;
+		//msg(receiver_id, sender_id, RIST_LOG_ERROR,
+		//	"\tSimulating lost packet for seq #%"PRIu32"\n", ctx->seq);
+	} else {
+		ret = sendto(p->sd, data, len, 0, &(p->u.address), p->address_len);
+	}
+
 	if (ret < 0) {
 		msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tSend failed: %d\n", ret);
 	} else {
@@ -419,15 +427,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		return -1;
 	}
 
-	size_t ret = 0;
-	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(seq_gre % 1000)) {
-	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
-		ret = payload_len;
-		//msg(receiver_id, sender_id, RIST_LOG_ERROR,
-		//	"\tSimulating lost packet for seq #%"PRIu32"\n", ctx->seq);
-	} else {
-		ret = rist_send_seq_rtcp(p, seq_gre, seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
-	}
+	size_t ret = rist_send_seq_rtcp(p, seq_gre, seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
 
 	if ((!p->compression && ret < payload_len) || ret <= 0)
 	{
