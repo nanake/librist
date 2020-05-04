@@ -49,7 +49,7 @@ static struct option long_options[] = {
 { "gre-src-port",    required_argument, NULL, 'n' },
 { "gre-dst-port",    required_argument, NULL, 'N' },
 { "cname",           required_argument, NULL, 'C' },
-{ "json",            required_argument, NULL, 'J' },
+{ "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
 
@@ -66,6 +66,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -d | --receiver4 rist://ADDRESS:PORT     | Address of fourth remote rist receiver                   |\n"
 "          |  The weight of the primary remote rist is always 5 and the other load balancing outputs    |\n"
 "          |  are relative to it. Use a value of zero for duplicate output.                             |\n"
+"       -S | --statsinterval value (ms)        | Interval at which stats get printed, 0 to disable      |\n"
 "       -i | --weight2 value                   | Load balancing weight of this output                   |\n"
 "       -j | --weight3 value                   | Load balancing weight of this output                   |\n"
 "       -k | --weight4 value                   | Load balancing weight of this output                   |\n"
@@ -84,11 +85,11 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -n | --gre-src-port port               | Reduced profile src port to forward                    |\n"
 "       -N | --gre-dst-port port               | Reduced profile dst port to forward                    |\n"
 "       -C | --cname identifier                | Manually configured identifier                         |\n"
-"       -J | --json value                      | Print JSON stats (0 = disabled, 1 = enabled)           |\n"
 "       -v | --verbose-level value             | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                            | Show this help                                         |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
+"       --statsinterval 1000      \\\n"
 "       --recovery-type time      \\\n"
 "       --min-buf 1000            \\\n"
 "       --max-buf 1000            \\\n"
@@ -100,7 +101,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --profile 1               \\\n"
 "       --gre-src-port 1971       \\\n"
 "       --gre-dst-port 1968       \\\n"
-"       --json 1                  \\\n"
+
 "       --verbose-level 2         \n";
 
 static void usage(char *cmd)
@@ -165,7 +166,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char *address[PEER_COUNT];
-	int json_out = 1;
+	int statsinterval = 1000;
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
@@ -192,7 +193,7 @@ int main(int argc, char *argv[])
 		weight[i] = 0;
 	}
 
-	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:N:C:h:J:", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "W:v:u:f:T:e:b:c:d:s:i:j:k:m:M:r:o:R:B:l:L:t:p:n:N:C:h:S:", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url = strdup(optarg);
@@ -288,8 +289,8 @@ int main(int argc, char *argv[])
 		case 'v':
 			loglevel = atoi(optarg);
 		break;
-		case 'J':
-			json_out = atoi(optarg);
+		case 'S':
+			statsinterval = atoi(optarg);
 		break;
 		case 'h':
 			/* Fall through */
@@ -365,8 +366,8 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (json_out) {
-		rist_sender_stats_callback_set(ctx, 1000, cb_stats, NULL);
+	if (statsinterval) {
+		rist_sender_stats_callback_set(ctx, statsinterval, cb_stats, NULL);
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {

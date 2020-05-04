@@ -20,7 +20,7 @@ struct rist_sender_args {
 	enum rist_log_level loglevel;
 	uint8_t encryption_type;
 	uint32_t flow_id;
-	int json_out;
+	int statsinterval;
 };
 
 struct rist_cb_arg {
@@ -35,10 +35,10 @@ static int keep_running = 1;
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -u | --inurl ADDRESS:PORT              * | Input IP address and port                              |\n"
 "       -o | --outurl ADDRESS:PORT             * | Output IP address and port                             |\n"
+"       -S | --statsinterval value (ms)          | Interval at which stats get printed, 0 to disable      |\n"
 "       -e | --encryption-password PWD           | Pre-shared encryption password                         |\n"
 "       -t | --encryption-type TYPE              | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)   |\n"
 "       -C | --cname identifier                  | Manually configured identifier                         |\n"
-"       -J | --json value                        | Print JSON stats (0 = disabled, 1 = enabled)           |\n"
 "       -v | --verbose-level                     | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
 "       -h | --help                              | Show this help                                         |\n"
 ;
@@ -49,7 +49,7 @@ static struct option long_options[] = {
 { "encryption-password", required_argument, NULL, 'p' },
 { "encryption-type", required_argument, NULL, 't' },
 { "cname",           required_argument, NULL, 'N' },
-{ "json",            required_argument, NULL, 'J' },
+{ "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'l' },
 { "help",            no_argument,       NULL, 'h' },
 
@@ -121,8 +121,8 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
-	if (setup->json_out) {
-		rist_sender_stats_callback_set(ctx, 1000, cb_stats, NULL);
+	if (setup->statsinterval) {
+		rist_sender_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL);
 	}
 
 	// Applications defaults and/or command line options
@@ -215,7 +215,7 @@ int main (int argc, char **argv) {
 	client_args.encryption_type = 0;
 	client_args.shared_secret = NULL;
 	client_args.flow_id = 0;
-	int json_out = 1;
+	int statsinterval = 1000;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	struct sigaction act;
 	act.sa_handler = intHandler;
@@ -223,7 +223,7 @@ int main (int argc, char **argv) {
 
 	int option_index;
 	char c;
-	while ((c = getopt_long(argc, argv, "u:o:e:C:h:v:t:", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "u:o:e:C:h:v:t:S:", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			inputurl = strdup(optarg); 
@@ -243,8 +243,8 @@ int main (int argc, char **argv) {
 		case 'l':
 			loglevel = atoi(optarg);
 			break;
-		case 'J':
-			json_out = atoi(optarg);
+		case 'S':
+			statsinterval = atoi(optarg);
 			break;
 		case 'h':
 			//
@@ -257,7 +257,7 @@ int main (int argc, char **argv) {
 	client_args.loglevel = loglevel;
 	client_args.shared_secret = shared_secret;
 	client_args.outputurl = outputurl;
-	client_args.json_out = json_out;
+	client_args.statsinterval = statsinterval;
 
 	struct rist_receiver *receiver_ctx;
 
@@ -293,8 +293,8 @@ int main (int argc, char **argv) {
 		strncpy((void *)&app_peer_config.cname[0], cname, 128);
 	}
 
-	if (json_out) {
-		rist_receiver_stats_callback_set(receiver_ctx, 1000, cb_stats, NULL);
+	if (statsinterval) {
+		rist_receiver_stats_callback_set(receiver_ctx, statsinterval, cb_stats, NULL);
 	}
 
 	// URL overrides (also cleans up the URL)

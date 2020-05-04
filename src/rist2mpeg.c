@@ -33,6 +33,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -b | --receiver2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of second local rist receiver               |\n"
 "       -c | --receiver3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of third local rist receiver                |\n"
 "       -d | --receiver4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of fourth local rist receiver               |\n"
+"       -S | --statsinterval value (ms)                                   | Interval at which stats get printed, 0 to disable      |\n"
 "       -e | --encryption-password PWD                                    | Pre-shared encryption password                      |\n"
 "       -t | --encryption-type TYPE                                       | Encryption type (1 = AES-128, 2 = AES-256)          |\n"
 "       -p | --profile number                                             | Rist profile (0 = simple, 1 = main)                 |\n"
@@ -50,7 +51,6 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -l | --bloat-limit NACK_COUNT                                   * | Buffer bloat min nack count for random discard      |\n"
 "       -L | --bloat-hardlimit NACK_COUNT                               * | Buffer bloat max nack count for hard limit discard  |\n"
 "       -W | --max-bitrate Kbps                                         * | rist recovery max bitrate (Kbit/s)                  |\n"
-"       -J | --json value                                                 | Print JSON stats (0 = disabled, 1 = enabled)        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --recovery-type time      \\\n"
@@ -92,7 +92,7 @@ static struct option long_options[] = {
 	{ "gre-src-port",    required_argument, NULL, 'n' },
 	{ "gre-dst-port",    required_argument, NULL, 'N' },
 	{ "cname",           required_argument, NULL, 'C' },
-	{ "json",            required_argument, NULL, 'J' },
+	{ "statsinterval",   required_argument, NULL, 'S' },
 	{ "verbose-level",   required_argument, NULL, 'v' },
 	{ "help",            no_argument,       NULL, 'h' },
 	{ 0, 0, 0, 0 },
@@ -117,6 +117,8 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 {
 	struct rist_port_filter *port_filter = (void *) arg;
 
+
+	printf("rtp_seq =%u\n",b->seq_rtp);
 	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
 		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
 		return -1;
@@ -190,7 +192,7 @@ int main(int argc, char *argv[])
 	char *cname = NULL;
 	char c;
 	int enable_data_callback = 1;
-	int json_out = 1;
+	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
 	uint8_t encryption_type = 0;
@@ -222,7 +224,7 @@ int main(int argc, char *argv[])
 		addr[i] = NULL;
 	}
 
-	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h:J", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h:S:", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'u':
 			url[0] = strdup(optarg);
@@ -304,8 +306,8 @@ int main(int argc, char *argv[])
 		case 'v':
 			loglevel = atoi(optarg);
 		break;
-		case 'J':
-			json_out = atoi(optarg);
+		case 'S':
+			statsinterval = atoi(optarg);
 		break;
 		case 'h':
 			/* Fall through */
@@ -368,8 +370,8 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 	}
-	if (json_out) {
-		rist_receiver_stats_callback_set(ctx, 1000, cb_stats, NULL);
+	if (statsinterval) {
+		rist_receiver_stats_callback_set(ctx, statsinterval, cb_stats, NULL);
 	}
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
@@ -455,9 +457,6 @@ int main(int argc, char *argv[])
 	if (!atleast_one_socket_opened) {
 		exit(1);
 	}
-
-	// callback is best unless you are using the timestamps passed with the buffer
-	enable_data_callback = 0;
 
 	if (enable_data_callback == 1) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &port_filter))
