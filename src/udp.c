@@ -620,7 +620,7 @@ void rist_create_socket(struct rist_peer *peer)
 	// TODO: implement multicast interface selection
 	if (peer->local_port) {
 		const char* host;
-	    uint16_t port;
+		uint16_t port;
 
 		char buffer[256];
 		if (peer->u.address.sa_family == AF_INET) {
@@ -647,7 +647,7 @@ void rist_create_socket(struct rist_peer *peer)
 	else {
 		// We use sendto ... so, no need to connect directly here
 		peer->sd = udpsocket_open(peer->address_family);
-        // TODO : set max hops
+		// TODO : set max hops
 		if (peer->sd > 0)
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL connect mode (%d)\n", peer->sd);
 		else {
