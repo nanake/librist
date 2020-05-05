@@ -2,6 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 project(librist)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_C_FLAGS "-Wall -Winvalid-pch -Wextra -Wpedantic -Werror -std=c99 -O3 -Drist_EXPORTS -Wshadow -pedantic-errors -D_GNU_SOURCE")
 
 find_package (Threads REQUIRED)
 

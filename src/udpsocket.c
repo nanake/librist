@@ -6,7 +6,7 @@
 
 
 /* Private functions */
-static const int yes = 1, no = 0;
+static const int yes = 1; // no = 0;
 
 /* Public API */
 
@@ -14,19 +14,16 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 {
 	struct sockaddr_in *a4 = (struct sockaddr_in *)addr;
 	struct sockaddr_in6 *a6 = (struct sockaddr_in6 *)addr;
-	socklen_t addrlen = 0;
 
 	/* Pre-check for numeric IPv6 */
 	if (inet_pton(AF_INET6, host, &a6->sin6_addr) > 0) {
 		a6->sin6_family = AF_INET6;
 		a6->sin6_port = htons(port);
-		addrlen = sizeof(struct sockaddr_in6);
 	}
 	/* Pre-check for numeric IPv4 */
 	else if (inet_pton(AF_INET, host, &a4->sin_addr) > 0) {
 		a4->sin_family = AF_INET;
 		a4->sin_port = htons(port);
-		addrlen = sizeof(struct sockaddr_in);
 		/* Try to resolve host */
 	} else {
 		struct addrinfo *res;
@@ -38,11 +35,9 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 		if (res[0].ai_family == AF_INET6) {
 			memcpy(a6, res[0].ai_addr, sizeof(struct sockaddr_in6));
 			a6->sin6_port = htons(port);
-			addrlen = sizeof(struct sockaddr_in6);
 		} else {
 			memcpy(a4, res[0].ai_addr, sizeof(struct sockaddr_in));
 			a4->sin_port = htons(port);
-			addrlen = sizeof(struct sockaddr_in);
 		}
 		freeaddrinfo(res);
 	}
@@ -74,6 +69,8 @@ uint32_t udpsocket_get_buffer_size(int sd)
 
 int udpsocket_set_mcast_iface(int sd, const char *mciface)
 {
+    (void)sd;
+    (void)mciface;
 	/* TODO */
 
 	return 0;

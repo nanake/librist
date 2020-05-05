@@ -508,7 +508,6 @@ int rist_set_url(struct rist_peer *peer)
 	char host[512];
 	uint16_t port;
 	int local;
-	struct sockaddr_in6 host_addr;
 	if (!peer->url) {
 		if (peer->local_port > 0) {
 			/* Put sender in IPv4 learning mode */
@@ -617,7 +616,6 @@ void rist_create_socket(struct rist_peer *peer)
 		return;
 	}
 
-	// TODO: implement multicast interface selection
 	if (peer->local_port) {
 		const char* host;
 		uint16_t port;

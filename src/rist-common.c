@@ -36,35 +36,27 @@ typedef struct rist_url_param {
 
 
 
-int rist_logs_set(int fd, char *address)
+int rist_logs_set(int fd, char *url)
 {
-	char * url = NULL;
+    char address[200];
+    uint16_t port;
+    int local;
 	int ret = rist_set_stats_fd(fd);
-	if (ret)
-		fprintf(stderr, "[ERROR] Could not set file descriptor to %d\n", fd);
+    if (ret) {
+        fprintf(stderr, "[ERROR] Could not set file descriptor to %d\n", fd);
+        return ret;
+    }
 
-	if (address)
-	{
-        char address[200];
-        uint16_t port;
-        int local;
-		url = strdup(address);
-		if (udpsocket_parse_url(url, address, 200, &port, &local) || (local == 1)) {
-			msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s while connecting the log socket. %s\n", strerror(errno), address);
-			ret = -1;
-		}
-		else
-		{
-            if (rist_set_stats_socket(address, port)) {
-                msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not set socket to: hostname-> %s, port-> %d\n",
-                        address, port);
-                ret = -1;
-            }
-		}
-	}
-
-	if (url)
-		free(url);
+    if (udpsocket_parse_url(url, address, 200, &port, &local) || (local == 1)) {
+        msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s while connecting the log socket. %s\n", strerror(errno), address);
+        ret = -1;
+    } else {
+        if (rist_set_stats_socket(address, port)) {
+            msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not set socket to: hostname-> %s, port-> %d\n",
+                    address, port);
+            ret = -1;
+        }
+    }
 	return ret;
 }
 
