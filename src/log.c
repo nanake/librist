@@ -3,11 +3,11 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include "network.h"
 #include <librist.h>
 #include "log-private.h"
 #include "time-shim.h"
 #include "stdio-shim.h"
+#include "udpsocket.h"
 
 static int loglevel = RIST_LOG_WARN;
 
@@ -38,7 +38,7 @@ int rist_set_stats_socket(char * hostname, int port)
 	}
 
 	if (!stats_socket) {
-		stats_socket = udp_Connect(hostname, port, -1, 0, NULL);
+		stats_socket = udpsocket_open_connect(hostname, port, NULL);
 		fprintf(stderr, "Logs socket created on %s : %d (#%d)\n", hostname, port, stats_socket);
 	} else {
 		fprintf(stderr, "Sorry, logs socket was already created, socket #%d\n", stats_socket);
@@ -78,7 +78,7 @@ void msg(intptr_t receiver_ctx, intptr_t sender_ctx, int level, const char *form
 		(void)ret;
 	}
 	if (stats_socket > 0) {
-		udp_Write(stats_socket, str_udp, udplen);
+		udpsocket_send(stats_socket, str_udp, udplen);
 	}
 
 	free(str_udp);

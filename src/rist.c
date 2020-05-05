@@ -121,7 +121,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 		if (p->local_port % 2 != 0)
 		{
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create peer, port must be even!\n");
-			udp_Close(p->sd);
+			udpsocket_close(p->sd);
 			free(p);
 			return -1;
 		}
@@ -130,7 +130,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 		p_rtcp = rist_receiver_peer_insert_local(ctx, config);
 		if (!p_rtcp)
 		{
-			udp_Close(p->sd);
+			udpsocket_close(p->sd);
 			free(p);
 			return -1;
 		}

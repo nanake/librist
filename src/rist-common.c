@@ -11,7 +11,7 @@
 #include "crypto-private.h"
 #include "log-private.h"
 #include "udp-private.h"
-#include "network.h"
+#include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
 #include "lz4/lz4.h"
@@ -35,6 +35,7 @@ typedef struct rist_url_param {
 } rist_url_param_t;
 
 
+
 int rist_logs_set(int fd, char *address)
 {
 	char * url = NULL;
@@ -44,19 +45,21 @@ int rist_logs_set(int fd, char *address)
 
 	if (address)
 	{
-		struct network_url parsed_url;
+        char address[200];
+        uint16_t port;
+        int local;
 		url = strdup(address);
-		if (parse_url(url, &parsed_url)) {
-			msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s / %s\n", parsed_url.error, address);
+		if (udpsocket_parse_url(url, address, 200, &port, &local) || (local == 1)) {
+			msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s while connecting the log socket. %s\n", strerror(errno), address);
 			ret = -1;
 		}
 		else
 		{
-			if (rist_set_stats_socket(parsed_url.hostname, parsed_url.port)) {
-				msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not set socket to: hostname-> %s, port-> %d\n",
-					parsed_url.hostname, parsed_url.port);
-				ret = -1;
-			}
+            if (rist_set_stats_socket(address, port)) {
+                msg(0, 0, RIST_LOG_ERROR, "[ERROR] Could not set socket to: hostname-> %s, port-> %d\n",
+                        address, port);
+                ret = -1;
+            }
 		}
 	}
 
@@ -334,7 +337,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 {
 	struct rist_flow *f = peer->flow;
 
-//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n", 
+//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 //	seq, source_time);
 
 	if (!f->receiver_queue_has_items) {
@@ -343,7 +346,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		{
 			/* Clear the queue if the queue had data */
 			/* f->receiver_queue_has_items can be reset to false when the output queue is emptied */
-			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO, 
+			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 				"[INFO] Clearing up old %zu bytes of old buffer data\n", f->receiver_queue_size);
 			/* Delete all buffer data (if any) */
 			empty_receiver_queue(f);
@@ -360,7 +363,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		size_t idx_initial = seq % f->receiver_queue_max;
 		f->receiver_queue_output_idx = idx_initial;
 		msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-			"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n", 
+			"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n",
 			seq, idx_initial, source_time, peer->flow->time_offset/RIST_CLOCK);
 		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port);
 		/* reset stats */
@@ -417,7 +420,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (source_time > f->max_source_time)
 			f->max_source_time = source_time;
 		if (diff > peer->missing_counter_max) {
-			// This triggers false positives when there is packet reordering. 
+			// This triggers false positives when there is packet reordering.
 			// Use the timestamp as a secondary check and ignore packets in the past, i.e. reordered straglers
 			if (source_time < f->max_source_time) {
 				// Only print this message when they are older than 10% buffer size
@@ -430,7 +433,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			}
 			else {
 				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-					"[ERROR] Received sequence %"PRIu32" is too far from last missing seq index %"PRIu32" > %"PRIu32", (%"PRIu32"/%"PRIu32")\n", 
+					"[ERROR] Received sequence %"PRIu32" is too far from last missing seq index %"PRIu32" > %"PRIu32", (%"PRIu32"/%"PRIu32")\n",
 					current_seq, diff, peer->missing_counter_max,
 					f->last_seq_found, f->last_seq_output);
 				// Detect and correct discontinuties in seq by resetting the last_seq_found when it is
@@ -615,7 +618,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			f->stats_instant.lost += holes;
 			f->receiver_queue_output_idx = counter;
 			msg(ctx->id, 0, RIST_LOG_ERROR,
-				"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n", 
+				"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
 				holes, counter, f->receiver_queue_size);
 		}
 		if (b) {
@@ -651,7 +654,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 				else if (delay_rtc <= recovery_buffer_ticks) {
 					// This is how we keep the buffer at the correct level
-					//msg(ctx->id, 0, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n", 
+					//msg(ctx->id, 0, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
 					break;
 				}
@@ -674,11 +677,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					uint8_t *payload = b->data;
 					pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
 					ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index] = new_data_block(
-							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index], b, 
+							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index], b,
 							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
 					if (ctx->receiver_data_callback) {
 						// send to callback synchronously
-						ctx->receiver_data_callback(ctx->receiver_data_callback_argument, 
+						ctx->receiver_data_callback(ctx->receiver_data_callback_argument,
 							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index]);
 					}
 					ctx->dataout_fifo_queue_write_index = (ctx->dataout_fifo_queue_write_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
@@ -779,7 +782,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 			else {
 				// Message with wrong seq!!!
 				msg(ctx->id, 0, RIST_LOG_ERROR,
-					"[ERROR] Retry queue has the wrong seq %"PRIu32" != %"PRIu32", removing ...\n", 
+					"[ERROR] Retry queue has the wrong seq %"PRIu32" != %"PRIu32", removing ...\n",
 					f->receiver_queue[idx]->seq, mb->seq);
 				remove_from_queue_reason = 4;
 				peer->stats_receiver_instant.missing--;
@@ -814,7 +817,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				// We do not mix/group missing sequence numbers with different upper 2 bytes
 				if (ctx->common.debug)
 					msg(ctx->id, 0, RIST_LOG_DEBUG,
-						"[DEBUG] seq-msb changed from %"PRIu32" to %"PRIu32" (%"PRIu32", %zu, %"PRIu32")\n", 
+						"[DEBUG] seq-msb changed from %"PRIu32" to %"PRIu32" (%"PRIu32", %zu, %"PRIu32")\n",
 						seq_msb, mb->seq >> 16, mb->seq, mb->peer->nacks.counter,
 						f->missing_counter);
 				send_nack_group(ctx, f, NULL);
@@ -938,10 +941,10 @@ err:
 	return -1;
 }
 
-struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx, 
+struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		const struct rist_peer_config *config)
 {
-	if (config->key_size) { 
+	if (config->key_size) {
 		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
@@ -970,7 +973,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		return NULL;
 	}
 
-	if (config->key_size) { 
+	if (config->key_size) {
 		p->key_secret.key_size = config->key_size;
 		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		p->key_secret.key_rotation = config->key_rotation;
@@ -1186,7 +1189,7 @@ void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation 
 }
 
 static void rist_sender_recv_nack(struct rist_peer *peer,
-		uint32_t flow_id, uint16_t src_port, uint16_t dst_port, const uint8_t *payload, 
+		uint32_t flow_id, uint16_t src_port, uint16_t dst_port, const uint8_t *payload,
 		size_t payload_len, uint32_t nack_seq_msb)
 {
 	RIST_MARK_UNUSED(flow_id);
@@ -1360,7 +1363,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 					rist_fsm_recv_connect(peer);
 					peer->flow->authenticated = true;
 					msg(ctx->id, 0, RIST_LOG_INFO,
-						"[INFO] Authenticated peer %d and flow %"PRIu32" for connection with cname: %s\n", 
+						"[INFO] Authenticated peer %d and flow %"PRIu32" for connection with cname: %s\n",
 							peer->adv_peer_id, peer->adv_flow_id,
 							peer->receiver_name);
 				}
@@ -1395,7 +1398,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 				"[WARNING] Received data packet but handshake is still pending, ignoring ...\n");
 			return;
 		}
-	} 
+	}
 
 	if (peer->retries > 0) {
 		msg(ctx->id, 0, RIST_LOG_WARN,
@@ -1562,9 +1565,9 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		if ( bytes_left < 4 )
 		{
 			/* we must have at least 4 bytes */
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Rist rtcp packet must have at least 4 bytes, we have %d\n", 
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Rist rtcp packet must have at least 4 bytes, we have %d\n",
 				bytes_left);
-			return; 
+			return;
 		}
 
 		ptype = rtcp->ptype;
@@ -1575,7 +1578,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		{
 			/* check for a sane number of bytes */
 			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Malformed feedback packet, expecting %u bytes in the" \
-				" packet, got a buffer of %u bytes. ptype = %d\n", bytes, 
+				" packet, got a buffer of %u bytes. ptype = %d\n", bytes,
 				bytes_left, ptype);
 			return;
 		}
@@ -1641,7 +1644,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					if (memcmp(pkt + RTCP_SDES_SIZE, peer->receiver_name, name_length) != 0)
 					{
 						memcpy(peer->receiver_name, pkt + RTCP_SDES_SIZE, name_length);
-						msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Peer %"PRIu32" receiver name is now: %s\n", 
+						msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Peer %"PRIu32" receiver name is now: %s\n",
 							peer->adv_peer_id, peer->receiver_name);
 					}
 				//}
@@ -1848,7 +1851,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		// TODO: should we close these sockets? who reopens them?
 #if defined (__unix__) || defined(__APPLE__)
 		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Peer recvfrom returned zero bytes (%d), closing socket (%d)\n", recv_bufsize, peer->sd);
-		//udp_Close(peer->sd);
+		//udpsocket_close(peer->sd);
 #else
 		int neterror = WSAGetLastError();
 		// We get WSAECONNRESET on receive from the OS when we we have sent data and there is no receiver listening.
@@ -2079,7 +2082,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	/* Double check for a valid rtp header */
 	if ((proto_hdr->rtp.flags & 0xc0) != 0x80)
 	{
-		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Malformed packet, rtp flag value is %02x instead of 0x80.\n", 
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Malformed packet, rtp flag value is %02x instead of 0x80.\n",
 			proto_hdr->rtp.flags);
 		return;
 	}
@@ -2106,7 +2109,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		flow_id = be32toh(rtcp->ssrc);
 		payload.size = recv_bufsize - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
 		payload.data = (void *)(recv_buf + gre_size + RIST_GRE_PROTOCOL_REDUCED_SIZE);
-		// Null this pointer to prevent code use below 
+		// Null this pointer to prevent code use below
 		// as only the first 8 bytes have valid data for RTCP packets
 		proto_hdr = NULL;
 		// The payload_type is not populated on non-librist senders
@@ -2116,7 +2119,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	//msg(0, 0, RIST_LOG_ERROR,
 	//			"[ERROR] HTF gre_seq %"PRIu32" "
-	//			"flow_id %"PRIu32", peer_id %"PRIu32", gre_size %zu, ptype %u\n", 
+	//			"flow_id %"PRIu32", peer_id %"PRIu32", gre_size %zu, ptype %u\n",
 	//			seq, flow_id, peer_id, gre_size, payload_type);
 
 protocol_bypass:
@@ -2160,7 +2163,7 @@ protocol_bypass:
 					if (RIST_UNLIKELY(!p->receiver_mode))
 						msg(receiver_id, sender_id, RIST_LOG_WARN,
 						"[WARNING] Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
-					else 
+					else
 						rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry);
 				break;
 				default:
@@ -2195,7 +2198,7 @@ protocol_bypass:
 			p->remote_port = payload.src_port;
 			p->local_port = payload.dst_port;
 		}
-		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u<-%u\n", 
+		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u<-%u\n",
 			flow_id, new_peer_id, p->local_port, p->remote_port);
 		if (peer->receiver_mode)
 			p->adv_flow_id = flow_id;
@@ -2531,7 +2534,7 @@ PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout &&
 						peer->last_rtcp_received > 0)
 					{
-						msg(0, peer->sender_ctx->id, RIST_LOG_WARN, 
+						msg(0, peer->sender_ctx->id, RIST_LOG_WARN,
 							"[WARNING] Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
 						bool current_state = peer->dead;
 						peer->dead = true;
@@ -2595,7 +2598,15 @@ PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 
 int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
 {
-	init_socket_subsystem();
+#ifdef _WIN32
+	int ret;
+	WSADATA wsaData;
+	ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (ret < 0) {
+		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to initialize WSA\n");
+		return -1;
+	}
+#endif
 	ctx->evctx = evsocket_init();
 	ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
 	if (profile > RIST_PROFILE_MAIN) {
@@ -2662,7 +2673,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 	//intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
 
 	// TODO: finish/test this code for proper cleanup of peer
-	/* work in progress 
+	/* work in progress
 
 	pthread_rwlock_t *peerlist_lock = &ctx->peerlist_lock;
 	struct evsocket_ctx *evctx = ctx->evctx;
@@ -2685,7 +2696,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
 
 	msg(receiver_id, sender_id, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 	if (peer->sd > -1) {
-		udp_Close(peer->sd);
+		udpsocket_close(peer->sd);
 		peer->sd = -1;
 	}
 
@@ -2773,7 +2784,7 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
-	if (config->key_size) { 
+	if (config->key_size) {
 		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
 			msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
@@ -2801,7 +2812,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		return NULL;
 	}
 
-	if (config->key_size) { 
+	if (config->key_size) {
 		newpeer->key_secret.key_size = config->key_size;
 		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
 		newpeer->key_secret.key_rotation = config->key_rotation;
@@ -2923,7 +2934,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 
 			msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 			if (peer->sd > -1) {
-				udp_Close(peer->sd);
+				udpsocket_close(peer->sd);
 				peer->sd = -1;
 			}
 
@@ -3024,9 +3035,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 							continue;
 						}
 					}
-				} 
+				}
 				if (now > f->stats_next_time) {
-					f->stats_next_time += f->stats_report_time; 
+					f->stats_next_time += f->stats_report_time;
 					f = rist_receiver_flow_statistics(ctx, f);
 				}
 				else
@@ -3107,7 +3118,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 
 		msg(0, ctx->id, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 		if (peer->sd > -1) {
-			udp_Close(peer->sd);
+			udpsocket_close(peer->sd);
 			peer->sd = -1;
 		}
 

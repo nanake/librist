@@ -13,7 +13,6 @@
 #include "socket-shim.h"
 #include "endian-shim.h"
 #include "lz4/lz4.h"
-#include "network.h"
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
@@ -506,7 +505,10 @@ int rist_set_url(struct rist_peer *peer)
 {
 	intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
 	intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
-
+	char host[512];
+	uint16_t port;
+	int local;
+	struct sockaddr_in6 host_addr;
 	if (!peer->url) {
 		if (peer->local_port > 0) {
 			/* Put sender in IPv4 learning mode */
@@ -514,51 +516,41 @@ int rist_set_url(struct rist_peer *peer)
 			peer->address_len = sizeof(struct sockaddr_in);
 			memset(&peer->u.address, 0, sizeof(struct sockaddr_in));
 			msg(receiver_id, sender_id, RIST_LOG_INFO,
-				"[INIT] Sender: in learning mode\n");
+					"[INIT] Sender: in learning mode\n");
 		}
-
 		return 1;
 	}
-
-	struct network_url parsed_url;
-	if (parse_url(peer->url, &parsed_url) != 0) {
-		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] %s / %s\n", parsed_url.error, peer->url);
+	if (udpsocket_parse_url(peer->url, host, 512, &port, &local) != 0) {
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] %s / %s\n", strerror(errno), peer->url);
 		return -1;
 	} else {
-		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n",
-			(char *) parsed_url.hostname, parsed_url.port);
+		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %hu\n",
+				(char *) host, port);
 	}
-
-	peer->address_family = parsed_url.address_family;
-	peer->address_len = parsed_url.address_len;
-	peer->listening = parsed_url.listening;
-
-	if (parsed_url.address_family == AF_INET) {
-		peer->address_len = sizeof(struct sockaddr_in);
-		((struct sockaddr_in *)&peer->u.address)->sin_family = AF_INET;
-		memcpy(&peer->u.address, &parsed_url.u.address, peer->address_len);
-	}
-	else if (parsed_url.address_family == AF_INET6) {
+	if (udpsocket_resolve_host(host, port, &peer->u.address) < 0) {
+		msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Host %s cannot be resolved\n",
+				(char *) host);
+		return -1;
+	} 
+	if (peer->u.inaddr6.sin6_family == AF_INET6) {
+		peer->address_family = AF_INET6;
 		peer->address_len = sizeof(struct sockaddr_in6);
-		((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
-		memcpy(&peer->u.address, &parsed_url.u.address, peer->address_len);
+	} else {
+		peer->address_family = AF_INET;
+		peer->address_len = sizeof(struct sockaddr_in);
 	}
-
-	if (parsed_url.listening) {
-		peer->local_port = parsed_url.port;
+	if (local) {
+		peer->listening = 1;
+		peer->local_port = port;
+	} else {
+		peer->listening = 0;
+		peer->remote_port = port;
 	}
-	else {
-		peer->remote_port = parsed_url.port;
-	}
-
 	if (peer->address_family == AF_INET) {
-		((struct sockaddr_in*)&peer->u.address)->sin_port = htons(parsed_url.port);
+		peer->u.inaddr.sin_port = htons(port);
+	} else {
+		peer->u.inaddr6.sin6_port = htons(port);
 	}
-
-	if (peer->address_family == AF_INET6) {
-		((struct sockaddr_in6*)&peer->u.address)->sin6_port = htons(parsed_url.port);
-	}
-
 	return 0;
 }
 
@@ -628,7 +620,7 @@ void rist_create_socket(struct rist_peer *peer)
 	// TODO: implement multicast interface selection
 	if (peer->local_port) {
 		const char* host;
-		int port;
+	    uint16_t port;
 
 		char buffer[256];
 		if (peer->u.address.sa_family == AF_INET) {
@@ -645,26 +637,21 @@ void rist_create_socket(struct rist_peer *peer)
 			return;
 		}
 
-		peer->sd = udp_Open(host, port, NULL, 0, 0, &peer->miface[0]);
+		peer->sd = udpsocket_open_bind(host, port, &peer->miface[0]);
 		if (peer->sd > 0) {
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
-			char *msgbuf = malloc(256);
-			msgbuf = udp_GetErrorDescription(peer->sd, msgbuf);
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Error starting in URL listening mode. %s\n", msgbuf);
-			free(msgbuf);
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Error starting in URL listening mode. %s\n", strerror(errno));
 		}
 	}
 	else {
 		// We use sendto ... so, no need to connect directly here
-		peer->sd = udp_Connect_Simple(peer->address_family, 32, NULL);
+		peer->sd = udpsocket_open(peer->address_family);
+        // TODO : set max hops
 		if (peer->sd > 0)
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL connect mode (%d)\n", peer->sd);
 		else {
-			char *msgbuf = malloc(256);
-			msgbuf = udp_GetErrorDescription(peer->sd, msgbuf);
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", msgbuf);
-			free(msgbuf);
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", strerror(errno));
 		}
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}

@@ -24,8 +24,8 @@ __BEGIN_DECLS
 #include "pthread-shim.h"
 #include "time-shim.h"
 #include "socket-shim.h"
-#include "network.h"
 #include "libevsocket.h"
+#include "udpsocket.h"
 #include "aes.h"
 #ifdef __linux
 #include "linux-crypto.h"
@@ -452,6 +452,8 @@ struct rist_peer {
 	uint16_t remote_port;
 	union {
 		struct sockaddr address;
+        struct sockaddr_in inaddr;
+        struct sockaddr_in6 inaddr6;
 		struct sockaddr_storage storage;
 	} u;
 	socklen_t address_len;
