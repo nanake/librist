@@ -45,7 +45,7 @@ The plan is the following:
 2. Provide a usable API,
 
 ### On-going
-3. Improve C code base with [various tweaks](https://code.videolan.org/rist/librist/wikis/task-list),
+3. Improve C code base with [various tweaks](https://code.videolan.org/rist/librist/wikis/to-do),
 4. Port/test on most platforms
 5. Provide wrappers for other languages
 
