@@ -2993,99 +2993,134 @@ protocol_bypass:
 		return 0;
 	}
 
-	int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer)
+static inline void peer_remove_child(struct rist_peer *peer) {
+	assert(peer->parent);
+	//head
+	if (!peer->sibling_prev) {
+		peer->parent->child = peer->sibling_next;
+	//middle or tail
+	} else {
+		peer->sibling_prev->sibling_next = peer->sibling_next;
+	}
+	if (peer->sibling_next)
+		peer->sibling_next->sibling_prev = peer->sibling_prev;
+	return;
+}
+
+static inline void peer_remove_linked_list(struct rist_peer *peer) {
+	assert(peer);
+	struct rist_common_ctx *ctx = get_cctx(peer);
+	if (!peer->prev) {
+		ctx->PEERS = peer->next;
+		if (peer->next)
+			peer->next->prev = NULL;
+	} else {
+		peer->prev->next = peer->next;
+	}
+	if (peer->next)
+		peer->next->prev = peer->prev;
+	return;
+}
+
+int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct rist_peer **next)
+{
+	//For now do not delete listening peers, we should implement that properly as well
+	if (peer == NULL) {
+		return -1;
+		if (next)
+			*next = NULL;
+	}
+	peer->shutdown = true;
+
+	if (peer->child)
 	{
-		RIST_MARK_UNUSED(ctx);
-		RIST_MARK_UNUSED(peer);
-		// TODO: test remove from sender list and peer linked list and
-		// perform proper cleanup
-
-		return 0;
-
-		/*
-		   pthread_rwlock_wrlock(&ctx->common.peerlist_lock);
-
-		   if (d_peer == NULL) {
-		   return -1;
-		   }
-
-		   if (d_peer) {
-		// middle
-		if (d_peer->prev && d_peer->next) {
-		d_peer->prev->next = d_peer->next;
-		d_peer->next->prev = d_peer->prev;
-		} else if (!d_peer->prev) {
-		// head
-		if (d_peer->next) {
-		d_peer->next->prev = NULL;
+		while (peer->child) {
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] removing child peer %u from peer %u\n", peer->child->adv_peer_id, peer->adv_peer_id);
+			rist_peer_remove(ctx, peer->child, NULL);
 		}
+	}
 
-		ctx->common.PEERS = d_peer->next;
-		} else if (!d_peer->next) {
-		// tail
-		d_peer->prev->next = NULL;
-		} else {
-		pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-		return -1;
+	if (peer->peer_data != NULL && peer->peer_data != peer)
+		peer->peer_data->peer_rtcp = NULL;
+	if (peer->peer_rtcp != NULL && peer->peer_rtcp != peer)
+		peer->peer_rtcp->peer_data = NULL;
+
+	if (peer->parent) {
+		peer_remove_child(peer);
+	}
+	peer_remove_linked_list(peer);
+
+	if (peer->flow) {
+		for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
+		{
+			if (peer->flow->peer_lst[i] == peer)
+			{
+				size_t move = sizeof(peer) * (peer->flow->peer_lst_len - i - 1);
+				if (move)
+					memmove(peer->flow->peer_lst[i], peer->flow->peer_lst[i+1], move);
+				break;
+			}
 		}
-		} else {
-		pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-		return -1;
+		peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
+		peer->sender_ctx->peer_lst_len--;
+		if (peer->flow->peer_lst_len == 0)
+			peer->flow->peer_lst = NULL;
+	}
+	
+	if (peer->sender_ctx) {
+		for (size_t i = 0; i < peer->sender_ctx->peer_lst_len; i++)
+		{
+			if (peer->sender_ctx->peer_lst[i] == peer)
+			{
+				size_t move = sizeof(peer) * (peer->sender_ctx->peer_lst_len - i - 1);
+				if (move)
+					memmove(peer->sender_ctx->peer_lst[i], peer->sender_ctx->peer_lst[i+1], move);
+				break;
+			}
 		}
+		peer->sender_ctx->peer_lst = realloc(peer->sender_ctx->peer_lst, sizeof(peer) * (peer->sender_ctx->peer_lst_len -1));
+		peer->sender_ctx->peer_lst_len--;
+		if (peer->sender_ctx->peer_lst_len == 0)
+			peer->sender_ctx->peer_lst = NULL;
+	}
 
-		free(d_peer);
-		pthread_rwlock_unlock(&ctx->common.peerlist_lock);
-		return 0;
-
-*/
-
-		//intptr_t receiver_id = peer->receiver_ctx ? peer->receiver_ctx->id : 0;
-		//intptr_t sender_id = peer->sender_ctx ? peer->sender_ctx->id : 0;
-
-		// TODO: finish/test this code for proper cleanup of peer
-		/* work in progress
-
-		   pthread_rwlock_t *peerlist_lock = &ctx->peerlist_lock;
-		   struct evsocket_ctx *evctx = ctx->evctx;
-
-		   pthread_rwlock_wrlock(peerlist_lock);
-
-		   if (!peer->receiver_mode)
-
-		   struct rist_peer *nextpeer = peer->next;
-		   rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Removing peer data received event\n");
-		// data receive event
-		if (peer->event_recv) {
+	
+	/* data receive event */
+	if (!peer->parent && peer->event_recv)
+	{
+		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] Removing peer data received event\n");
+		struct evsocket_ctx *evctx = ctx->evctx;
 		evsocket_delevent(evctx, peer->event_recv);
-		peer->event_recv = NULL;
-		}
-
-		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Removing peer handshake/ping timer\n");
-		/ rtcp timer
+	}
+	
+	/* rtcp timer */
+	if (peer->send_keepalive)
+	{
+		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] Removing peer handshake/ping timer\n");
 		peer->send_keepalive = false;
+	}
 
-		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Closing peer socket on port %d\n", peer->local_port);
-		if (peer->sd > -1) {
+	
+	if (!peer->parent && peer->sd > -1)
+	{
+		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
 		udpsocket_close(peer->sd);
 		peer->sd = -1;
-		}
-
-		struct rist_peer *deleted_peer = peer;
-		peer = nextpeer;
-
-		// Do not free the listening peers here, we do it at the end of the protocol main loop
-		if (!peer->listening)
-		free(deleted_peer);
-		}
-
-		ctx->PEERS = NULL;
-		pthread_rwlock_unlock(peerlist_lock);
-
-		if (ctx->auth.arg) {
+	}
+	_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
+	_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
+	eap_delete_ctx(&peer->eap_ctx);
+	if (peer->url)
+		free(peer->url);
+	
+	if (ctx->auth.arg) {
 		ctx->auth.disconn_cb(ctx->auth.arg, peer);
-		}
-
-*/
+	}
+	if (next != NULL)
+		*next = peer->next;
+	rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] cleanup done for peer %u\n", peer->adv_peer_id);
+	free(peer);
+	return 0;
 }
 
 int rist_auth_handler(struct rist_common_ctx *ctx,
@@ -3304,11 +3339,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	for (;;) {
 		if (!peer)
 			break;
-		next = peer->next;
-		// Peers could be in shutdown already (deleted stale flows)
-		if (!peer->shutdown)
-			rist_shutdown_peer(peer);
-		free(peer);
+		rist_peer_remove(&ctx->common, peer, &next);
 		peer = next;
 	}
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
@@ -3488,12 +3519,9 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	for (;;) {
 		if (!peer)
 			break;
-		next = peer->next;
-		rist_shutdown_peer(peer);
-		free(peer);
+		rist_peer_remove(&ctx->common, peer, &next);
 		peer = next;
 	}
-	free(ctx->peer_lst);
 	evsocket_destroy(ctx->common.evctx);
 
 	pthread_rwlock_unlock(peerlist_lock);

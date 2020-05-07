@@ -700,7 +700,7 @@ static int rist_receiver_peer_create(struct rist_receiver *ctx,
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Created RTCP peer: host %s, port %d, new_url %s, %" PRIu32 "\n", p_rtcp->url, p_rtcp->local_port, config->address, p_rtcp->adv_peer_id);
 
 		p->peer_rtcp = p_rtcp;
-
+		p_rtcp->peer_data = p;
 		peer_append(p_rtcp);
 		/* jumpstart communication */
 		rist_fsm_init_comm(p_rtcp);
@@ -788,55 +788,23 @@ int rist_peer_create(struct rist_ctx *ctx, struct rist_peer **peer, const struct
 		return -1;
 }
 
-static int rist_sender_peer_destroy(struct rist_sender *ctx, struct rist_peer *peer)
-{
-	if (!ctx)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
-		return -1;
-	}
-	else if (!peer)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
-		return -1;
-	}
-
-	peer->dead = true;
-	rist_peer_remove(&ctx->common, peer);
-	rist_log_priv(&ctx->common, RIST_LOG_WARN, "rist_sender_peer_remove not fully implemented!\n");
-	return 0;
-}
-
-static int rist_receiver_peer_destroy(struct rist_receiver *ctx, struct rist_peer *peer)
-{
-	if (!ctx)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
-		return -1;
-	}
-	else if (!peer)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
-		return -1;
-	}
-
-	peer->dead = true;
-	rist_peer_remove(&ctx->common, peer);
-	rist_log_priv(&ctx->common, RIST_LOG_WARN, "rist_receiver_peer_remove not fully implemented!\n");
-	return 0;
-}
-
 int rist_peer_destroy(struct rist_ctx *ctx, struct rist_peer *peer) {
 	if (!ctx) {
 		rist_log_priv3(RIST_LOG_ERROR, "rist_peer_destroy call with null ctx\n");
 		return -1;
 	}
+	struct rist_common_ctx *cctx = NULL;
 	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx)
-		return rist_receiver_peer_destroy(ctx->receiver_ctx, peer);
+		cctx = &ctx->receiver_ctx->common;
 	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx)
-		return rist_sender_peer_destroy(ctx->sender_ctx, peer);
+		cctx = &ctx->sender_ctx->common;
 	else
 		return -1;
+	assert(cctx != NULL);
+	pthread_rwlock_wrlock(&cctx->peerlist_lock);
+	int ret = rist_peer_remove(cctx, peer, NULL);
+	pthread_rwlock_unlock(&cctx->peerlist_lock);
+	return ret;
 }
 
 static int rist_sender_start(struct rist_sender *ctx)
