@@ -5,7 +5,7 @@ The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies fully to t
 
 ## ToDo
 
-The todo list can be found [on the wiki](https://code.videolan.org/rist/librist/wikis/task-list).
+The todo list can be found [on the wiki](https://code.videolan.org/rist/librist/wikis/to-do).
 
 ## Codebase language
 
