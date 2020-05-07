@@ -275,6 +275,8 @@ int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id)
 
 int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id)
 {
+	//Make sure LSB = 0
+	flow_id &= ~1UL;
 	ctx->adv_flow_id = flow_id;
 	for (size_t i = 0; i < ctx->peer_lst_len; i++)
 	{

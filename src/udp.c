@@ -52,6 +52,24 @@ uint64_t timestampNTP_u64(void)
 	return t; // nanoseconds (technically, 232.831 picosecond units)
 }
 
+uint64_t timestampNTP_RTC_u64(void) {
+	timespec_t ts;
+#ifdef __APPLE__
+	clock_gettime_osx(&ts);
+#elif defined _WIN32
+	clock_gettime(CLOCK_MONOTONIC, &ts);
+#else
+	clock_gettime(CLOCK_REALTIME, &ts);
+#endif
+	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
+	uint64_t t = (uint64_t)(ts.tv_nsec) << 32;
+	t /= 1000000000;
+	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
+	// No leap seconds during that period since they were not invented yet.
+	t |= (70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec;
+	return t;
+}
+
 uint32_t timestampRTP_u32( int advanced, uint64_t i_ntp )
 {
 	if (!advanced) {
@@ -90,6 +108,14 @@ uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp)
 		i_ntp /= clock;
 	}
 	return i_ntp;
+}
+
+uint64_t calculate_rtt_delay(uint64_t request, uint64_t response, uint32_t delay) {
+	/* both request and response are NTP timestamps, delay is in microseconds */
+	uint64_t rtt = response - request;
+	if (RIST_UNLIKELY(delay))
+		rtt -= (((uint64_t)delay) << 32)/1000000;
+	return rtt;
 }
 
 void rist_clean_sender_enqueue(struct rist_sender *ctx)
@@ -649,41 +675,124 @@ void rist_create_socket(struct rist_peer *peer)
 
 }
 
-int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len)
-{
-	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
-
-	uint16_t namelen = strlen(peer->cname);
-	/* add ssrc(4), type(1) and length(1) and align to 32 bits */
-	uint16_t sdes_chunk_size = ((((namelen + 6) >> 2) + 1) << 2);
-	uint16_t padding = sdes_chunk_size - namelen - 6;
-	uint16_t sdes_size = sdes_chunk_size + 4; // Add flags(1), ptype(1) and len(2) (outside the chunk)
-
-	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
-	int payload_len = sizeof(struct rist_rtcp_rr_empty_pkt) + sdes_size;
-	struct rist_rtcp_rr_empty_pkt *rr = (struct rist_rtcp_rr_empty_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET);
-	struct rist_rtcp_sdes_pkt *sdes = (struct rist_rtcp_sdes_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + sizeof(struct rist_rtcp_rr_empty_pkt));
-
-	// TODO: when array_len == 0, send the full RR report (every 200ms)
-	/* Populate empty RR for receiver */
+static inline void rist_rtcp_write_empty_rr(uint8_t *buf, int *offset, const uint32_t flow_id) {
+	struct rist_rtcp_rr_empty_pkt *rr = (struct rist_rtcp_rr_empty_pkt *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(struct rist_rtcp_rr_empty_pkt);
 	rr->rtcp.flags = RTCP_SR_FLAGS;
 	rr->rtcp.ptype = PTYPE_RR;
-	rr->rtcp.ssrc = htobe32(peer->adv_flow_id);
+	rr->rtcp.ssrc = htobe32(flow_id);
 	rr->rtcp.len = htons(1);
+}
 
+static inline void rist_rtcp_write_rr(uint8_t *buf, int *offset, const struct rist_peer *peer)
+{
+	struct rist_rtcp_rr_pkt *rr = (struct rist_rtcp_rr_pkt *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(struct rist_rtcp_rr_pkt);
+	rr->rtcp.flags = RTCP_RR_FULL_FLAGS;
+	rr->rtcp.ptype = PTYPE_RR;
+	rr->rtcp.ssrc = htobe32(peer->adv_flow_id);
+	rr->rtcp.len = htons(7);
+	/* TODO fix these variables */
+	rr->fraction_lost = 0;
+	rr->cumulative_pkt_loss_msb = 0;
+	rr->cumulative_pkt_loss_lshw = 0;
+	rr->highest_seq = 0;
+	rr->jitter = 0;
+	rr->lsr = htobe32(peer->last_sender_report_time >> 16);
+	/*  expressed in units of 1/65536  == middle 16 bits?!? */
+	rr->dlsr = htobe32((timestampNTP_u64() - peer->last_sender_report_ts) >> 16);
+}
+
+static inline void rist_rtcp_write_sr(uint8_t *buf, int *offset, struct rist_peer *peer) {
+	struct rist_rtcp_sr_pkt *sr = (struct rist_rtcp_sr_pkt *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(struct rist_rtcp_sr_pkt);
+	/* Populate SR for sender */
+	sr->rtcp.flags = RTCP_SR_FLAGS;
+	sr->rtcp.ptype = PTYPE_SR;
+	sr->rtcp.ssrc = htobe32(peer->adv_flow_id);
+	sr->rtcp.len = htons(6);
+	uint64_t now = timestampNTP_u64();
+	uint64_t now_rtc = timestampNTP_RTC_u64();
+	peer->last_sender_report_time = now_rtc;
+	peer->last_sender_report_ts = now;
+	uint32_t ntp_lsw = (uint32_t)now_rtc;
+	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
+	// No leap seconds during that period since they were not invented yet.
+	uint32_t ntp_msw = now_rtc >> 32;
+	sr->ntp_msw = htobe32(ntp_msw);
+	sr->ntp_lsw = htobe32(ntp_lsw);
+	sr->rtp_ts = htobe32(timestampRTP_u32(peer->advanced, now));
+	sr->sender_pkts = 0;  //htonl(f->packets_count);
+	sr->sender_bytes = 0; //htonl(f->bytes_count);
+}
+
+static inline void rist_rtcp_write_sdes(uint8_t *buf, int *offset, const char *name, const uint32_t flow_id)
+{
+	uint16_t namelen = strlen(name);
+	uint16_t sdes_size = ((10 + namelen + 1) + 3) & ~3;
+	uint16_t padding = sdes_size - namelen - 10;
+	struct rist_rtcp_sdes_pkt *sdes = (struct rist_rtcp_sdes_pkt *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sdes_size;
 	/* Populate SDES for sender description */
 	sdes->rtcp.flags = RTCP_SDES_FLAGS;
 	sdes->rtcp.ptype = PTYPE_SDES;
-	sdes->rtcp.len = htons(sdes_chunk_size >> 2);
-	sdes->rtcp.ssrc = htobe32(peer->adv_flow_id);
+	sdes->rtcp.len = htons((sdes_size - 1) >> 2);
+	sdes->rtcp.ssrc = htobe32(flow_id);
 	sdes->cname = 1;
 	sdes->name_len = namelen;
-	// We copy the extra padding bytes from the source because it is a preallocated buffer 
+	// We copy the extra padding bytes from the source because it is a preallocated buffer
 	// of size 128 with all zeroes
-	memcpy(sdes->udn, peer->cname, namelen + padding);
+	memcpy(sdes->udn, name, namelen + padding);
+}
 
-	if (array_len > 0)
-	{
+static inline void rist_rtcp_write_echoreq(uint8_t *buf, int *offset, const uint32_t flow_id)
+{
+	struct rist_rtcp_echoext *echo = (struct rist_rtcp_echoext *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(struct rist_rtcp_echoext);
+	echo->flags = RTCP_ECHOEXT_REQ_FLAGS;
+	echo->ptype = PTYPE_NACK_CUSTOM;
+	echo->ssrc = htobe32(flow_id);
+	echo->len = htons(5);
+	memcpy(echo->name, "RIST", 4);
+	uint64_t now = timestampNTP_u64();
+	echo->ntp_msw = htobe32((uint32_t)(now >> 32));
+	echo->ntp_lsw = htobe32((uint32_t)(now & 0x000000000FFFFFFFF));
+}
+
+static inline void rist_rtcp_write_echoresp(uint8_t *buf,int *offset, const uint64_t request_time, const uint32_t flow_id) {
+	struct rist_rtcp_echoext *echo = (struct rist_rtcp_echoext *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(struct rist_rtcp_echoext);
+	echo->flags = RTCP_ECHOEXT_RESP_FLAGS;
+	echo->ptype = PTYPE_NACK_CUSTOM;
+	echo->len = htons(5);
+	echo->ssrc = htobe32(flow_id);
+	memcpy(echo->name, "RIST", 4);
+	echo->ntp_msw = htobe32((uint32_t)(request_time >> 32));
+	echo->ntp_lsw = htobe32((uint32_t)(request_time & 0x000000000FFFFFFFF));
+	echo->delay = 0;
+}
+
+int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
+	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
+	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
+
+	int payload_len = 0;
+	rist_rtcp_write_rr(rtcp_buf, &payload_len, peer);
+	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
+	struct rist_common_ctx *cctx = get_cctx(peer);
+	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+}
+
+int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], int array_len)
+{
+	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
+	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
+
+	int payload_len = 0;
+	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
+	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	if (RIST_LIKELY(array_len > 0)) {
 		// Add nack requests (if any)
 		struct rist_rtp_nack_record *rec;
 
@@ -695,6 +804,7 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 		seqext_buf->len = htons(3);
 		uint32_t seq = seq_array[0];
 		seqext_buf->seq_msb = htobe16(seq >> 16);
+		uint32_t fci_count = 1;
 
 		// Now the NACK message
 		if (peer->receiver_ctx->nack_type == RIST_NACK_BITMASK)
@@ -702,34 +812,69 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 			struct rist_rtcp_nack_bitmask *rtcp = (struct rist_rtcp_nack_bitmask *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext));
 			rtcp->flags = RTCP_NACK_BITMASK_FLAGS;
 			rtcp->ptype = PTYPE_NACK_BITMASK;
-			rtcp->len = htons(2 + array_len);
 			rtcp->ssrc_source = 0; // TODO
 			rtcp->ssrc = htobe32(peer->adv_flow_id);
 			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE);
-			for (int i = 0; i < array_len; i++) {
-				rec->start = htons(seq_array[i]);
-				rec->extra = htons(0);
-				rec++;
+			uint32_t last_seq, tmp_seq;
+			tmp_seq = last_seq = seq_array[0];
+			uint32_t boundary = tmp_seq +16;
+			rec->start = htons(tmp_seq);
+			uint16_t extra = 0;
+			for (int i = 1; i < array_len; i++)
+			{
+				tmp_seq = seq_array[i];
+				if (last_seq < tmp_seq && tmp_seq <= boundary) {
+					uint16_t bitnum = tmp_seq - last_seq;
+					SET_BIT(extra, (bitnum -1));
+				} else {
+					rec->extra = htons(extra);
+					rec++;
+					fci_count++;
+					extra = 0;
+					rec->start = htons(tmp_seq);
+					last_seq = tmp_seq;
+					boundary = tmp_seq + 16;
+				}
 			}
+			rec->extra = htons(extra);
+			rtcp->len = htons(2 + fci_count);
 		}
 		else // PTYPE_NACK_CUSTOM
 		{
 			struct rist_rtcp_nack_range *rtcp = (struct rist_rtcp_nack_range *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext));
 			rtcp->flags = RTCP_NACK_RANGE_FLAGS;
 			rtcp->ptype = PTYPE_NACK_CUSTOM;
-			rtcp->len = htons(2 + array_len);
 			rtcp->ssrc_source = htobe32(peer->adv_flow_id);
 			memcpy(rtcp->name, "RIST", 4);
 			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE);
-			for (int i = 0; i < array_len; i++) {
-				uint16_t tmp_seq = (uint16_t)seq_array[i];
-				//fprintf(stderr, "sending nack for seq %d\n", tmp_seq);
-				rec->start = htons(tmp_seq);
-				rec->extra = htons(0);
-				rec++;
+			uint16_t tmp_seq = (uint16_t)seq_array[0];
+			uint16_t last_seq = tmp_seq;
+			rec->start = htons(tmp_seq);
+			uint16_t extra = 0;
+			for (int i = 1; i < array_len; i++)
+			{
+				tmp_seq = (uint16_t)seq_array[i];
+				if (RIST_UNLIKELY(extra == UINT16_MAX)) {
+					rec->extra = htons(extra);
+					rec++;
+					fci_count++;
+					rec->start = htons(tmp_seq);
+					extra = 0;
+				} else if (tmp_seq == last_seq +1) {
+					extra++;
+				} else {
+					rec->extra = htons(extra);
+					rec++;
+					fci_count++;
+					rec->start = htons(tmp_seq);
+					extra = 0;
+				}
+				last_seq = tmp_seq;
 			}
+			rec->extra = htons(extra);
+			rtcp->len = htons(2 + fci_count);
 		}
-		int nack_bufsize = sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE + RTCP_FB_FCI_GENERIC_NACK_SIZE * array_len;
+		int nack_bufsize = sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE + RTCP_FB_FCI_GENERIC_NACK_SIZE * fci_count;
 		payload_len += nack_bufsize;
 		payload_type = RIST_PAYLOAD_TYPE_RTCP_NACK;
 	}
@@ -739,61 +884,19 @@ int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int ar
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
-void rist_send_sender_rtcp(struct rist_peer *peer)
-{
-	uint16_t namelen = strlen(peer->cname);
-	/* add ssrc(4), type(1) and length(1) and align to 32 bits */
-	uint16_t sdes_chunk_size = ((((namelen + 6) >> 2) + 1) << 2);
-	uint16_t padding = sdes_chunk_size - namelen - 6;
-	uint16_t sdes_size = sdes_chunk_size + 4; // Add flags(1), ptype(1) and len(2) (outside the chunk)
-
+void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
-	int payload_len = sizeof(struct rist_rtcp_sr_pkt) + sdes_size;
-	struct rist_rtcp_sr_pkt *sr = (struct rist_rtcp_sr_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET);
-	struct rist_rtcp_sdes_pkt *sdes = (struct rist_rtcp_sdes_pkt *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + sizeof(struct rist_rtcp_sr_pkt));
+	int payload_len = 0;
 
-	/* Populate SR for sender */
-	sr->rtcp.flags = RTCP_SR_FLAGS;
-	sr->rtcp.ptype = PTYPE_SR;
-	sr->rtcp.ssrc = htobe32(peer->adv_flow_id);
-	sr->rtcp.len = htons(6);
-	uint64_t now = timestampNTP_u64();
-	timespec_t ts;
-#ifdef __APPLE__
-	clock_gettime_osx(&ts);
-#elif	defined _WIN32
-	clock_gettime(CLOCK_MONOTONIC, &ts);
-#else
-	clock_gettime(CLOCK_REALTIME, &ts);
-#endif
-	// Convert nanoseconds to 32-bits fraction (232 picosecond units)
-	uint32_t ntp_lsw = (uint32_t)ts.tv_nsec;
-	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
-	// No leap seconds during that period since they were not invented yet.
-	uint32_t ntp_msw = (70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec;
-	sr->ntp_msw = htobe32(ntp_msw);
-	sr->ntp_lsw = htobe32(ntp_lsw);
-	sr->rtp_ts = htobe32(timestampRTP_u32(peer->advanced, now));
-	sr->sender_pkts = 0;//htonl(f->packets_count);
-	sr->sender_bytes = 0;//htonl(f->bytes_count);
-
-	/* Populate SDES for sender description */
-	sdes->rtcp.flags = RTCP_SDES_FLAGS;
-	sdes->rtcp.ptype = PTYPE_SDES;
-	sdes->rtcp.len = htons(sdes_chunk_size >> 2);
-	sdes->rtcp.ssrc = htobe32(peer->adv_flow_id);
-	sdes->cname = 1;
-	sdes->name_len = namelen;
-	// We copy the extra padding bytes from the source because it is a preallocated buffer
-	// of size 128 with all zeroes
-	memcpy(sdes->udn, peer->cname, namelen + padding);
-
+	rist_rtcp_write_sr(rtcp_buf, &payload_len, peer);
+	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
 	struct rist_sender *ctx = peer->sender_ctx;
 	pthread_rwlock_wrlock(&ctx->queue_lock);
 	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
+	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
+	{
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
@@ -805,6 +908,65 @@ void rist_send_sender_rtcp(struct rist_peer *peer)
 	return;
 }
 
+int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time) {
+	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
+	int payload_len = 0;
+	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
+	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	rist_rtcp_write_echoresp(rtcp_buf, &payload_len, echo_request_time, peer->adv_flow_id);
+	if (peer->receiver_mode) {
+		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
+		struct rist_common_ctx *cctx = get_cctx(peer);
+		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	} else {
+		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
+		struct rist_sender *ctx = peer->sender_ctx;
+		pthread_rwlock_wrlock(&ctx->queue_lock);
+		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
+		{
+			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
+			pthread_rwlock_unlock(&ctx->queue_lock);
+			return -1;
+		}
+		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
+		ctx->sender_queue_bytesize += payload_len;
+		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+		pthread_rwlock_unlock(&ctx->queue_lock);
+		return 0;
+	}
+}
+int rist_request_echo(struct rist_peer *peer) {
+	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
+	int payload_len = 0;
+	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
+	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
+	if (peer->receiver_mode)
+	{
+		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
+		struct rist_common_ctx *cctx = get_cctx(peer);
+		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	}
+	else
+	{
+		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
+		struct rist_sender *ctx = peer->sender_ctx;
+		pthread_rwlock_wrlock(&ctx->queue_lock);
+		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
+		{
+			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
+			pthread_rwlock_unlock(&ctx->queue_lock);
+			return -1;
+		}
+		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
+		ctx->sender_queue_bytesize += payload_len;
+		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+		pthread_rwlock_unlock(&ctx->queue_lock);
+		return 0;
+	}
+}
 static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 {
 	struct rist_peer *outputpeer = peer;
@@ -818,7 +980,7 @@ static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 		if (get_cctx(peer)->debug)
 			msg(0, 0, RIST_LOG_DEBUG, "[DEBUG] Sending %d nacks starting with %"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32"\n",
 			peer->nacks.counter, peer->nacks.array[0],peer->nacks.array[1],peer->nacks.array[2],peer->nacks.array[3]);
-		if (rist_send_receiver_rtcp(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
+		if (rist_receiver_send_nacks(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
 			peer->nacks.counter = 0;
 		else
 			msg(0, 0, RIST_LOG_ERROR, "\tCould not send nacks, will try again\n");

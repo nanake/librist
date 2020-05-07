@@ -43,13 +43,19 @@ __BEGIN_DECLS
 #define NACK_FMT_RANGE 0
 #define NACK_FMT_SEQEXT 1
 
+#define ECHO_REQUEST 2
+#define ECHO_RESPONSE 3
+
 #define RTCP_SDES_SIZE 10
 #define RTP_MPEGTS_FLAGS 0x80
 #define RTCP_SR_FLAGS 0x80
+#define RTCP_RR_FULL_FLAGS 0x81
 #define RTCP_SDES_FLAGS 0x81
 #define RTCP_NACK_RANGE_FLAGS 0x80
 #define RTCP_NACK_BITMASK_FLAGS 0x81
 #define RTCP_NACK_SEQEXT_FLAGS 0x81
+#define RTCP_ECHOEXT_REQ_FLAGS 0x82
+#define RTCP_ECHOEXT_RESP_FLAGS 0x83
 
 // RTP Payload types and clocks
 // March 1995 (page 9): https://tools.ietf.org/html/draft-ietf-avt-profile-04
@@ -127,7 +133,29 @@ The RTP header is always present on data packets
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 
 */
-
+/*
+0                   1                   2                   3
+ 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|V=2|0| Subtype |   PT=APP=204  |            Length             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                  SSRC of media source                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         name (ASCII)                          |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                Timestamp, most significant word               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|               Timestamp, least significant word               |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                Processing Delay (microseconds)                |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Padding bytes                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+                               ...
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                         Padding bytes                         |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
 /*
 
 Data Channel:
@@ -230,6 +258,17 @@ RIST_PACKED_STRUCT(rist_rtcp_seqext,{
 	uint16_t reserved0;
 })
 
+RIST_PACKED_STRUCT(rist_rtcp_echoext, {
+	uint8_t flags;
+	uint8_t ptype;
+	uint16_t len;
+	uint32_t ssrc;
+	uint8_t name[4];
+	uint32_t ntp_msw;
+	uint32_t ntp_lsw;
+	uint32_t delay;
+})
+
 RIST_PACKED_STRUCT(rist_rtcp_sr_pkt,{
 	struct rist_rtcp_hdr rtcp;
 	uint32_t ntp_msw;
@@ -264,8 +303,10 @@ RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
 
 /* shared functions in udp.c */
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
-RIST_PRIV int rist_send_receiver_rtcp(struct rist_peer *peer, uint32_t seq_array[], int array_len);
-RIST_PRIV void rist_send_sender_rtcp(struct rist_peer *peer);
+RIST_PRIV int rist_receiver_periodic_rtcp(struct rist_peer *peer);
+RIST_PRIV void rist_sender_periodic_rtcp(struct rist_peer *peer);
+RIST_PRIV int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time);
+RIST_PRIV int rist_request_echo(struct rist_peer *peer);
 RIST_PRIV int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_gre, uint32_t seq_rtp);
 RIST_PRIV size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer *buffer);
@@ -278,8 +319,10 @@ RIST_PRIV void rist_create_socket(struct rist_peer *peer);
 RIST_PRIV size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx);
 
 RIST_PRIV uint64_t timestampNTP_u64(void);
+RIST_PRIV uint64_t timestampNTP_RTC_u64(void);
 RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
 RIST_PRIV uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp);
+RIST_PRIV uint64_t calculate_rtt_delay(uint64_t request, uint64_t response, uint32_t delay);
 
 static inline uint32_t get_rtp_ts_clock(uint8_t ptype) {
 	uint32_t clock = 0;

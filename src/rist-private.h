@@ -388,6 +388,8 @@ struct rist_peer {
 	struct rist_peer *peer_data;
 	bool is_rtcp;
 	bool is_data;
+	/* sender only: peer is known to respond to echo requests use those to calculate RTT instead */
+	bool echo_enabled;
 
 	/* For keeping track of the connection that initiated a peer */
 	struct rist_peer *parent;
@@ -500,6 +502,8 @@ struct rist_peer {
 	uint64_t keepalive_next_time;
 	uint32_t session_timeout;
 	uint64_t last_rtcp_received;
+	uint64_t last_sender_report_time;
+	uint64_t last_sender_report_ts;
 
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];

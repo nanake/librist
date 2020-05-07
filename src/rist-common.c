@@ -1063,6 +1063,10 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 
 		/* call it the first time manually to speed up the handshake */
 		rist_peer_rtcp(NULL, peer);
+		/* send 3 echo requests to jumpstart accurate RTT calculation */
+		rist_request_echo(peer);
+		rist_request_echo(peer);
+		rist_request_echo(peer);
 	}
 }
 
@@ -1500,6 +1504,42 @@ static void rist_recv_oob_data(struct rist_peer *peer, struct rist_buffer *paylo
 	}
 }
 
+static void rist_rtcp_handle_echo_request(struct rist_peer *peer, struct rist_rtcp_echoext *echoreq) {
+	if (RIST_UNLIKELY(!peer->echo_enabled))
+		peer->echo_enabled = true;
+	uint64_t echo_request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
+	rist_respond_echoreq(peer, echo_request_time);
+}
+
+static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_rtcp_echoext *echoreq) {
+	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
+	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
+	peer->last_mrtt = rtt / RIST_CLOCK;
+	peer->eight_times_rtt -= peer->eight_times_rtt/8;
+	peer->eight_times_rtt += rtt / RIST_CLOCK;
+}
+
+static void rist_handle_sr_pkt(struct rist_peer *peer, struct rist_rtcp_sr_pkt *sr) {
+	uint64_t ntp_time = ((uint64_t)be32toh(sr->ntp_msw) << 32) | be32toh(sr->ntp_lsw);
+	peer->last_sender_report_time = ntp_time;
+	peer->last_sender_report_ts = timestampNTP_u64();
+}
+
+static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *rr) {
+	if (peer->echo_enabled)
+		return;
+	uint64_t lsr_tmp = (peer->last_sender_report_time >> 16) & 0xFFFFFFFF;
+	uint64_t lsr_ntp = be32toh(rr->lsr);
+	if (lsr_ntp == lsr_tmp) {
+		uint64_t now = timestampNTP_u64();
+		uint64_t rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
+		peer->last_mrtt = rtt /RIST_CLOCK;
+		peer->eight_times_rtt -= peer->eight_times_rtt/8;
+		peer->eight_times_rtt += rtt/RIST_CLOCK;
+	}
+
+}
+
 static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, struct rist_buffer *payload)
 {
@@ -1548,19 +1588,33 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					nack_seq_msb = ((uint32_t)be16toh(seq_ext->seq_msb)) << 16;
 					break;
 				}
-				else if (subtype != NACK_FMT_RANGE) {
+				else if (subtype == ECHO_RESPONSE) {
+					struct rist_rtcp_echoext *echoresponse = (struct rist_rtcp_echoext *) pkt;
+					rist_rtcp_handle_echo_response(peer, echoresponse);
+					break;
+				}
+				else if (subtype == ECHO_REQUEST) {
+					struct rist_rtcp_echoext *echorequest = (struct rist_rtcp_echoext *)pkt;
+					rist_rtcp_handle_echo_request(peer, echorequest);
+					break;
+				}
+				else if (subtype == NACK_FMT_RANGE)	{
+					//Fallthrough
+					RIST_FALLTHROUGH;
+				}
+				else {
 					msg(receiver_id, sender_id, RIST_LOG_DEBUG, "[DEBUG] Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
 					break;
 				}
-				RIST_FALLTHROUGH;
 			case PTYPE_NACK_BITMASK:
+				//Also FMT Range
 				rist_sender_recv_nack(peer, flow_id, payload->src_port, payload->dst_port, pkt, bytes_left, nack_seq_msb);
 				break;
 			case PTYPE_RR:
-				/*
-				if (p_sys->b_ismulticast == false)
-					process_rr(f, pkt, len);
-				*/
+				if (ntohs(rtcp->len) == 7) {
+					struct rist_rtcp_rr_pkt *rr = (struct rist_rtcp_rr_pkt *)pkt;
+					rist_handle_rr_pkt(peer, rr);
+				}
 				break;
 
 			case PTYPE_SDES:
@@ -1603,7 +1657,9 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 
 				break;
 			}
-			case PTYPE_SR:
+			case PTYPE_SR:;
+				struct rist_rtcp_sr_pkt *sr = (struct rist_rtcp_sr_pkt *)pkt;
+				rist_handle_sr_pkt(peer, sr);
 				break;
 
 			default:
@@ -1626,9 +1682,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	else { //if (ctx->profile <= RIST_PROFILE_MAIN) {
 		//msg(0, 0, RIST_LOG_ERROR, "\tSent rctp message! peer/local (%d/%d)\n", peer->state_peer, peer->state_local);
 		if (peer->receiver_mode) {
-			rist_send_receiver_rtcp(peer, NULL, 0);
+			rist_receiver_periodic_rtcp(peer);
 		} else {
-			rist_send_sender_rtcp(peer);
+			rist_sender_periodic_rtcp(peer);
+			if (peer->echo_enabled)
+				rist_request_echo(peer);
 		}
 	}
 }
