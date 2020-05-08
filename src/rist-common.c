@@ -2928,7 +2928,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 			}
 
 #ifdef __linux
-			if (peer->cryptoctx)
+			if (!peer->parent && peer->cryptoctx)
 				free(peer->cryptoctx);
 #endif
 
