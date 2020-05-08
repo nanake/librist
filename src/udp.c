@@ -936,6 +936,7 @@ int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_tim
 		return 0;
 	}
 }
+
 int rist_request_echo(struct rist_peer *peer) {
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
 	int payload_len = 0;
@@ -967,6 +968,7 @@ int rist_request_echo(struct rist_peer *peer) {
 		return 0;
 	}
 }
+
 static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 {
 	struct rist_peer *outputpeer = peer;
