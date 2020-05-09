@@ -25,6 +25,7 @@
 #define SOL_IP 0x0
 #define SOL_IPV6 0x29
 #define if_nametoindex(name)  atoi(name)
+#define close(s) closesocket(s)
 typedef uint32_t socklen_t;
 
 /* POSIX */
