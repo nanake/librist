@@ -47,6 +47,10 @@ int rist_logs_set(int fd, char *url)
         return ret;
     }
 
+    if (!url) {
+        fprintf(stderr, "[INFO] Remote log disabled.\n");
+        return 0;
+    }
     if (udpsocket_parse_url(url, address, 200, &port, &local) || (local == 1)) {
         msg(0, 0, RIST_LOG_ERROR, "[ERROR] %s while connecting the log socket. %s\n", strerror(errno), address);
         ret = -1;

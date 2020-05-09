@@ -41,6 +41,10 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 		}
 		freeaddrinfo(res);
 	}
+
+
+
+
 	return 0;
 }
 
@@ -90,6 +94,10 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 	int sd;
 	struct sockaddr_in6 raw;
 	uint16_t addrlen;
+	uint16_t proto;
+	uint32_t ttlcmd;
+	const uint32_t ttl = UDPSOCKET_MAX_HOPS;
+
 	if (udpsocket_resolve_host(host, port, (struct sockaddr *)&raw) < 0)
 		return -1;
 
@@ -97,20 +105,30 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 	if (sd < 0)
 		return sd;
 
-	if (raw.sin6_family == AF_INET6)
+	if (raw.sin6_family == AF_INET6) {
 		addrlen = sizeof(struct sockaddr_in6);
-	else
+		proto = IPPROTO_IP;
+		ttlcmd = IP_MULTICAST_TTL;
+	} else {
 		addrlen = sizeof(struct sockaddr_in);
+		proto = IPPROTO_IPV6;
+		ttlcmd = IPV6_MULTICAST_HOPS;
+	}
 
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
+	}
+	if (setsockopt(sd, proto, ttlcmd, &ttl, sizeof(ttl)) == 0) {
+		/* Non-critical error */
+		fprintf(stderr, "Cannot set socket MAX HOPS: %s\n", strerror(errno));
 	}
 	if (mciface)
 		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
 	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0)
 		return -1;
+
 
 	return sd;
 }
@@ -175,14 +193,15 @@ int udpsocket_close(int sd)
 	return close(sd);
 }
 
-int udpsocket_parse_url(const char *url, char *address, int address_maxlen, uint16_t *port, int *local)
+int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local)
 {
 	char *p_port = NULL, *p_addr = (char *)url;
 	int using_sqbrkts = 0;
-	char *p = (char *)url;
+	char *p;
     if (!url)
         return -1;
 
+    p = url;
 	if (strlen(p) < 1)
 		return -1;
 

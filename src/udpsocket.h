@@ -12,6 +12,8 @@
 /* TODO: check errno on windows */
 #include <errno.h>
 
+#define UDPSOCKET_MAX_HOPS 32
+
 
 /* Windows */
 #ifdef _WIN32
@@ -94,7 +96,7 @@ int udpsocket_send(int sd, const void *buf, size_t size);
 int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port);
 int udpsocket_recv(int sd, void *buf, size_t size);
 int udpsocket_close(int sd);
-int udpsocket_parse_url(const char *url, char *address, int address_maxlen, uint16_t *port, int *local);
+int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local);
 
 
 #endif /* ifndef UDPSOCKET_H */
