@@ -14,6 +14,10 @@
 
 #define UDPSOCKET_MAX_HOPS 32
 
+#ifndef SOL_IP
+#define SOL_IP 0x0
+#define SOL_IPV6 0x29
+#endif
 
 /* Windows */
 #ifdef _WIN32
@@ -22,8 +26,6 @@
 #include <Windows.h>
 #include <ws2tcpip.h>
 #define AF_LOCAL AF_UNSPEC
-#define SOL_IP 0x0
-#define SOL_IPV6 0x29
 #define if_nametoindex(name)  atoi(name)
 #define close(s) closesocket(s)
 typedef uint32_t socklen_t;
