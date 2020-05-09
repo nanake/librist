@@ -13,11 +13,12 @@ platform_files = []
 inc = include_directories('inc', 'extra')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
-add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
 	add_global_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
+else
+	add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 endif
 
 if host_machine.system() == 'linux'
