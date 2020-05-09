@@ -180,6 +180,8 @@ int udpsocket_parse_url(const char *url, char *address, int address_maxlen, uint
 	char *p_port = NULL, *p_addr = (char *)url;
 	int using_sqbrkts = 0;
 	char *p = (char *)url;
+    if (!url)
+        return -1;
 
 	if (strlen(p) < 1)
 		return -1;
