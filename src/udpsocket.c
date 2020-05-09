@@ -41,10 +41,6 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 		}
 		freeaddrinfo(res);
 	}
-
-
-
-
 	return 0;
 }
 
@@ -198,10 +194,10 @@ int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *
 	char *p_port = NULL, *p_addr = (char *)url;
 	int using_sqbrkts = 0;
 	char *p;
-    if (!url)
-        return -1;
+	if (!url)
+		return -1;
 
-    p = url;
+	p = url;
 	if (strlen(p) < 1)
 		return -1;
 
