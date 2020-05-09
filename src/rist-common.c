@@ -866,8 +866,6 @@ static int rist_set_manual_sockdata(struct rist_peer *peer, const struct rist_pe
 	peer->address_family = config->address_family;
 	peer->listening = !config->initiate_conn;
 	const char *hostname = config->address;
-	struct addrinfo *ai, *orig;
-	struct sockaddr *res = NULL;
 	int ret;
 	if ((!hostname || !*hostname) && peer->listening) {
 		if (peer->address_family == AF_INET) {
@@ -877,57 +875,26 @@ static int rist_set_manual_sockdata(struct rist_peer *peer, const struct rist_pe
 			((struct sockaddr_in *)&peer->u.address)->sin_addr.s_addr = INADDR_ANY;
 		} else {
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] No hostname specified: listening to [::0]\n");
-			peer->address_len = sizeof(struct sockaddr_in);
+			peer->address_len = sizeof(struct sockaddr_in6);
 			((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
 			((struct sockaddr_in6 *)&peer->u.address)->sin6_addr = in6addr_any;
 		}
 	} else {
-		ret = getaddrinfo(hostname, NULL, NULL, &orig);
+		ret = udpsocket_resolve_host(hostname, config->physical_port, &peer->u.address);
 		if (ret != 0) {
 			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Error trying to resolve hostname %s\n", hostname);
 			goto err;
 		}
-		for (ai = orig; ai != NULL; ai = ai->ai_next) {
-			if (peer->address_family == AF_LOCAL) {
-				peer->address_family = ai->ai_family;
-				((struct sockaddr_in *)&peer->u.address)->sin_family = ai->ai_family;
-			}
-			if (peer->address_family == ai->ai_family) {
-				res = ai->ai_addr;
-				if (ai->ai_family == AF_INET) {
-					peer->address_len = sizeof(struct sockaddr_in);
-					((struct sockaddr_in *)&peer->u.address)->sin_family = AF_INET;
-					memcpy(&peer->u.address, res, peer->address_len);
-					break;
-				}
-				if (ai->ai_family == AF_INET6) {
-					peer->address_len = sizeof(struct sockaddr_in6);
-					((struct sockaddr_in6 *)&peer->u.address)->sin6_family = AF_INET6;
-					memcpy(&peer->u.address, res, peer->address_len);
-					break;
-				}
-			}
-			// This loops until it finds the last non-null entry
-		}
-		freeaddrinfo(orig);
-		if (!res || (peer->address_family == AF_LOCAL)) {
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Could not find IPv4/6 (%d) for hostname\n", peer->address_family);
-			goto err;
-		}
+		peer->address_family = ((struct sockaddr_in *)&peer->u.address)->sin_family;
+		if (peer->address_family == AF_INET)
+			peer->address_len = sizeof(struct sockaddr_in);
+		else
+			peer->address_len = sizeof(struct sockaddr_in6);
 	}
-
-	if (config->address_family == AF_INET) {
-		((struct sockaddr_in*)&peer->u.address)->sin_port = htons(config->physical_port);
-	}
-	else if (config->address_family == AF_INET6) {
-		((struct sockaddr_in6*)&peer->u.address)->sin6_port = htons(config->physical_port);
-	}
-	if (peer->listening) {
+	if (peer->listening)
 		peer->local_port = config->physical_port;
-	}
-	else {
+	else
 		peer->remote_port = config->physical_port;
-	}
 
 	return 0;
 

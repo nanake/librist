@@ -209,9 +209,10 @@ int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *
 		p = p_slash + 1;
 	}
 	p_addr = p;
-	if (*p_addr == '@')
+	if (*p_addr == '@') {
 		*local = 1;
-	else
+		p_addr++;
+	} else
 		*local = 0;
 
 	if (*p_addr == '[') {
