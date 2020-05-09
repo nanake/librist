@@ -72,10 +72,11 @@ int udpsocket_set_buffer_size(int sd, uint32_t bufsize);
 uint32_t udpsocket_get_buffer_size(int sd);
 
 /*
- * Explicitly set the mcast interface for the socket [sd] to [mciface].
+ * Explicitly set the mcast interface for the socket [sd] to [mciface] for address
+ * family [family].
  * Returns 0 on success, -1 on error (errno is set accordingly).
  */
-int udpsocket_set_mcast_iface(int sd, const char *mciface);
+int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family);
 
 /* Open a udp socket and connect it to remote [host] + [port].
  *

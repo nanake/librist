@@ -57,7 +57,6 @@ int udpsocket_set_buffer_size(int sd, uint32_t bufsize)
 	return 0;
 }
 
-
 uint32_t udpsocket_get_buffer_size(int sd)
 {
 	uint32_t bufsize;
@@ -67,13 +66,22 @@ uint32_t udpsocket_get_buffer_size(int sd)
 	return bufsize;
 }
 
-int udpsocket_set_mcast_iface(int sd, const char *mciface)
+int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 {
-    (void)sd;
-    (void)mciface;
-	/* TODO */
-
-	return 0;
+	int scope = if_nametoindex(mciface);
+	if (scope == 0)
+		return -1;
+#ifdef _WIN32
+	return setsockopt(s, SOL_IP, IP_MULTICAST_IF, (char *)&scope, sizeof(scope));
+#else
+	if (family == AF_INET6) {
+		return setsockopt(sd, SOL_IPV6, IPV6_MULTICAST_IF, &scope, sizeof(scope));
+	} else {
+		struct ip_mreqn req = { .imr_ifindex = scope };
+		return setsockopt(sd, SOL_IP, IP_MULTICAST_IF, &req, sizeof(req));
+	}
+	return -1;
+#endif
 }
 
 
@@ -99,7 +107,7 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
 	if (mciface)
-		udpsocket_set_mcast_iface(sd, mciface);
+		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
 	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0)
 		return -1;
@@ -129,7 +137,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
 	if (mciface)
-		udpsocket_set_mcast_iface(sd, mciface);
+		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)
 		return -1;
