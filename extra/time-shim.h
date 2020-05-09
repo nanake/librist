@@ -7,6 +7,7 @@
 #define __TIME_SHIM_H
 
 #if defined(_WIN32)
+#define usleep(a)	Sleep((a)/1000)
 # include <WinSock2.h>
 # include <time.h>
 

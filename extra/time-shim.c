@@ -7,7 +7,6 @@
 #include "time-shim.h"
 
 #ifdef _WIN32
-#define usleep(a)	Sleep((a)/1000)
 #define _WINSOCKAPI_
 # include <windows.h>
 # include <errno.h>

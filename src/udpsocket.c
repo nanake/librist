@@ -72,7 +72,7 @@ int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 	if (scope == 0)
 		return -1;
 #ifdef _WIN32
-	return setsockopt(s, SOL_IP, IP_MULTICAST_IF, (char *)&scope, sizeof(scope));
+	return setsockopt(sd, SOL_IP, IP_MULTICAST_IF, (char *)&scope, sizeof(scope));
 #else
 	if (family == AF_INET6) {
 		return setsockopt(sd, SOL_IPV6, IPV6_MULTICAST_IF, &scope, sizeof(scope));
