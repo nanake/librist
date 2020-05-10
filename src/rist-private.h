@@ -285,6 +285,7 @@ struct rist_common_ctx {
 	uint16_t oob_queue_write_index;
 
 	bool debug;
+	uint32_t birthtime_rtp_offset;
 };
 
 struct rist_receiver {
@@ -417,7 +418,6 @@ struct rist_peer {
 
 	bool receiver_mode;
 	bool advanced;
-	bool short_seq;
 
 	int sd;
 

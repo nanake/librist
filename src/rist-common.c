@@ -394,62 +394,17 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	// Check for missing data and queue retries
 	if (!retry) {
-		uint32_t current_seq = seq - 1;
-		if (f->short_seq)
-			current_seq = current_seq & (UINT16_MAX);
-
-		// We would just need to check if the current_seq is larger than the last_seq_found and
-		// not too far from it.
-		// However, because of the 32 bit wrap-around this becomes a complex mathematical problem.
-		// What we do is always assume it is is ahead (even when it is less) and calculate
-		// the distance to it. Then, we make sure it is not too far (the ones that are less
-		// will automatically be very far, almost UINT32_MAX far) and skip it if it is ...
-		uint32_t diff = 0;
-		if (current_seq >= f->last_seq_found) {
-			diff = current_seq - f->last_seq_found;
-		} else {
-			if (!f->short_seq)
-				diff = (UINT32_MAX - f->last_seq_found) + current_seq;
-			else
-				diff = (UINT16_MAX - f->last_seq_found) + current_seq;
-		}
-		if (source_time > f->max_source_time)
+		// TODO: handle timestamp wraparounds
+		// Do not process retries for out of order old packets if we already moved past their timestamp
+		if (source_time >= f->max_source_time)
 			f->max_source_time = source_time;
-		if (diff > peer->missing_counter_max) {
-			// This triggers false positives when there is packet reordering.
-			// Use the timestamp as a secondary check and ignore packets in the past, i.e. reordered straglers
-			if (source_time < f->max_source_time) {
-				// Only print this message when they are older than 10% buffer size
-				if (((f->max_source_time - source_time) * 10) > f->recovery_buffer_ticks) {
-					uint64_t age = (f->max_source_time - source_time)/RIST_CLOCK;
-					msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
-							"[WARNING] Old out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
-							current_seq, age);
-				}
-			}
-			else {
-				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-						"[ERROR] Received sequence %"PRIu32" is too far from last missing seq index %"PRIu32" > %"PRIu32", (%"PRIu32"/%"PRIu32")\n",
-						current_seq, diff, peer->missing_counter_max,
-						f->last_seq_found, f->last_seq_output);
-				// Detect and correct discontinuties in seq by resetting the last_seq_found when it is
-				// too far from last_seq_output
-				uint32_t diff2 = 0;
-				if (f->last_seq_found >= f->last_seq_output) {
-					diff2 = f->last_seq_found - f->last_seq_output;
-				} else {
-					if (!f->short_seq)
-						diff2 = (UINT32_MAX - f->last_seq_found) + f->last_seq_output;
-					else
-						diff2 = (UINT16_MAX - f->last_seq_found) + f->last_seq_output;
-				}
-				// TODO: should we use a different/faster criteria?
-				if (diff2 > peer->missing_counter_max) {
-					msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-							"[ERROR] Our output index %"PRIu32" and missing search index %"PRIu32" are too far from each other (%"PRIu32"), resetting the missing search index\n",
-							f->last_seq_output, f->last_seq_found, diff2);
-					f->last_seq_found = seq;
-				}
+		else {
+			// Only print this message when they are older than 10% buffer size
+			if (((f->max_source_time - source_time) * 10) > f->recovery_buffer_ticks) {
+				uint64_t age = (f->max_source_time - source_time)/RIST_CLOCK;
+				msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
+						"[WARNING] Old out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
+						seq, age);
 			}
 			return 0;
 		}
@@ -457,6 +412,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		/* check for missing packets */
 		// We start looking at the point of this insert and work our way backwards until we reach
 		// the last checkpoint (seq #). Any holes encountered are queued in missing array.
+		uint32_t current_seq = seq - 1;
+		if (f->short_seq)
+			current_seq = (uint16_t)current_seq ;
 		size_t current_idx = rist_index_dec(f, idx);
 		struct rist_buffer *b = f->receiver_queue[current_idx];
 		while (!b || f->last_seq_found != current_seq) {
@@ -2119,9 +2077,9 @@ protocol_bypass:
 						{
 							// Get the sequence from the rtp header for queue management
 							seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
-							// TODO: add support for seq number extension? ...
-							if (!p->short_seq)
-								p->short_seq = true;
+							// TODO: add support for null packet suppresion
+							// We will not use seq number extension value at all ...
+							// If you want 32 bit seq, use the advanced profile
 						}
 						if (RIST_UNLIKELY(!p->receiver_mode))
 							msg(receiver_id, sender_id, RIST_LOG_WARN,

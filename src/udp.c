@@ -97,6 +97,7 @@ uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp)
 		i_ntp = part1 | part2 | part3;
 		//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
 	} else {
+		// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
 		int32_t clock = get_rtp_ts_clock(ptype);
 		if (RIST_UNLIKELY(!clock)){
 				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;
@@ -308,10 +309,15 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			}
 			if (ctx->profile == RIST_PROFILE_ADVANCED) {
 				hdr->rtp.payload_type = RTP_PTYPE_RIST;
-				hdr->rtp.ts = (uint32_t)(source_time >> 16);
+				hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
 			} else {
 				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
-				hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
+				if (!ctx->birthtime_rtp_offset) {
+					// Force a 32bit timestamp wrap-around 60 seconds after startup. It will break 
+					// crappy implementations and/or will guarantee 13 hours of clean stream.
+					ctx->birthtime_rtp_offset = UINT32_MAX - timestampRTP_u32(p->advanced, source_time) - (90000*60);
+				}
+				hdr->rtp.ts = htobe32(ctx->birthtime_rtp_offset + timestampRTP_u32(p->advanced, source_time));
 			}
 		}
 		// copy the rtp header data (needed for encryption)

@@ -197,14 +197,14 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 			return -1;
 		}
 
-		if (p->short_seq) {
+		if (!p->advanced) {
 			f->short_seq = true;
 			f->receiver_queue_max = UINT16_SIZE;
 		}
 		else
 			f->receiver_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32" created\n", flow_id);
+		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32" created (short=%d)\n", flow_id, f->short_seq);
 	} else {
 		/* double check that this peer is not a member of this flow already */
 		if (flow_has_peer(f, flow_id, p->adv_peer_id)) {
