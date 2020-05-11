@@ -97,7 +97,6 @@ uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp)
 		i_ntp = part1 | part2 | part3;
 		//fprintf(stderr,"source time %"PRIu64", rtp time %"PRIu32"\n", source_time, rtp_time);
 	} else {
-		// TODO: Extrapolate upper bits to avoid uint32_t timestamp rollover issues?
 		int32_t clock = get_rtp_ts_clock(ptype);
 		if (RIST_UNLIKELY(!clock)){
 				clock = RTP_PTYPE_MPEGTS_CLOCKHZ;

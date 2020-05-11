@@ -355,6 +355,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		/* This ensures the next packet does not trigger nacks */
 		f->last_seq_output = seq - 1;
 		f->last_seq_found = seq;
+		f->max_source_time = source_time;
 		/* This will synchronize idx and seq so we can insert packets into receiver buffer based on seq number */
 		size_t idx_initial = seq % f->receiver_queue_max;
 		f->receiver_queue_output_idx = idx_initial;
@@ -394,19 +395,18 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	// Check for missing data and queue retries
 	if (!retry) {
-		// TODO: handle timestamp wraparounds
-		// Do not process retries for out of order old packets if we already moved past their timestamp
-		if (source_time >= f->max_source_time)
+	
+		// Report on out of order old packets
+		if (source_time >= f->max_source_time) {
 			f->max_source_time = source_time;
-		else {
-			// Only print this message when they are older than 10% buffer size
-			if (((f->max_source_time - source_time) * 10) > f->recovery_buffer_ticks) {
+		} else {
+			// Only print this message when the packet is within one buffer size
+			if ((f->max_source_time - source_time) < f->recovery_buffer_ticks) {
 				uint64_t age = (f->max_source_time - source_time)/RIST_CLOCK;
 				msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
-						"[WARNING] Old out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
+						"[WARNING] Out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
 						seq, age);
 			}
-			return 0;
 		}
 
 		/* check for missing packets */
@@ -538,6 +538,13 @@ static struct rist_data_block *new_data_block(struct rist_data_block *output_buf
 	return output_buffer;
 }
 
+static void reset_clock_offsets(struct rist_flow *f, struct rist_buffer *b, int64_t delay)
+{
+	f->max_source_time = b->source_time;
+	f->time_offset = (int64_t)timestampNTP_u64() - (int64_t)b->source_time - delay;
+	f->last_seq_output_source_time = b->source_time;
+}
+
 static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 {
 
@@ -584,32 +591,38 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				int64_t target_time = (int64_t)b->source_time + f->time_offset;
 				uint64_t delay_rtc = now > (uint64_t)target_time ? (now - (uint64_t)target_time) : 0;
 
-				// Warning for a possible timing bug (the source has an improperly scaled timestamp)
-				if ((delay * 10) < recovery_buffer_ticks)
+				if (b->source_time < f->last_seq_output_source_time)
 				{
-					// TODO: quiet this down based on some other parameter that measures proper behavior,
-					// i.e. buffer filling up after it has been initialized. Perhaps print them
-					// only after one buffer length post flow initialization
 					msg(ctx->id, 0, RIST_LOG_WARN,
-							"**** [WARNING] Packet %"PRIu32" is too young %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", is buffer building up?\n",
-							b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
+						"[WARNING] Timestamp for packet %"PRIu32" (%zu bytes) jumped back %"PRIu64"ms, adjusting clocks\n",
+						b->seq, b->size, (f->last_seq_output_source_time - b->source_time) / RIST_CLOCK);
+					reset_clock_offsets(f,b,delay);
+					break;
 				}
-				//else
-				//	msg(ctx->id, 0, RIST_LOG_WARN,
-				//		"**** [WARNING] Packet %"PRIu32" is ok %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", is buffer building up?\n",
-				//		b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
+				// TODO: how to compensate for large forward jumps in timestamps? do we need to or are
+				// the checks that follow enough?
 
 				if (RIST_UNLIKELY(delay > (2 * recovery_buffer_ticks))) {
-					// Double check the age of the packet within our receiver queue and empty if necessary
-					// Safety net for discontinuities in source timestamp or sequence numbers
+					// Double check the age of the packet within our receiver queue
+					// Safety net for discontinuities in source timestamp, clock drift or improperly scaled timestamp
 					msg(ctx->id, 0, RIST_LOG_WARN,
-							"**** [WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, releasing from output queue ...\n",
+							"[WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, , clock drift of discontinuity, applying corrective measures\n",
 							b->seq, b->size, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
+					reset_clock_offsets(f,b,delay);
 				}
 				else if (delay_rtc <= recovery_buffer_ticks) {
 					// This is how we keep the buffer at the correct level
 					//msg(ctx->id, 0, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
+					break;
+				}
+				else if (RIST_UNLIKELY((delay * 2) < recovery_buffer_ticks)) {
+					// Double check the age of the packet within our receiver queue
+					// Safety net for discontinuities in source timestamp, clock drift or improperly scaled timestamp
+					msg(ctx->id, 0, RIST_LOG_WARN,
+						"[WARNING] Packet %"PRIu32" is too young %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", clock drift of discontinuity, applying corrective measures\n",
+						b->seq, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
+					reset_clock_offsets(f,b,delay);
 					break;
 				}
 
@@ -646,6 +659,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					if (pthread_cond_signal(&(ctx->condition)))
 						msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 				}
+				// Track this one only for data
+				f->last_seq_output_source_time = b->source_time;
 			}
 			//else
 			//	fprintf(stderr, "rtcp skip at %"PRIu32", just removing it from queue\n", b->seq);

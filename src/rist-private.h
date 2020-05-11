@@ -193,6 +193,7 @@ struct rist_flow {
 	struct rist_peer **peer_lst;
 	size_t peer_lst_len;
 	uint32_t last_seq_output;
+	uint64_t last_seq_output_source_time;
 	uint32_t last_seq_found;
 	intptr_t receiver_id;
 	intptr_t sender_id;
