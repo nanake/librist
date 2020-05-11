@@ -9,13 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <getopt.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
+#include "getopt-shim.h"
 #include <stdbool.h>
 #include <signal.h>
 #include "network.h"
@@ -210,9 +204,22 @@ int main(int argc, char *argv[])
 	struct rist_port_filter port_filter;
 	port_filter.virt_src_port = 0;
 	port_filter.virt_dst_port = 0;
+
+#ifdef _WIN32
+#ifdef _WIN64
+typedef __int64 ssize_t;
+#else
+typedef signed int ssize_t;
+#endif
+#define STDERR_FILENO 2
+    signal(SIGINT, intHandler);
+    signal(SIGTERM, intHandler);
+    signal(SIGABRT, intHandler);
+#else
 	struct sigaction act = {0};
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
+#endif
 
 	for (size_t i = 0; i < INPUT_COUNT; i++) {
 		url[i] = NULL;
@@ -472,7 +479,11 @@ int main(int argc, char *argv[])
 	}
 	/* Start the rist protocol thread */
 	if (enable_data_callback == 1) {
+#ifdef _WIN32
+		system("pause");
+#else
 		pause();
+#endif
 	}
 	else {
 		// Master loop

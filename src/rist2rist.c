@@ -8,7 +8,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <unistd.h>
-#include <getopt.h>
+#include "getopt-shim.h"
 #include <assert.h>
 #include <signal.h>
 

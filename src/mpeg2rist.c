@@ -9,14 +9,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
-#include <getopt.h>
-#include <arpa/inet.h>
-#include <netdb.h>
-#include <sys/socket.h>
-#include <unistd.h>
-#include <sys/ioctl.h>
-#include <net/if.h>
-#include <sys/time.h>
+#include "getopt-shim.h"
 #include <signal.h>
 #include "network.h"
 
@@ -184,10 +177,18 @@ int main(int argc, char *argv[])
 	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
 	uint32_t buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
 	uint32_t buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
+
+#ifdef _WIN32
+#define STDERR_FILENO 2
+    signal(SIGINT, intHandler);
+    signal(SIGTERM, intHandler);
+    signal(SIGABRT, intHandler);
+#else
 	struct sigaction act;
 	act.sa_handler = intHandler;
 	act.sa_flags = 0;
 	sigaction(SIGINT, &act, NULL);
+#endif
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
 		address[i] = NULL;
