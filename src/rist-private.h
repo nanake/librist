@@ -210,11 +210,7 @@ struct rist_flow {
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;
 
-	/* variables used for seq number extrapolation */
-	uint32_t rtp_last_change_time;
-	uint32_t rtp_last_change_counter;
-	uint16_t rtp_last_change_seq;
-	uint16_t rtp_msw;
+	/* variable used for seq number length (16bit or 32bit) */
 	bool short_seq;
 };
 

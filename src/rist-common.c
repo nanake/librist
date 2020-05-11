@@ -347,9 +347,6 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			/* Delete all buffer data (if any) */
 			empty_receiver_queue(f);
 		}
-		/* These are used for seq msw extrapolation */
-		f->rtp_last_change_time = 0;
-		f->rtp_msw = 0;
 		/* Calculate and store clock offset with respect to source */
 		f->time_offset = (int64_t)timestampNTP_u64() - (int64_t)source_time;
 		/* This ensures the next packet does not trigger nacks */
