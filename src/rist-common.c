@@ -183,7 +183,7 @@ int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_con
 				}
 			}
 		}
-		strncpy((void *)output_peer_config->address, url, clean_url_len >= RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG-1 : clean_url_len);
+		strncpy((void *)output_peer_config->address, url, clean_url_len >= RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG-1 : clean_url_len - 1);
 	} else {
 		strncpy((void *)output_peer_config->address, url, RIST_MAX_STRING_LONG-1);
 	}
