@@ -169,7 +169,7 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set socket MAX HOPS: %s\n", strerror(errno));
 	}
-	if (mciface)
+	if (mciface && mciface[0] != '\0')
 		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
 	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0)
