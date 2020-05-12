@@ -3,7 +3,7 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 #include "udpsocket.h"
-
+#include <ifaddrs.h>
 
 /* Private functions */
 static const int yes = 1; // no = 0;
@@ -84,6 +84,56 @@ int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 #endif
 }
 
+int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, uint16_t family) {
+#ifdef __linux
+	if (family != AF_INET)
+		return -1;
+	char address[INET6_ADDRSTRLEN];
+	char mcastaddress[INET6_ADDRSTRLEN];
+	struct ifaddrs *ifaddr, *ifa, *found;
+	struct sockaddr_in *mcast_v4 = (struct sockaddr_in *)sa;
+	inet_ntop(AF_INET, &(mcast_v4->sin_addr), mcastaddress, INET_ADDRSTRLEN);
+
+	if (getifaddrs(&ifaddr) == -1) {
+		perror("getifaddrs");
+		return 1;
+	}
+	//We need to get a local address to join the group from. If we have a miface we use it's address.
+	//We use the first non loopback address we find.
+	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
+			continue;
+		if (miface != NULL && strcmp(miface, ifa->ifa_name) != 0) {
+			continue;
+		}
+		if (ifa->ifa_addr->sa_family == AF_INET) {
+			struct sockaddr_in *v4 = (struct sockaddr_in *)ifa->ifa_addr;
+			uint32_t msb = ((ntohl(v4->sin_addr.s_addr) & 0xFF000000) >> 24);
+			if (msb != 127)	{
+				found = ifa;
+				break;
+			}
+		}
+	}
+	if (!found)
+		return -1;
+
+	struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
+	inet_ntop(AF_INET, &(v4->sin_addr), address, INET_ADDRSTRLEN);
+	fprintf(stderr, "Joining multicast address:%s from IP %s on interface %s\n", mcastaddress, address, found->ifa_name);
+	struct ip_mreq group;
+	group.imr_multiaddr.s_addr = mcast_v4->sin_addr.s_addr;
+	group.imr_interface.s_addr = v4->sin_addr.s_addr;
+	if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group))< 0) {
+		fprintf(stderr, "Failed to join multicast group\n");
+		return -1;
+	}
+	return 0;
+#else
+	return 0;
+#endif
+}
+
 
 int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 {
@@ -141,20 +191,27 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 	if (sd < 0)
 		return sd;
 
-	if (raw.sin6_family == AF_INET6)
+	int is_multicast = 0;
+	if (raw.sin6_family == AF_INET6) {
 		addrlen = sizeof(struct sockaddr_in6);
-	else
+		is_multicast = IN6_IS_ADDR_MULTICAST(&raw.sin6_addr);
+	}
+	else {
+		struct sockaddr_in *tmp = (struct sockaddr_in*)&raw;
 		addrlen = sizeof(struct sockaddr_in);
-
+		is_multicast = IN_MULTICAST(ntohl(tmp->sin_addr.s_addr));
+	}
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-	if (mciface)
-		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
-
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)
 		return -1;
+
+	if (is_multicast) {
+		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0)
+			return -1;
+	}
 
 	return sd;
 }
