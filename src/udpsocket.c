@@ -103,7 +103,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
 			continue;
-		if (miface != NULL && strcmp(miface, ifa->ifa_name) != 0) {
+		if (miface != NULL && miface[0] != '\0' && strcmp(miface, ifa->ifa_name) != 0) {
 			continue;
 		}
 		if (ifa->ifa_addr->sa_family == AF_INET) {
