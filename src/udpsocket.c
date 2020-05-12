@@ -94,10 +94,9 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	struct sockaddr_in *mcast_v4 = (struct sockaddr_in *)sa;
 	inet_ntop(AF_INET, &(mcast_v4->sin_addr), mcastaddress, INET_ADDRSTRLEN);
 
-	if (getifaddrs(&ifaddr) == -1) {
-		perror("getifaddrs");
-		return 1;
-	}
+	if (getifaddrs(&ifaddr) == -1)
+		return -1;
+
 	//We need to get a local address to join the group from. If we have a miface we use it's address.
 	//We use the first non loopback address we find.
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
@@ -116,8 +115,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 		}
 	}
 	if (!found)
-		return -1;
-
+		goto fail;
 	struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
 	inet_ntop(AF_INET, &(v4->sin_addr), address, INET_ADDRSTRLEN);
 	fprintf(stderr, "Joining multicast address:%s from IP %s on interface %s\n", mcastaddress, address, found->ifa_name);
@@ -126,9 +124,14 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	group.imr_interface.s_addr = v4->sin_addr.s_addr;
 	if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group))< 0) {
 		fprintf(stderr, "Failed to join multicast group\n");
-		return -1;
+		goto fail;
 	}
+	freeifaddrs(ifaddr);
 	return 0;
+
+fail:
+	freeifaddrs(ifaddr);
+	return -1;
 #else
 	return 0;
 #endif
