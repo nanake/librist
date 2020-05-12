@@ -90,7 +90,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 		return -1;
 	char address[INET6_ADDRSTRLEN];
 	char mcastaddress[INET6_ADDRSTRLEN];
-	struct ifaddrs *ifaddr, *ifa, *found;
+	struct ifaddrs *ifaddr, *ifa, *found = NULL;
 	struct sockaddr_in *mcast_v4 = (struct sockaddr_in *)sa;
 	inet_ntop(AF_INET, &(mcast_v4->sin_addr), mcastaddress, INET_ADDRSTRLEN);
 
