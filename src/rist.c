@@ -230,10 +230,9 @@ int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
 		return -1;
 	}
 
-	if (init_common_ctx(&ctx->common, profile))
-		goto fail;
-
 	ctx->id = (intptr_t)ctx;
+	if (init_common_ctx(ctx, NULL, &ctx->common, profile))
+		goto fail;
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] RIST Receiver Library v%d.%d.%d\n",
 		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
@@ -303,14 +302,14 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 		return -1;
 	}
 
-	if (init_common_ctx(&ctx->common, profile))
+	ctx->id = (intptr_t)ctx;
+	if (init_common_ctx(NULL, ctx, &ctx->common, profile))
 	{
 		free(ctx);
 		ctx = NULL;
 		return -1;
 	}
 	ctx->common.stats_report_time = (uint64_t)1000 * (uint64_t)RIST_CLOCK;
-	ctx->id = (intptr_t)ctx;
 	//ctx->common.seq = 9159579;
 	//ctx->common.seq = RIST_SERVER_QUEUE_BUFFERS - 25000;
 

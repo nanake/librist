@@ -2529,8 +2529,10 @@ protocol_bypass:
 		return 0;
 	}
 
-	int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
+	int init_common_ctx(struct rist_receiver *ctx_receiver, struct rist_sender *ctx_sender, struct rist_common_ctx *ctx, enum rist_profile profile)
 	{
+		intptr_t receiver_id = ctx_receiver ? ctx_receiver->id : 0;
+		intptr_t sender_id = ctx_sender ? ctx_sender->id : 0;
 #ifdef _WIN32
 		int ret;
 		WSADATA wsaData;
@@ -2542,15 +2544,22 @@ protocol_bypass:
 #endif
 		ctx->evctx = evsocket_init();
 		ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
-		if (profile > RIST_PROFILE_MAIN) {
-			msg(0, 0, RIST_LOG_ERROR, "[ERROR] Profile not supported (%d), using main profile instead\n", profile);
+		if (profile > RIST_PROFILE_ADVANCED) {
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Profile not supported (%d), using main profile instead\n", profile);
 			profile = RIST_PROFILE_MAIN;
 		}
+		if (profile == RIST_PROFILE_SIMPLE)
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in Simple Profile Mode\n");
+		else if (profile == RIST_PROFILE_MAIN)
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in Main Profile Mode\n");
+		else if (profile == RIST_PROFILE_ADVANCED)
+			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in Advanced Profile Mode\n");
+
 		ctx->profile = profile;
 		ctx->stats_report_time = 0;
 
 		if (pthread_rwlock_init(&ctx->peerlist_lock, NULL) != 0) {
-			msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->peerlist_lock\n");
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->peerlist_lock\n");
 			return -1;
 		}
 		return 0;
