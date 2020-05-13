@@ -10,9 +10,9 @@ ENDIF()
 
 find_package (Threads REQUIRED)
 
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/)
-include_directories(${CMAKE_CURRENT_SOURCE_DIR}/extra/)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR}/contrib/)
 file(GLOB base "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
 file(GLOB extra "${CMAKE_CURRENT_SOURCE_DIR}/extra/*.c")
 file(GLOB lz4 "${CMAKE_CURRENT_SOURCE_DIR}/extra/lz4/*.c")
