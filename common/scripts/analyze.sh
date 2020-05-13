@@ -12,7 +12,7 @@ if [ -z ${MESON_SOURCE_ROOT+x} ]; then
     exit 1;
 fi
 
-perl -pe "s{\@SOURCEDIR\@}{${MESON_SOURCE_ROOT}}g" ${MESON_SOURCE_ROOT}/configs/cppcheck-suppressions.in.txt > ${MESON_SOURCE_ROOT}/configs/cppcheck-suppressions.txt
+perl -pe "s{\@SOURCEDIR\@}{${MESON_SOURCE_ROOT}}g" ${MESON_SOURCE_ROOT}/common/configs/cppcheck-suppressions.in.txt > ${MESON_SOURCE_ROOT}/common/configs/cppcheck-suppressions.txt
 
 if hash scan-build 2>/dev/null; then
     ninja -C ${MESON_BUILD_ROOT} scan-build
