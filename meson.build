@@ -10,7 +10,7 @@ cc = meson.get_compiler('c')
 
 deps = []
 platform_files = []
-inc = include_directories('inc', 'extra')
+inc = include_directories('include', 'extra')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
 
@@ -54,7 +54,7 @@ librist = library('rist',
 	dependencies: deps,
 	install: true)
 
-install_headers('inc/librist.h')
+install_headers('include/librist.h')
 
 if get_option('test')
 	subdir('test')
