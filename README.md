@@ -1,4 +1,4 @@
-![librist logo](doc/librist_logo.png)
+![librist logo](docs/librist_logo.png)
 
 # librist
 
