@@ -183,8 +183,12 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 	if (mciface && mciface[0] != '\0')
 		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
-	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0)
+	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0) {
+        int err = errno;
+        close(sd);
+        errno = err;
 		return -1;
+    }
 
 
 	return sd;
@@ -217,10 +221,12 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
 
-	// TODO: don't we need to close these sockets before we return -1?
-
-	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)
+	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
+        int err = errno;
+        close(sd);
+        errno = err;
 		return -1;
+    }
 
 	if (is_multicast) {
 		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0)
