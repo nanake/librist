@@ -1141,7 +1141,7 @@ peer_select:
 	}
 }
 
-static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
+static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq)
 {
 	// This is by design in advanced mode, that is why we push all output data and handshakes 
 	// through the sender_queue, so we can keep the seq and idx in sync
@@ -1191,7 +1191,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 	// If they request a non-sense seq number, we will catch it when we check the seq number against
 	// the one on that buffer position and it does not match
 
-	size_t idx = rist_sender_index_get(ctx, retry->seq, retry->peer);
+	size_t idx = rist_sender_index_get(ctx, retry->seq);
 	if (ctx->sender_queue[idx] == NULL) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), consider increasing the buffer size\n",
@@ -1293,7 +1293,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer *peer)
 {
 	uint64_t now = timestampNTP_u64();
-	size_t idx = rist_sender_index_get(ctx, seq, peer);
+	size_t idx = rist_sender_index_get(ctx, seq);
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
 	if (buffer)
 	{
