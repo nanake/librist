@@ -1320,7 +1320,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 }
 
 static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t flow_id,
-		uint64_t source_time, struct rist_buffer *payload, bool retry)
+		uint64_t source_time, struct rist_buffer *payload, uint8_t retry)
 {
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
@@ -1356,7 +1356,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	}
 
 	//msg(ctx->id, 0, RIST_LOG_ERROR,
-	//	"[DEBUG] rist_recv_data, seq %"PRIu32"\n", seq);
+	//	"[DEBUG] rist_recv_data, seq %"PRIu32", retry=%d\n", seq, retry);
 
 	//	Just some debug output
 	//	if ((seq - peer->flow->last_seq_output) != 1)
@@ -1405,7 +1405,7 @@ static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
-	if (peer->flow && peer->advanced) {
+	if (peer->flow && ctx->common.profile == RIST_PROFILE_ADVANCED) {
 		// We must insert a placeholder into the queue to prevent counting it as a hole during missing packet search
 		size_t idx = seq % peer->flow->receiver_queue_max;
 		struct rist_buffer *b = peer->flow->receiver_queue[idx];
@@ -1803,12 +1803,12 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		uint32_t seq = 0;
 		uint32_t time_extension = 0;
 		struct rist_protocol_hdr *proto_hdr = NULL;
-		uint8_t peer_id = 0;
+		uint8_t compression = 0;
+		uint8_t retry = 0;
+		uint8_t advanced = 0;
 		struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 		size_t gre_size = 0;
-		uint8_t advanced = 0;
 		uint32_t flow_id = 0;
-		bool retry = false;
 
 		if (cctx->profile > RIST_PROFILE_SIMPLE)
 		{
@@ -1840,19 +1840,20 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
 
-			//advanced = CHECK_BIT(gre->flags2, 3);
-			// Peer ID (TODO: do it more elegantly?)
-			if (CHECK_BIT(gre->flags1, 3)) SET_BIT(peer_id, 0);
-			if (CHECK_BIT(gre->flags1, 2)) SET_BIT(peer_id, 1);
-			if (CHECK_BIT(gre->flags1, 1)) SET_BIT(peer_id, 2);
-			if (CHECK_BIT(gre->flags1, 0)) SET_BIT(peer_id, 3);
-			// Payload type (TODO: do it more elegantly)
-			if (CHECK_BIT(gre->flags2, 4)) SET_BIT(payload.type, 3);
-			if (CHECK_BIT(gre->flags2, 5)) SET_BIT(payload.type, 2);
-			if (CHECK_BIT(gre->flags2, 6)) SET_BIT(payload.type, 1);
-			if (CHECK_BIT(gre->flags2, 7)) SET_BIT(payload.type, 0);
-
-			if (has_checksum) {
+			advanced = CHECK_BIT(gre->flags2, 0); // GRE version
+			if (advanced) {
+				compression = CHECK_BIT(gre->flags1, 3);
+				retry = CHECK_BIT(gre->flags1, 2);
+				payload.fragment_final = CHECK_BIT(gre->flags1, 1);
+				// fragment_number (max is 64)
+				if (CHECK_BIT(gre->flags1, 0)) SET_BIT(payload.fragment_number, 0);
+				if (CHECK_BIT(gre->flags2, 7)) SET_BIT(payload.fragment_number, 1);
+				if (CHECK_BIT(gre->flags2, 6)) SET_BIT(payload.fragment_number, 2);
+				if (CHECK_BIT(gre->flags2, 5)) SET_BIT(payload.fragment_number, 3);
+				if (CHECK_BIT(gre->flags2, 4)) SET_BIT(payload.fragment_number, 4);
+				if (CHECK_BIT(gre->flags2, 3)) SET_BIT(payload.fragment_number, 5);
+				// CHECK_BIT(gre->flags2, 2) is free for future use (version)
+				// CHECK_BIT(gre->flags2, 1) is free for future use (version)
 				time_extension = be32toh(gre->checksum_reserved1);
 			}
 
@@ -1969,10 +1970,9 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				goto protocol_bypass;
 			}
 			// Decompress if necessary
-			if (payload.type == RIST_PAYLOAD_TYPE_DATA_LZ4) {
-				int dlen;
+			if (compression) {
 				void *dbuf = get_cctx(p)->buf.dec;
-				dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, payload.size, RIST_MAX_PACKET_SIZE);
+				int dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, payload.size, RIST_MAX_PACKET_SIZE);
 				if (dlen < 0) {
 					msg(receiver_id, sender_id, RIST_LOG_ERROR,
 							"[ERROR] Could not decompress data packet (%d), assuming normal data ...\n", dlen);
@@ -1984,8 +1984,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					payload.size = dlen;
 					payload.data = dbuf;
 				}
-				// Restore normal payload type
-				payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 			}
 			// Make sure we have enought bytes
 			if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
@@ -2030,12 +2028,12 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			if (flow_id & 1UL)
 			{
 				flow_id ^= 1UL;
-				retry = true;
+				fprintf(stderr, "trhis is a retry, %"PRIu32"\n", flow_id);
+				retry = 1;
 			}
 			payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
 			payload.data = (void *)(recv_buf + gre_size + sizeof(*proto_hdr));
-			if (!advanced)
-				payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
+			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 		} else {
 			// remap the rtp payload to the correct rtcp header
 			struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)(&proto_hdr->rtp);
@@ -2045,9 +2043,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			// Null this pointer to prevent code use below
 			// as only the first 8 bytes have valid data for RTCP packets
 			proto_hdr = NULL;
-			// The payload_type is not populated on non-librist senders
-			if (!advanced)
-				payload.type = RIST_PAYLOAD_TYPE_RTCP;
+			payload.type = RIST_PAYLOAD_TYPE_RTCP;
 		}
 
 		//msg(0, 0, RIST_LOG_ERROR,
@@ -2114,11 +2110,7 @@ protocol_bypass:
 		if (peer->listening &&
 				(payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
 			/* No match, new peer creation when on listening mode */
-			uint32_t new_peer_id = 0;
-			if (advanced)
-				new_peer_id = peer_id;
-			else
-				new_peer_id = ++cctx->peer_counter;
+			uint32_t new_peer_id = ++cctx->peer_counter;
 			p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
 			// Copy settings and init/update global variables that depend on settings
 			peer_copy_settings(peer, p);
@@ -2141,7 +2133,6 @@ protocol_bypass:
 			p->address_family = family;
 			p->address_len = addrlen;
 			p->listening = 0;
-			p->advanced = advanced;
 			p->is_rtcp = peer->is_rtcp;
 			p->is_data = peer->is_data;
 			p->peer_data = p;

@@ -197,7 +197,7 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 			return -1;
 		}
 
-		if (!p->advanced) {
+		if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
 			f->short_seq = true;
 			f->receiver_queue_max = UINT16_SIZE;
 		}

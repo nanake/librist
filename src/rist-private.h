@@ -99,6 +99,8 @@ struct rist_buffer {
 	uint32_t seq;
 	uint16_t seq_rtp;
 	uint64_t time;
+	uint8_t fragment_number;
+	uint8_t fragment_final;
 	// TODO: These three are only used by sender ... do I split buffer into sender and receiver?
 	uint64_t last_retry_request;
 	uint8_t transmit_count;
@@ -414,7 +416,6 @@ struct rist_peer {
 	bool buffer_bloat_active;
 
 	bool receiver_mode;
-	bool advanced;
 
 	int sd;
 

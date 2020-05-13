@@ -245,6 +245,8 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	   malloc and mempcy, to ensure our source stays clean. We only do this with RAW data as these buffers are the only
 	   assumed to be reused by retransmits */
 	uint8_t *_payload = NULL;
+	bool compressed = false;
+	bool retry = false;
 	
 	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE 
 							&& payload_type == RIST_PAYLOAD_TYPE_DATA_RAW 
@@ -297,26 +299,27 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			hdr->rtp.flags = RTP_MPEGTS_FLAGS;
 			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
 			hdr->rtp.seq = htobe16(seq_rtp);
-			if (seq != ctx->seq)
+			if ((seq + 1) != ctx->seq)
 			{
-				// This is a retranmission
-				//msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"\n", seq, seq_rtp);
+				// This is a retransmission
+				//msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"/%"PRIu32"\n", seq, seq_rtp, ctx->seq);
 				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
 				//hdr->rtp.ssrc |= (1 << 31);
 				// TODO: fix this with an OR instead
 				hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
+				retry = true;
 			}
 			if (ctx->profile == RIST_PROFILE_ADVANCED) {
 				hdr->rtp.payload_type = RTP_PTYPE_RIST;
-				hdr->rtp.ts = htobe32(timestampRTP_u32(p->advanced, source_time));
+				hdr->rtp.ts = htobe32(timestampRTP_u32(1, source_time));
 			} else {
 				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
 				if (!ctx->birthtime_rtp_offset) {
 					// Force a 32bit timestamp wrap-around 60 seconds after startup. It will break 
 					// crappy implementations and/or will guarantee 13 hours of clean stream.
-					ctx->birthtime_rtp_offset = UINT32_MAX - timestampRTP_u32(p->advanced, source_time) - (90000*60);
+					ctx->birthtime_rtp_offset = UINT32_MAX - timestampRTP_u32(0, source_time) - (90000*60);
 				}
-				hdr->rtp.ts = htobe32(ctx->birthtime_rtp_offset + timestampRTP_u32(p->advanced, source_time));
+				hdr->rtp.ts = htobe32(ctx->birthtime_rtp_offset + timestampRTP_u32(0, source_time));
 			}
 		}
 		// copy the rtp header data (needed for encryption)
@@ -338,7 +341,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				if ((size_t)clen < payload_len) {
 					payload_len = clen;
 					_payload = cbuf;
-					payload_type = RIST_PAYLOAD_TYPE_DATA_LZ4;
+					compressed = true;
 				} else {
 					//msg(receiver_id, ctx->id, DEBUG,
 					//    "compressed %d to %lu\n", len, compressed_len);
@@ -356,18 +359,28 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			SET_BIT(gre_key_seq->flags1, 7); // set checksum bit
 			SET_BIT(gre_key_seq->flags1, 5); // set key flag
 			SET_BIT(gre_key_seq->flags1, 4); // set seq bit
-			// Peer ID (TODO: do it more elegantly)
-			if (CHECK_BIT(p->adv_peer_id, 0)) SET_BIT(gre_key_seq->flags1, 3);
-			if (CHECK_BIT(p->adv_peer_id, 1)) SET_BIT(gre_key_seq->flags1, 2);
-			if (CHECK_BIT(p->adv_peer_id, 2)) SET_BIT(gre_key_seq->flags1, 1);
-			if (CHECK_BIT(p->adv_peer_id, 3)) SET_BIT(gre_key_seq->flags1, 0);
-			// Payload type (TODO: do it more elegantly)
-			if (CHECK_BIT(payload_type, 0)) SET_BIT(gre_key_seq->flags2, 7);
-			if (CHECK_BIT(payload_type, 1)) SET_BIT(gre_key_seq->flags2, 6);
-			if (CHECK_BIT(payload_type, 2)) SET_BIT(gre_key_seq->flags2, 5);
-			if (CHECK_BIT(payload_type, 3)) SET_BIT(gre_key_seq->flags2, 4);
-			if (ctx->profile == RIST_PROFILE_ADVANCED)
-				SET_BIT(gre_key_seq->flags2, 3); // set advanced protocol identifier
+
+			if (ctx->profile == RIST_PROFILE_ADVANCED) {
+				SET_BIT(gre_key_seq->flags2, 0); // set advanced protocol identifier
+				if (compressed)
+					SET_BIT(gre_key_seq->flags1, 3); // set compression bit
+				if (retry)
+					SET_BIT(gre_key_seq->flags1, 2); // set retry bit
+				// TODO: implement fragmentation and fill in this data 
+				// (fragmentation to be done at API data entry point)
+				uint8_t fragment_final = 0;
+				uint8_t fragment_number = 0;
+				if (CHECK_BIT(fragment_final, 0)) SET_BIT(gre_key_seq->flags1, 1);
+				// fragment_number (max is 64)
+				if (CHECK_BIT(fragment_number, 0)) SET_BIT(gre_key_seq->flags1, 0);
+				if (CHECK_BIT(fragment_number, 1)) SET_BIT(gre_key_seq->flags2, 7);
+				if (CHECK_BIT(fragment_number, 2)) SET_BIT(gre_key_seq->flags2, 6);
+				if (CHECK_BIT(fragment_number, 3)) SET_BIT(gre_key_seq->flags2, 5);
+				if (CHECK_BIT(fragment_number, 4)) SET_BIT(gre_key_seq->flags2, 4);
+				if (CHECK_BIT(fragment_number, 5)) SET_BIT(gre_key_seq->flags2, 3);
+				//SET_BIT(gre_key_seq->flags2, 2) is free for future use (version)
+				//SET_BIT(gre_key_seq->flags2, 1) is free for future use (version)
+			}
 
 			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
@@ -407,17 +420,23 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
 			SET_BIT(gre_seq->flags1, 7); // set checksum bit
 			SET_BIT(gre_seq->flags1, 4); // set seq bit
-			// Peer ID (TODO: do it more elegantly)
-			if (CHECK_BIT(p->adv_peer_id, 0)) SET_BIT(gre_seq->flags1, 3);
-			if (CHECK_BIT(p->adv_peer_id, 1)) SET_BIT(gre_seq->flags1, 2);
-			if (CHECK_BIT(p->adv_peer_id, 2)) SET_BIT(gre_seq->flags1, 1);
-			if (CHECK_BIT(p->adv_peer_id, 3)) SET_BIT(gre_seq->flags1, 0);
-			// Payload type (TODO: do it more elegantly)
-			if (CHECK_BIT(payload_type, 0)) SET_BIT(gre_seq->flags2, 7);
-			if (CHECK_BIT(payload_type, 1)) SET_BIT(gre_seq->flags2, 6);
-			if (CHECK_BIT(payload_type, 2)) SET_BIT(gre_seq->flags2, 5);
-			if (CHECK_BIT(payload_type, 3)) SET_BIT(gre_seq->flags2, 4);
-			SET_BIT(gre_seq->flags2, 3); // set advanced protocol identifier
+
+			if (ctx->profile == RIST_PROFILE_ADVANCED) {
+				SET_BIT(gre_seq->flags2, 0); // set advanced protocol identifier
+				if (compressed)
+					SET_BIT(gre_seq->flags1, 3); // set compression bit
+				if (retry)
+					SET_BIT(gre_seq->flags1, 2); // set retry bit
+				uint8_t fragment_final = 0;
+				uint8_t fragment_number = 0;
+				if (CHECK_BIT(fragment_final, 0)) SET_BIT(gre_seq->flags1, 1);
+				if (CHECK_BIT(fragment_number, 0)) SET_BIT(gre_seq->flags1, 0);
+				if (CHECK_BIT(fragment_number, 1)) SET_BIT(gre_seq->flags2, 7);
+				if (CHECK_BIT(fragment_number, 2)) SET_BIT(gre_seq->flags2, 6);
+				if (CHECK_BIT(fragment_number, 3)) SET_BIT(gre_seq->flags2, 5);
+				if (CHECK_BIT(fragment_number, 4)) SET_BIT(gre_seq->flags2, 4);
+				if (CHECK_BIT(fragment_number, 5)) SET_BIT(gre_seq->flags2, 3);
+			}
 		
 			gre_seq->prot_type = htobe16(proto_type);
 			gre_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
@@ -439,7 +458,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
 
-	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(seq % 1000)) {
+	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000)) {
 	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
 		ret = len;
 		//msg(receiver_id, sender_id, RIST_LOG_ERROR,
@@ -711,7 +730,9 @@ static inline void rist_rtcp_write_sr(uint8_t *buf, int *offset, struct rist_pee
 	uint32_t ntp_msw = now_rtc >> 32;
 	sr->ntp_msw = htobe32(ntp_msw);
 	sr->ntp_lsw = htobe32(ntp_lsw);
-	sr->rtp_ts = htobe32(timestampRTP_u32(peer->advanced, now));
+	struct rist_common_ctx *ctx = get_cctx(peer);
+	int advanced = ctx->profile == RIST_PROFILE_ADVANCED ? 1 : 0;
+	sr->rtp_ts = htobe32(timestampRTP_u32(advanced, now));
 	sr->sender_pkts = 0;  //htonl(f->packets_count);
 	sr->sender_bytes = 0; //htonl(f->bytes_count);
 }
@@ -1068,13 +1089,13 @@ peer_select:
 				while (child) {
 					if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq, buffer->seq_rtp);
+					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
 					}
 					child = child->sibling_next;
 				}
 			} else {
 				uint8_t *payload = buffer->data;
-				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq, buffer->seq_rtp);
+				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
 			}
 		} else {
 			/* Election of next peer */
@@ -1095,13 +1116,13 @@ peer_select:
 			while (child) {
 				if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq, buffer->seq_rtp);
+					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
 				}
 				child = child->sibling_next;
 			}
 		} else {
 			uint8_t *payload = buffer->data;
-			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq, buffer->seq_rtp);
+			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
 			ctx->weight_counter--;
 			peer->w_count--;
 		}
@@ -1125,7 +1146,7 @@ static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq, struc
 	// This is by design in advanced mode, that is why we push all output data and handshakes 
 	// through the sender_queue, so we can keep the seq and idx in sync
 	size_t idx = (seq + 1) % (uint64_t)ctx->sender_queue_max;
-	if (!peer->advanced) {
+	if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
 		// For simple profile and main profile without extended seq numbers, we use a conversion table
 		idx = ctx->seq_index[(uint16_t)seq];
 	}
@@ -1178,7 +1199,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
-	} else if (retry->peer->advanced && ctx->sender_queue[idx]->seq != retry->seq) {
+	} else if (ctx->common.profile == RIST_PROFILE_ADVANCED && ctx->sender_queue[idx]->seq != retry->seq) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), something is very wrong!\n",
 			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
@@ -1186,7 +1207,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
-	else if (!retry->peer->advanced && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
+	else if (ctx->common.profile < RIST_PROFILE_ADVANCED && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), bitrate is too high, use advanced profile instead\n",
 			(uint16_t)retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
@@ -1279,7 +1300,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 		if (buffer->last_retry_request != 0)
 		{
 			// Even though all the checks are on the dequeue function, we leave this one here
-			// to prevent the flodding of our fifo .. It is only based on the date of the
+			// to prevent the flooding of our fifo .. It is only based on the date of the
 			// last queued item with the same seq.
 			// This is a safety check to protect against buggy or non compliant receivers that request the
 			// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
