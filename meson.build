@@ -10,7 +10,7 @@ cc = meson.get_compiler('c')
 
 deps = []
 platform_files = []
-inc = include_directories('include', 'extra')
+inc = include_directories('include', 'contrib')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
 
@@ -26,7 +26,7 @@ if host_machine.system() == 'linux'
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
-	platform_files += 'extra/linux-crypto.c'
+	platform_files += 'contrib/linux-crypto.c'
 endif
 
 librist = library('rist',
@@ -37,18 +37,18 @@ librist = library('rist',
 	'src/rist-common.c',
 	'src/udp.c',
 	'src/stats.c',
-    'src/udpsocket.c',
-	'extra/aes.c',
-	'extra/sha256.c',
-	'extra/fastpbkdf2.c',
-	'extra/libevsocket.c',
-	'extra/stdio-shim.c',
-	'extra/time-shim.c',
-	'extra/pthread-shim.c',
-	'extra/lz4/lz4.c',
-	'extra/lz4/lz4frame.c',
-	'extra/lz4/lz4hc.c',
-	'extra/lz4/xxhash.c',
+	'src/udpsocket.c',
+	'contrib/aes.c',
+	'contrib/sha256.c',
+	'contrib/fastpbkdf2.c',
+	'contrib/libevsocket.c',
+	'contrib/stdio-shim.c',
+	'contrib/time-shim.c',
+	'contrib/pthread-shim.c',
+	'contrib/lz4/lz4.c',
+	'contrib/lz4/lz4frame.c',
+	'contrib/lz4/lz4hc.c',
+	'contrib/lz4/xxhash.c',
 	platform_files,
 	include_directories: inc,
 	dependencies: deps,
