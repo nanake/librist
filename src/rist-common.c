@@ -2028,7 +2028,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			if (flow_id & 1UL)
 			{
 				flow_id ^= 1UL;
-				fprintf(stderr, "trhis is a retry, %"PRIu32"\n", flow_id);
 				retry = 1;
 			}
 			payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
