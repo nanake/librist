@@ -2424,7 +2424,6 @@ protocol_bypass:
 				max_jitter_ms);
 
 		uint64_t now  = timestampNTP_u64();
-		ctx->common.nacks_next_time = now;
 		ctx->stats_next_time = now;
 		ctx->checks_next_time = now;
 		while(!ctx->common.shutdown) {
@@ -2933,6 +2932,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 
 	uint64_t rist_nack_interval = (uint64_t)ctx->common.rist_max_jitter;
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
+	ctx->common.nacks_next_time = timestampNTP_u64();
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] Starting receiver protocol loop with %d ms timer\n", max_jitter_ms);
 
