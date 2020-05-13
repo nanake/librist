@@ -97,8 +97,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	if (getifaddrs(&ifaddr) == -1)
 		return -1;
 
-	//We need to get a local address to join the group from. If we have a miface we use it's address.
-	//We use the first non loopback address we find.
+	// We need to get a local address to join the group from.
 	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
 		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
 			continue;
@@ -106,14 +105,23 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 			continue;
 		}
 		if (ifa->ifa_addr->sa_family == AF_INET) {
-			struct sockaddr_in *v4 = (struct sockaddr_in *)ifa->ifa_addr;
-			uint32_t msb = ((ntohl(v4->sin_addr.s_addr) & 0xFF000000) >> 24);
-			if (msb != 127)	{
+			if (miface != NULL && miface[0] != '\0') {
+				// If we have an miface we use it's address.
 				found = ifa;
 				break;
 			}
+			else {
+				// We use the first non loopback address we find.
+				struct sockaddr_in *v4 = (struct sockaddr_in *)ifa->ifa_addr;
+				uint32_t msb = ((ntohl(v4->sin_addr.s_addr) & 0xFF000000) >> 24);
+				if (msb != 127)	{
+					found = ifa;
+					break;
+				}
+			}
 		}
 	}
+
 	if (!found)
 		goto fail;
 	struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
@@ -208,6 +216,9 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
+
+	// TODO: don't we need to close these sockets before we return -1?
+
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)
 		return -1;
 

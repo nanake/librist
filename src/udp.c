@@ -644,7 +644,7 @@ void rist_create_socket(struct rist_peer *peer)
 		if (peer->sd > 0) {
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Error starting in URL listening mode. %s\n", strerror(errno));
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Could not start in URL listening mode. %s\n", strerror(errno));
 		}
 	}
 	else {
@@ -654,7 +654,7 @@ void rist_create_socket(struct rist_peer *peer)
 		if (peer->sd > 0)
 			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Starting in URL connect mode (%d)\n", peer->sd);
 		else {
-			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Starting in URL connect mode. %s\n", strerror(errno));
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Could not start in URL connect mode. %s\n", strerror(errno));
 		}
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
