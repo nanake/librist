@@ -1295,25 +1295,49 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	uint64_t now = timestampNTP_u64();
 	size_t idx = rist_sender_index_get(ctx, seq);
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
+	struct rist_retry *retry;
 	if (!buffer)
 	{
 		msg(0, ctx->id, RIST_LOG_WARN,
 			"[ERROR] Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
 			ctx->sender_recover_min_time);
 		return;
-	}
-
-	// Now insert into the missing queue
-	struct rist_retry *retry;
-	size_t index = ctx->sender_retry_queue_read_index;
-	while (index != ctx->sender_retry_queue_write_index) {
-		retry = &ctx->sender_retry_queue[index];
-		if (retry->seq == seq && retry->peer == peer) {
-			fprintf(stderr, "Retry already queued for this peer\n");
-			return;
-		} else if (++index >= ctx->sender_retry_queue_size)
+	} else if (ctx->peer_lst_len == 1) {
+		if (buffer->last_retry_request != 0)
 		{
-			index= 0;
+			// Even though all the checks are on the dequeue function, we leave this one here
+			// to prevent the flooding of our fifo .. It is only based on the date of the
+			// last queued item with the same seq.
+			// This is a safety check to protect against buggy or non compliant receivers that request the
+			// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
+			uint64_t delta = 2 * (now - buffer->last_retry_request) / RIST_CLOCK;
+			if (ctx->common.debug)
+				msg(0, ctx->id, RIST_LOG_DEBUG,
+					"[DEBUG] Nack request for seq %" PRIu32 " with delta %" PRIu64 " and rtt_min %" PRIu32 "\n",
+					buffer->seq, delta, peer->config.recovery_rtt_min);
+			if (delta < peer->config.recovery_rtt_min)
+			{
+				msg(0, ctx->id, RIST_LOG_WARN,
+					"[ERROR] Nack request for seq %" PRIu32 "/%" PRIu32 " is already queued, %" PRIu64 " < %" PRIu32 "\n",
+					buffer->seq, idx, delta, peer->config.recovery_rtt_min);
+				// TODO: stats?
+				return;
+			}
+		}
+	} else {
+		// Now insert into the missing queue	
+		size_t index = ctx->sender_retry_queue_read_index;
+		while (index != ctx->sender_retry_queue_write_index) {
+			retry = &ctx->sender_retry_queue[index];
+			if (retry->seq == seq && retry->peer == peer) {
+				msg(0, ctx->id, RIST_LOG_WARN,
+					"[WARNING] Nack request for seq %" PRIu32 "/%" PRIu32 " is already queued, for pear %s\n",
+					buffer->seq, idx, peer->cname);
+				return;
+			} else if (++index >= ctx->sender_retry_queue_size)
+			{
+				index= 0;
+			}
 		}
 	}
 	retry = &ctx->sender_retry_queue[ctx->sender_retry_queue_write_index];
