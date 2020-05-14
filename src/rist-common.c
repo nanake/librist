@@ -275,11 +275,11 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 	// return NULL ... We need to find and remove all heap allocations
 	struct rist_buffer *b;
 	pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
-	if (0 && ctx->rist_free_buffer) {
+	if (ctx->rist_free_buffer) {
 		b = ctx->rist_free_buffer;
 		ctx->rist_free_buffer = b->next_free;
 		if (b->alloc_size < len) {
-			b->data = realloc(b->data, len);
+			b->data = realloc(b->data, len + RIST_MAX_PAYLOAD_OFFSET);
 			b->alloc_size = len;
 		}
 		ctx->rist_free_buffer_count--;
@@ -300,10 +300,14 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 				fprintf(stderr, "OOM\n");
 				return NULL;
 			}
-			memcpy((uint8_t*)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
 		}
 		b->alloc_size = len;
 	}
+	if (buf != NULL && len > 0)
+	{
+		memcpy((uint8_t *)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
+	}
+	b->alloc_size = len;
 	b->next_free = NULL;
 	b->free = false;
 	b->size = len;
@@ -322,7 +326,7 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 
 void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 {
-	if (0 && RIST_LIKELY(!ctx->shutdown)) {
+	if (RIST_LIKELY(!ctx->shutdown)) {
 		pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
 		b->next_free = ctx->rist_free_buffer;
 		ctx->rist_free_buffer = b;
