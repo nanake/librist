@@ -1295,38 +1295,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	uint64_t now = timestampNTP_u64();
 	size_t idx = rist_sender_index_get(ctx, seq);
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
-	if (buffer)
-	{
-		if (buffer->last_retry_request != 0)
-		{
-			// Even though all the checks are on the dequeue function, we leave this one here
-			// to prevent the flooding of our fifo .. It is only based on the date of the
-			// last queued item with the same seq.
-			// This is a safety check to protect against buggy or non compliant receivers that request the
-			// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
-			uint64_t delta = 2 * (now - buffer->last_retry_request) / RIST_CLOCK;
-			if (ctx->common.debug)
-				msg(0, ctx->id, RIST_LOG_DEBUG,
-					"[DEBUG] Nack request for seq %"PRIu32" with delta %"PRIu64" and rtt_min %"PRIu32"\n", 
-					buffer->seq, delta, peer->config.recovery_rtt_min);
-			if (delta < peer->config.recovery_rtt_min)
-			{
-				msg(0, ctx->id, RIST_LOG_WARN,
-					"[ERROR] Nack request for seq %"PRIu32"/%"PRIu32" is already queued, %"PRIu64" < %"PRIu32"\n",
-					buffer->seq, idx, delta, peer->config.recovery_rtt_min);
-				// TODO: stats?
-				return;
-			}
-		}
-		else
-		{
-			if (ctx->common.debug)
-				msg(0, ctx->id, RIST_LOG_DEBUG,
-					"[DEBUG] First nack request for seq %"PRIu32"\n", buffer->seq);
-			buffer->last_retry_request = now;
-		}
-	}
-	else
+	if (!buffer)
 	{
 		msg(0, ctx->id, RIST_LOG_WARN,
 			"[ERROR] Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
