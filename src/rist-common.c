@@ -275,7 +275,7 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 	// return NULL ... We need to find and remove all heap allocations
 	struct rist_buffer *b;
 	pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
-	if (ctx->rist_free_buffer) {
+	if (0 && ctx->rist_free_buffer) {
 		b = ctx->rist_free_buffer;
 		ctx->rist_free_buffer = b->next_free;
 		if (b->alloc_size < len) {
@@ -322,7 +322,7 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 
 void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 {
-	if (RIST_LIKELY(!ctx->shutdown)) {
+	if (0 && RIST_LIKELY(!ctx->shutdown)) {
 		pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
 		b->next_free = ctx->rist_free_buffer;
 		ctx->rist_free_buffer = b;
