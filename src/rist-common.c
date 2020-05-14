@@ -269,7 +269,7 @@ static void init_peer_settings(struct rist_peer *peer)
 	}
 }
 
-struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
+struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	// TODO: we will ran out of stack before heap and when that happens malloc will crash not just
 	// return NULL ... We need to find and remove all heap allocations
@@ -304,7 +304,8 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 	return b;
 }
 
-void free_rist_buffer(struct rist_buffer *b) {
+void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
+{
 	if (RIST_LIKELY(b->size))
 		free(b->data);
 	free(b);
@@ -345,7 +346,7 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	   "Inserting seq %"PRIu32" len %zu source_time %"PRIu32" at idx %zu\n",
 	   seq, len, source_time, idx);
 	   */
-	f->receiver_queue[idx] = rist_new_buffer(buf, len, RIST_PAYLOAD_TYPE_DATA_RAW, seq, source_time, src_port, dst_port);
+	f->receiver_queue[idx] = rist_new_buffer(get_cctx(peer), buf, len, RIST_PAYLOAD_TYPE_DATA_RAW, seq, source_time, src_port, dst_port);
 	if (RIST_UNLIKELY(!f->receiver_queue[idx])) {
 		msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside receiver buffer, OOM, decrease max bitrate or buffer time length\n");
 		return -1;
@@ -438,7 +439,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 		else {
 			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Invalid Dupe (possible seq discontinuity)! %"PRIu32", freeing buffer ...\n", seq);
-			free_rist_buffer(b);
+			free_rist_buffer(get_cctx(peer), b);
 			f->receiver_queue[idx] = NULL;
 		}
 	}
@@ -672,7 +673,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			f->receiver_queue_size -= b->size;
 			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
 			f->receiver_queue_output_idx = (f->receiver_queue_output_idx + 1) % f->receiver_queue_max;
-			free_rist_buffer(b);
+			free_rist_buffer(&ctx->common, b);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
@@ -1421,10 +1422,10 @@ static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		{
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] RTCP buffer placeholder had data!!! seq=%"PRIu32", buf_seq=%"PRIu32"\n",
 					seq, b->seq);
-			free_rist_buffer(b);
+			free_rist_buffer(get_cctx(peer), b);
 			peer->flow->receiver_queue[idx] = NULL;
 		}
-		peer->flow->receiver_queue[idx] = rist_new_buffer(NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
+		peer->flow->receiver_queue[idx] = rist_new_buffer(get_cctx(peer), NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
 		if (RIST_UNLIKELY(!peer->flow->receiver_queue[idx])) {
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside receiver buffer, OOM, decrease max bitrate or buffer time length\n");
 			return;
@@ -2218,7 +2219,7 @@ protocol_bypass:
 
 		/* insert into oob fifo queue */
 		pthread_rwlock_wrlock(&ctx->oob_queue_lock);
-		ctx->oob_queue[ctx->oob_queue_write_index] = rist_new_buffer(buf, len, RIST_PAYLOAD_TYPE_DATA_OOB, 0, 0, 0, 0);
+		ctx->oob_queue[ctx->oob_queue_write_index] = rist_new_buffer(ctx, buf, len, RIST_PAYLOAD_TYPE_DATA_OOB, 0, 0, 0, 0);
 		if (RIST_UNLIKELY(!ctx->oob_queue[ctx->oob_queue_write_index])) {
 			msg(0, 0, RIST_LOG_ERROR, "\t Could not create oob packet buffer, OOM\n");
 			pthread_rwlock_unlock(&ctx->oob_queue_lock);
@@ -3096,7 +3097,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		}
 		ctx->sender_queue_bytesize -= b->size;
-		free_rist_buffer(b);
+		free_rist_buffer(&ctx->common, b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {

@@ -46,7 +46,8 @@ void empty_receiver_queue(struct rist_flow *f)
 		struct rist_buffer *b = f->receiver_queue[counter];
 		if (b)
 		{
-			free_rist_buffer(b);
+			free_rist_buffer(get_cctx(f->peer_lst[0]), b);
+			f->receiver_queue[counter] = NULL;
 			f->receiver_queue_size -= b->size;
 		}
 		counter = (counter + 1) % f->receiver_queue_max;
