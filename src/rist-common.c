@@ -321,14 +321,6 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	return 0;
 }
 
-static size_t rist_index_dec(struct rist_flow *f,size_t idx)
-{
-	if (!idx) {
-		idx = f->receiver_queue_max;
-	}
-	return idx - 1;
-}
-
 static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_flow *f = peer->flow;
@@ -405,43 +397,43 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 						seq, age);
 			}
 		}
-
 		/* check for missing packets */
-		// We start looking at the point of this insert and work our way backwards until we reach
-		// the last checkpoint (seq #). Any holes encountered are queued in missing array.
-		uint32_t current_seq = seq - 1;
+		// We start at the last known good packet, and look forwards till we hit this seq
+		uint32_t missing_seq = seq - 1;
 		if (f->short_seq)
-			current_seq = (uint16_t)current_seq ;
-		size_t current_idx = rist_index_dec(f, idx);
-		struct rist_buffer *b = f->receiver_queue[current_idx];
-		while (!b || f->last_seq_found != current_seq) {
-			if (f->missing_counter > peer->missing_counter_max) {
-				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-						"[ERROR] Retry buffer is already too large (%d) for the configured "
-						"bandwidth ... ignoring missing packet(s).\n",
-						f->missing_counter);
-				break;
-			} else if (!b) {
-				if (!peer->buffer_bloat_active) {
-					rist_receiver_missing(f, peer, current_seq, rtt);
-				} else {
-					msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
+			missing_seq = (uint16_t)missing_seq;
+
+		if (missing_seq != f->last_seq_found)
+		{
+			uint32_t counter = 1;
+			missing_seq = (f->last_seq_found + counter);
+
+			if (f->short_seq)
+				missing_seq = (uint16_t)missing_seq;
+
+			while (missing_seq != seq)
+			{
+				if (RIST_UNLIKELY(peer->buffer_bloat_active || f->missing_counter > peer->missing_counter_max)) {
+					if (f->missing_counter > peer->missing_counter_max)
+						msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
+							"[ERROR] Retry buffer is already too large (%d) for the configured "
+							"bandwidth ... ignoring missing packet(s).\n",
+							f->missing_counter);
+					if (peer->buffer_bloat_active)
+						msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
 							"[ERROR] Link has collapsed. Not queuing new retries until it recovers.\n");
 					break;
-				}
-			}
-			current_seq--;
-			if (f->short_seq)
-				current_seq = (uint16_t)current_seq;
-			current_idx = rist_index_dec(f, current_idx);
-			b = f->receiver_queue[current_idx];
-			if (current_idx == idx) {
-				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "[ERROR] Did not find any data after a full counter loop (missing loop) (%zu)\n", f->receiver_queue_size);
-				// if the entire buffer is empty, something is very wrong ....
-				break;
+					}
+				rist_receiver_missing(f, peer, missing_seq, rtt);
+				if (RIST_UNLIKELY(counter == f->receiver_queue_max))
+					break;
+				counter++;
+				missing_seq = (f->last_seq_found + counter);
+				if (f->short_seq)
+					missing_seq = (uint16_t)missing_seq;
 			}
 		}
-		// TODO: when we break on the conditions above, will setting this value "mess-up" the index?
+		//If we stopped due to bloat or missing count max this will be incorrect.
 		f->last_seq_found = seq;
 	}
 	return 0;
