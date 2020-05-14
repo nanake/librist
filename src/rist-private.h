@@ -98,7 +98,11 @@ struct rist_buffer {
 	int8_t use_seq;
 	uint32_t seq;
 	uint16_t seq_rtp;
-	uint64_t time;
+
+	uint64_t time;//Time we received the packet
+	uint64_t packet_time;//Timestamp based on the RTP time of the packet
+	uint64_t target_output_time;//packet_time + buffer
+
 	uint8_t fragment_number;
 	uint8_t fragment_final;
 	// TODO: These three are only used by sender ... do I split buffer into sender and receiver?
@@ -203,7 +207,13 @@ struct rist_flow {
 	uint64_t last_ipstats_time;
 	uint64_t last_output_time;
 	uint64_t max_source_time;
-	int64_t time_offset;
+
+	int64_t time_offset;//Current offset between our clock and RTP packets.
+	int64_t time_offset_old;//Old offset between our clock and RTP packets.
+	uint64_t time_offset_changed_ts;//Timestamp the RTP counter last wrapped
+	uint64_t last_packet_source_time;//Last packet source time
+	uint64_t last_packet_ts;//Last packet time
+
 	bool authenticated;
 	uint32_t session_timeout;
 
