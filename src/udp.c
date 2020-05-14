@@ -304,8 +304,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				//msg(receiver_id, sender_id, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"/%"PRIu32"\n", seq, seq_rtp, ctx->seq);
 				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
 				//hdr->rtp.ssrc |= (1 << 31);
-				// TODO: fix this with an OR instead
-				hdr->rtp.ssrc = htobe32(p->adv_flow_id + 1);
+				hdr->rtp.ssrc = htobe32(p->adv_flow_id | 0x01);
 				retry = true;
 			}
 			if (ctx->profile == RIST_PROFILE_ADVANCED) {
@@ -453,6 +452,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		data = _payload - hdr_len + RIST_GRE_PROTOCOL_REDUCED_SIZE;
 	}
 
+
 	// TODO: compare p->sender_ctx->sender_queue_read_index and p->sender_ctx->sender_queue_write_index
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
@@ -487,7 +487,8 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	intptr_t sender_id = p->sender_ctx ? p->sender_ctx->id : 0;
 
 	// This can only and will most likely be zero for data packets. RTCP should always have value.
-	// TODO: add warning message if it is zero for non data packet
+	assert(payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port == 0 : 1);
+	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
 	if (dst_port == 0)
 		dst_port = p->config.virt_dst_port;
 
@@ -1335,6 +1336,17 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 
 	// Now insert into the missing queue
 	struct rist_retry *retry;
+	size_t index = ctx->sender_retry_queue_read_index;
+	while (index != ctx->sender_retry_queue_write_index) {
+		retry = &ctx->sender_retry_queue[index];
+		if (retry->seq == seq && retry->peer == peer) {
+			fprintf(stderr, "Retry already queued for this peer\n");
+			return;
+		} else if (++index >= ctx->sender_retry_queue_size)
+		{
+			index= 0;
+		}
+	}
 	retry = &ctx->sender_retry_queue[ctx->sender_retry_queue_write_index];
 	retry->seq = seq;
 	retry->peer = peer;

@@ -616,6 +616,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after a full counter loop (%zu)\n", f->receiver_queue_size);
 					// if the entire buffer is empty, something is very wrong, reset the queue ...
 					f->receiver_queue_has_items = false;
+					f->receiver_queue_size = 0;
 					// exit the function and wait 5ms (max jitter time)
 					return;
 				}
@@ -1897,7 +1898,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				//
 				// make sure we have a key before attempting to decrypt
 				if (!k->key_size) {
-					// TODO log
+					msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Receiving encrypted data, but configured without keysize!\n");
 					return;
 				}
 
@@ -2948,7 +2949,6 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 		{
 			const uint8_t *payload = ctx->dataout_fifo_queue[i]->payload;
 			if (payload) {
-				// TODO: why does this crash
 				free((void*)payload);
 				payload = NULL;
 			}
@@ -2990,11 +2990,10 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 			while (f) {
 				if (now > f->checks_next_time) {
 					f->checks_next_time += f->recovery_buffer_ticks;
-					// TODO: use the new setting per peer called session_timeout instead
-					// TODO: STALE_FLOW_TIME or buffer size in us ... which ever is greater
-					if ((f->stats_total.last_recv_ts != 0) && (now - f->stats_total.last_recv_ts > (uint64_t)STALE_FLOW_TIME))
+					uint64_t timeout = f->session_timeout > f->recovery_buffer_ticks ? f->session_timeout: f->recovery_buffer_ticks;
+					if ((f->stats_total.last_recv_ts != 0) && (now - f->stats_total.last_recv_ts > timeout))
 					{
-						if ((now- f->stats_total.last_recv_ts) < (1.5 * (uint64_t)STALE_FLOW_TIME))
+						if ((now- f->stats_total.last_recv_ts) < (1.5 * (uint64_t)timeout))
 						{
 							struct rist_flow *next = f->next;
 							// Do nothing
@@ -3003,7 +3002,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 									now,
 									f->stats_total.last_recv_ts,
 									now - f->stats_total.last_recv_ts,
-									(uint64_t)STALE_FLOW_TIME);
+									(uint64_t)timeout);
 							pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 							pthread_rwlock_wrlock(peerlist_lock);
 							rist_delete_flow(ctx, f);
