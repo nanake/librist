@@ -321,6 +321,37 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	return 0;
 }
 
+static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t current_seq, uint32_t rtt) {
+	uint32_t counter = 1;
+	uint32_t missing_seq = (f->last_seq_found + counter);
+
+	if (f->short_seq)
+		missing_seq = (uint16_t)missing_seq;
+
+	while (missing_seq != current_seq)
+	{
+		if (RIST_UNLIKELY(peer->buffer_bloat_active || f->missing_counter > peer->missing_counter_max))
+		{
+			if (f->missing_counter > peer->missing_counter_max)
+				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
+					"[ERROR] Retry buffer is already too large (%d) for the configured "
+					"bandwidth ... ignoring missing packet(s).\n",
+					f->missing_counter);
+			if (peer->buffer_bloat_active)
+				msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
+					"[ERROR] Link has collapsed. Not queuing new retries until it recovers.\n");
+			break;
+		}
+		rist_receiver_missing(f, peer, missing_seq, rtt);
+		if (RIST_UNLIKELY(counter == f->receiver_queue_max))
+			break;
+		counter++;
+		missing_seq = (f->last_seq_found + counter);
+		if (f->short_seq)
+			missing_seq = (uint16_t)missing_seq;
+	}
+}
+
 static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_flow *f = peer->flow;
@@ -405,33 +436,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 		if (missing_seq != f->last_seq_found)
 		{
-			uint32_t counter = 1;
-			missing_seq = (f->last_seq_found + counter);
-
-			if (f->short_seq)
-				missing_seq = (uint16_t)missing_seq;
-
-			while (missing_seq != seq)
-			{
-				if (RIST_UNLIKELY(peer->buffer_bloat_active || f->missing_counter > peer->missing_counter_max)) {
-					if (f->missing_counter > peer->missing_counter_max)
-						msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-							"[ERROR] Retry buffer is already too large (%d) for the configured "
-							"bandwidth ... ignoring missing packet(s).\n",
-							f->missing_counter);
-					if (peer->buffer_bloat_active)
-						msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR,
-							"[ERROR] Link has collapsed. Not queuing new retries until it recovers.\n");
-					break;
-					}
-				rist_receiver_missing(f, peer, missing_seq, rtt);
-				if (RIST_UNLIKELY(counter == f->receiver_queue_max))
-					break;
-				counter++;
-				missing_seq = (f->last_seq_found + counter);
-				if (f->short_seq)
-					missing_seq = (uint16_t)missing_seq;
-			}
+			receiver_mark_missing(f, peer, seq, rtt);
 		}
 		//If we stopped due to bloat or missing count max this will be incorrect.
 		f->last_seq_found = seq;
