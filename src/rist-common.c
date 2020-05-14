@@ -304,6 +304,12 @@ struct rist_buffer *rist_new_buffer(const void *buf, size_t len, uint8_t type, u
 	return b;
 }
 
+void free_rist_buffer(struct rist_buffer *b) {
+	if (RIST_LIKELY(b->size))
+		free(b->data);
+	free(b);
+}
+
 static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry)
 {
 	uint64_t now = timestampNTP_u64();
@@ -432,8 +438,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 		else {
 			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Invalid Dupe (possible seq discontinuity)! %"PRIu32", freeing buffer ...\n", seq);
-			free(b->data);
-			free(b);
+			free_rist_buffer(b);
 			f->receiver_queue[idx] = NULL;
 		}
 	}
@@ -667,9 +672,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			f->receiver_queue_size -= b->size;
 			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
 			f->receiver_queue_output_idx = (f->receiver_queue_output_idx + 1) % f->receiver_queue_max;
-			if (b->size)
-				free(b->data);
-			free(b);
+			free_rist_buffer(b);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
@@ -1418,8 +1421,7 @@ static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		{
 			msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] RTCP buffer placeholder had data!!! seq=%"PRIu32", buf_seq=%"PRIu32"\n",
 					seq, b->seq);
-			free(b->data);
-			free(b);
+			free_rist_buffer(b);
 			peer->flow->receiver_queue[idx] = NULL;
 		}
 		peer->flow->receiver_queue[idx] = rist_new_buffer(NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
@@ -3094,8 +3096,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		}
 		ctx->sender_queue_bytesize -= b->size;
-		free(b->data);
-		free(b);
+		free_rist_buffer(b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {

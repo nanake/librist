@@ -154,8 +154,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 		/* now delete it */
 		ctx->sender_queue_bytesize -= b->size;
-		free(b->data);
-		free(b);
+		free_rist_buffer(b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 
