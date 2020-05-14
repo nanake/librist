@@ -706,6 +706,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 	/* Now loop through missing queue and process items */
 	struct rist_missing_buffer *mb = f->missing;
 	struct rist_missing_buffer **prev = &f->missing;
+	struct rist_missing_buffer *previous = NULL;
 	int empty = 0;
 	uint32_t seq_msb = 0;
 	if (mb)
@@ -808,6 +809,8 @@ nack_loop_continue:
 						"[DEBUG] Removing seq %" PRIu32 " from missing, queue size is %d, retry #%u, age %"PRIu64"ms, reason %d\n",
 						mb->seq, f->missing_counter, mb->nack_count, (timestampNTP_u64() - mb->insertion_time) / RIST_CLOCK, remove_from_queue_reason);
 			struct rist_missing_buffer *next = mb->next;
+			if (!next)
+				f->missing_tail = previous;
 			*prev = next;
 			free(mb);
 			mb = next;
@@ -815,6 +818,7 @@ nack_loop_continue:
 		} else {
 			/* Move it to the end of the queue */
 			// TODO: I think this is wrong and we loose nacks when we get here
+			previous = mb;
 			prev = &mb->next;
 			mb = mb->next;
 		}

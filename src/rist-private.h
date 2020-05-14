@@ -180,6 +180,7 @@ struct rist_flow {
 
 	/* Missing incoming packets, waiting for retransmission */
 	struct rist_missing_buffer *missing;
+	struct rist_missing_buffer *missing_tail;
 	uint32_t missing_counter;
 
 	struct rist_peer_flow_stats stats_instant;

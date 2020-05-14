@@ -27,9 +27,15 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 			"with deadline in %" PRIu64 "ms (queue=%d), last_seq_found %"PRIu32"\n",
 		seq, (m->next_nack - now) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
 
-	m->next = f->missing ? f->missing : NULL;
+	m->next = NULL;
 	// Insert it at the end of the queue
-	f->missing = m;
+	if (!f->missing) {
+		f->missing = m;
+		f->missing_tail = m;
+	} else {
+		f->missing_tail->next = m;
+		f->missing_tail = m;
+	}
 }
 
 void empty_receiver_queue(struct rist_flow *f)
