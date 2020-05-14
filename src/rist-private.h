@@ -109,6 +109,10 @@ struct rist_buffer {
 	uint64_t last_retry_request;
 	uint8_t transmit_count;
 	struct rist_peer *peer;
+
+	struct rist_buffer *next_free;
+	size_t alloc_size;
+	bool free;
 };
 
 struct rist_missing_buffer {
@@ -258,6 +262,9 @@ struct rist_common_ctx {
 		uint8_t recv[RIST_MAX_PACKET_SIZE];
 		uint8_t rtcp[RIST_MAX_PACKET_SIZE];
 	} buf;
+	struct rist_buffer *rist_free_buffer;
+	pthread_mutex_t rist_free_buffer_mutex;
+	uint64_t rist_free_buffer_count;
 
 	/* timers */
 	uint64_t nacks_next_time;
@@ -531,7 +538,7 @@ RIST_PRIV struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const
 RIST_PRIV void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b);
 RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw);
-RIST_PRIV void empty_receiver_queue(struct rist_flow *f);
+RIST_PRIV void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx);
 RIST_PRIV void rist_flush_missing_flow_queue(struct rist_flow *flow);
 
 /* defined in rist-common.c */

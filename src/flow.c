@@ -38,7 +38,7 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 	}
 }
 
-void empty_receiver_queue(struct rist_flow *f)
+void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
 {
 	size_t counter = f->receiver_queue_output_idx;
 	pthread_rwlock_wrlock(&f->queue_lock);
@@ -46,9 +46,9 @@ void empty_receiver_queue(struct rist_flow *f)
 		struct rist_buffer *b = f->receiver_queue[counter];
 		if (b)
 		{
-			free_rist_buffer(get_cctx(f->peer_lst[0]), b);
 			f->receiver_queue[counter] = NULL;
 			f->receiver_queue_size -= b->size;
+			free_rist_buffer(ctx, b);
 		}
 		counter = (counter + 1) % f->receiver_queue_max;
 		if (counter == f->receiver_queue_output_idx) {
@@ -98,7 +98,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting output buffer data\n");
 	/* Delete all buffer data (if any) */
-	empty_receiver_queue(f);
+	empty_receiver_queue(f, &ctx->common);
 
 	// Delete flow
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting flow\n");

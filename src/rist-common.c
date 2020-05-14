@@ -273,23 +273,39 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 {
 	// TODO: we will ran out of stack before heap and when that happens malloc will crash not just
 	// return NULL ... We need to find and remove all heap allocations
-	struct rist_buffer *b = malloc(sizeof(*b));
-	if (!b) {
-		fprintf(stderr, "OOM\n");
-		return NULL;
-	}
-
-	if (buf != NULL && len > 0)
-	{
-		b->data = malloc(len + RIST_MAX_PAYLOAD_OFFSET);
-		if (!b->data) {
-			free(b);
+	struct rist_buffer *b;
+	pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
+	if (ctx->rist_free_buffer) {
+		b = ctx->rist_free_buffer;
+		ctx->rist_free_buffer = b->next_free;
+		if (b->alloc_size < len) {
+			b->data = realloc(b->data, len);
+			b->alloc_size = len;
+		}
+		ctx->rist_free_buffer_count--;
+		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
+	} else {
+		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
+		b= malloc(sizeof(*b));
+		if (!b) {
 			fprintf(stderr, "OOM\n");
 			return NULL;
 		}
-		memcpy((uint8_t*)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
-	}
 
+		if (buf != NULL && len > 0)
+		{
+			b->data = malloc(len + RIST_MAX_PAYLOAD_OFFSET);
+			if (!b->data) {
+				free(b);
+				fprintf(stderr, "OOM\n");
+				return NULL;
+			}
+			memcpy((uint8_t*)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
+		}
+		b->alloc_size = len;
+	}
+	b->next_free = NULL;
+	b->free = false;
 	b->size = len;
 	b->source_time = source_time;
 	b->seq = seq;
@@ -306,9 +322,19 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 
 void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 {
-	if (RIST_LIKELY(b->size))
-		free(b->data);
-	free(b);
+	if (RIST_LIKELY(!ctx->shutdown)) {
+		pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
+		b->next_free = ctx->rist_free_buffer;
+		ctx->rist_free_buffer = b;
+		b->free = true;
+		ctx->rist_free_buffer_count++;
+		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
+	}else {
+		if (RIST_LIKELY(b->size))
+			free(b->data);
+		free(b);
+	}
+	
 }
 
 static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry)
@@ -406,7 +432,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 					"[INFO] Clearing up old %zu bytes of old buffer data\n", f->receiver_queue_size);
 			/* Delete all buffer data (if any) */
-			empty_receiver_queue(f);
+			empty_receiver_queue(f, get_cctx(peer));
 		}
 		/* Calculate and store clock offset with respect to source */
 		f->time_offset = (int64_t)timestampNTP_u64() - (int64_t)source_time;
@@ -2559,6 +2585,10 @@ protocol_bypass:
 			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->peerlist_lock\n");
 			return -1;
 		}
+		if (pthread_mutex_init(&ctx->rist_free_buffer_mutex, NULL) != 0) {
+			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Failed to init ctx->rist_free_buffer_mutex\n");
+			return -1;
+		}
 		return 0;
 	}
 
@@ -2890,6 +2920,13 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 		}
 		ctx->common.PEERS = NULL;
 		pthread_rwlock_unlock(peerlist_lock);
+	}
+	struct rist_buffer *b = ctx->common.rist_free_buffer;
+	struct rist_buffer *next;
+	while (b) {
+		next = b->next_free;
+		free_rist_buffer(&ctx->common, b);
+		b = next;
 	}
 	evsocket_loop_finalize(ctx->common.evctx);
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Peers cleanup complete\n");
