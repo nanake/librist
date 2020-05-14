@@ -462,7 +462,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	if (f->receiver_queue[idx]) {
 		// TODO: record stats
 		struct rist_buffer *b = f->receiver_queue[idx];
-		if (b->seq == seq) {
+		if (b->source_time == source_time) {
 			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Dupe! %"PRIu32"/%zu\n", seq, idx);
 			peer->stats_receiver_instant.dups++;
 			return 1;
@@ -482,7 +482,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	// Check for missing data and queue retries
 	if (!retry) {
-	
+		bool out_of_order = false;
 		// Report on out of order old packets
 		if (source_time >= f->max_source_time) {
 			f->max_source_time = source_time;
@@ -493,6 +493,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 				msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
 						"[WARNING] Out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
 						seq, age);
+				out_of_order = true;
 			}
 		}
 		/* check for missing packets */
@@ -501,7 +502,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (f->short_seq)
 			missing_seq = (uint16_t)missing_seq;
 
-		if (missing_seq != f->last_seq_found)
+		if (!out_of_order && missing_seq != f->last_seq_found)
 		{
 			receiver_mark_missing(f, peer, seq, rtt);
 		}
