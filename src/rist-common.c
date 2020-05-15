@@ -346,7 +346,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	uint64_t now = timestampNTP_u64();
 	//Check and correct timing
 
-	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX - 180000)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
+	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX /2)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
 	{
 		f->time_offset_old = f->time_offset;
 		f->time_offset = (int64_t)now - (int64_t)source_time;
