@@ -633,7 +633,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					break;
 				}
 			}
-			if (b && b->target_output_time <= now) {
+			if (b && b->target_output_time > now) {
 				//The block we found is not ready for output, so we wait.
 				break;
 			}
