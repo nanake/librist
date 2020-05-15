@@ -346,12 +346,12 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	uint64_t now = timestampNTP_u64();
 	//Check and correct timing
 
-	if (RIST_UNLIKELY(!retry && source_time < f->last_packet_source_time && ((f->last_packet_source_time - source_time) > (UINT32_MAX - 180000)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
+	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX - 180000)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
 	{
 		f->time_offset_old = f->time_offset;
 		f->time_offset = (int64_t)now - (int64_t)source_time;
 		fprintf(stderr, "Clock wrapped, old offset: %" PRIi64 " new offset %" PRIi64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
-		f->last_packet_source_time = 0;
+		f->max_source_time = 0;
 		f->time_offset_changed_ts = now;
 	}
 	uint64_t packet_time = source_time + f->time_offset;
@@ -361,10 +361,10 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	{
 		packet_time = source_time + f->time_offset_old;
 	}
-	else if (source_time > f->last_packet_source_time)
+	else if (source_time > f->max_source_time)
 	{
 		f->last_packet_ts = packet_time;
-		f->last_packet_source_time = source_time;
+		f->max_source_time = source_time;
 	}
 	return packet_time;
 }
@@ -604,6 +604,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 {
 
 	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
+	uint64_t now = timestampNTP_u64();
 	while (f->receiver_queue_size > 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->receiver_queue[f->receiver_queue_output_idx];
@@ -632,6 +633,10 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					break;
 				}
 			}
+			if (b && b->target_output_time <= now) {
+				//The block we found is not ready for output, so we wait.
+				break;
+			}
 			f->stats_instant.lost += holes;
 			f->receiver_queue_output_idx = counter;
 			msg(ctx->id, 0, RIST_LOG_ERROR,
@@ -640,7 +645,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 		}
 		if (b) {
 
-			uint64_t now = timestampNTP_u64();
+			now = timestampNTP_u64();
 			if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 
 				uint64_t delay = (now - b->time);

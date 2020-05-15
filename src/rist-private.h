@@ -215,7 +215,6 @@ struct rist_flow {
 	int64_t time_offset;//Current offset between our clock and RTP packets.
 	int64_t time_offset_old;//Old offset between our clock and RTP packets.
 	uint64_t time_offset_changed_ts;//Timestamp the RTP counter last wrapped
-	uint64_t last_packet_source_time;//Last packet source time
 	uint64_t last_packet_ts;//Last packet time
 
 	bool authenticated;
