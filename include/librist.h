@@ -94,6 +94,15 @@ __BEGIN_DECLS
 #define RIST_URL_PARAM_MIFACE          "miface"
 #define RIST_URL_PARAM_SESSION_TIMEOUT "session-timeout"
 #define RIST_URL_PARAM_KEEPALIVE_INT   "keepalive-interval"
+/* Less common URL parameters */
+#define RIST_URL_PARAM_BUFFER_SIZE_MIN  "buffer-min"
+#define RIST_URL_PARAM_BUFFER_SIZE_MAX  "buffer-max"
+#define RIST_URL_PARAM_RTT_MIN          "rtt-min"
+#define RIST_URL_PARAM_RTT_MAX          "rtt-max"
+#define RIST_URL_PARAM_AES_KEY_ROTATION "key-rotation"
+#define RIST_URL_PARAM_BUFFER_BLOAT_MODE       "buffer-bloat-mode"
+#define RIST_URL_PARAM_BUFFER_BLOAT_LIMIT      "buffer-bloat-limit"
+#define RIST_URL_PARAM_BUFFER_BLOAT_HARD_LIMIT "buffer-bloat-hard-limit"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT   "virt-src-port"
 #define RIST_URL_PARAM_PROFILE         "profile"

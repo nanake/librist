@@ -128,6 +128,14 @@ int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_con
 						output_peer_config->recovery_length_min = temp;
 						output_peer_config->recovery_length_max = temp;
 					}
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_SIZE_MIN ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						output_peer_config->recovery_length_min = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_SIZE_MAX ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						output_peer_config->recovery_length_max = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MIFACE ) == 0) {
 					strncpy((void *)output_peer_config->miface, val, 128-1);
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET ) == 0) {
@@ -139,6 +147,10 @@ int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_con
 					if (temp == 0 || temp == 128 || temp == 192 || temp == 256) {
 						output_peer_config->key_size = temp;
 					}
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_KEY_ROTATION ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->key_rotation = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BANDWIDTH ) == 0) {
 					int temp = atoi( val );
 					if (temp > 0)
@@ -153,6 +165,14 @@ int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_con
 						output_peer_config->recovery_rtt_min = temp;
 						output_peer_config->recovery_rtt_max = temp;
 					}
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTT_MIN ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						output_peer_config->recovery_rtt_min = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTT_MAX ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0)
+						output_peer_config->recovery_rtt_max = temp;
 				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_REORDER_BUFFER ) == 0) {
 					int temp = atoi( val );
 					if (temp >= 0)
@@ -177,6 +197,18 @@ int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_con
 					int temp = atoi( val );
 					if (temp > 0)
 						output_peer_config->keepalive_interval = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_MODE ) == 0) {
+					int temp = atoi( val );
+					if (temp >= 0 && temp <= 2)
+						output_peer_config->buffer_bloat_mode = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_LIMIT ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->buffer_bloat_limit = temp;
+				} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_HARD_LIMIT ) == 0) {
+					int temp = atoi( val );
+					if (temp > 0)
+						output_peer_config->buffer_bloat_hard_limit = temp;
 				} else {
 					ret = -1;
 					fprintf(stderr, "Unknown parameter %s\n", url_params[i].key);
