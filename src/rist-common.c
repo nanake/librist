@@ -665,9 +665,14 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					break;
 				}
 			}
-			if (b && b->target_output_time > now) {
-				//The block we found is not ready for output, so we wait.
-				break;
+			if (b) {
+				uint64_t delay1 = (now - b->time);
+				if (RIST_UNLIKELY(delay1 > (2 * recovery_buffer_ticks))) {
+					// According to the real time clock, it is too late, continue.
+				} else if (b->target_output_time > now) {
+					// The block we found is not ready for output, so we wait.
+					break;
+				}
 			}
 			f->stats_instant.lost += holes;
 			f->receiver_queue_output_idx = counter;
@@ -690,7 +695,6 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					msg(ctx->id, 0, RIST_LOG_WARN,
 							"[WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, , clock drift of discontinuity, applying corrective measures\n",
 							b->seq, b->size, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
-
 				}
 				else if (b->target_output_time >= now) {
 					// This is how we keep the buffer at the correct level
