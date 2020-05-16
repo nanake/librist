@@ -43,8 +43,13 @@ typedef uint32_t socklen_t;
 #include <net/if.h>
 #endif /* Windows / POSIX */
 
-
 /*** Public API ***/
+#define UDPSOCKET_SOCK_BUFSIZE 0x80000
+
+typedef struct udpsocket_url_param {
+	char *key;
+	char *val;
+} udpsocket_url_param_t;
 
 /* Open a udp socket of family [af]
  *
@@ -100,6 +105,7 @@ int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uin
 int udpsocket_recv(int sd, void *buf, size_t size);
 int udpsocket_close(int sd);
 int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local);
-
+int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *params,
+         int max_params, uint32_t *clean_url_len);
 
 #endif /* ifndef UDPSOCKET_H */

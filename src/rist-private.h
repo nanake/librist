@@ -25,7 +25,7 @@ __BEGIN_DECLS
 #include "time-shim.h"
 #include "socket-shim.h"
 #include "libevsocket.h"
-#include "udpsocket.h"
+#include "librist_udpsocket.h"
 #include "aes.h"
 #ifdef __linux
 #include "linux-crypto.h"

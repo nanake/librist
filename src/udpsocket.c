@@ -2,7 +2,7 @@
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
-#include "udpsocket.h"
+#include "librist_udpsocket.h"
 #include <ifaddrs.h>
 
 /* Private functions */
@@ -145,7 +145,6 @@ fail:
 #endif
 }
 
-
 int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 {
 	int sd;
@@ -184,12 +183,11 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
 
 	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0) {
-        int err = errno;
-        close(sd);
-        errno = err;
+		int err = errno;
+		close(sd);
+		errno = err;
 		return -1;
-    }
-
+	}
 
 	return sd;
 }
@@ -222,11 +220,11 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 	}
 
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
-        int err = errno;
-        close(sd);
-        errno = err;
+		int err = errno;
+		close(sd);
+		errno = err;
 		return -1;
-    }
+	}
 
 	if (is_multicast) {
 		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0)
@@ -239,7 +237,6 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 int udpsocket_send(int sd, const void *buf, size_t size)
 {
 	return send(sd, buf, size, 0);
-
 }
 
 int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port)
@@ -264,6 +261,43 @@ int udpsocket_recv(int sd, void *buf, size_t size)
 int udpsocket_close(int sd)
 {
 	return close(sd);
+}
+
+int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *params, int max_params,
+	uint32_t *clean_url_len)
+{
+	char* query = NULL;
+	int i = 0;
+	char *token = NULL;
+
+	query = strchr( url, '?' );
+	if (query != NULL)
+		*clean_url_len = query - url + 1;
+	else
+		*clean_url_len = strlen(url) + 1;
+
+	if (!query || *query == '\0')
+		return -1;
+	if (!params || max_params == 0)
+		return 0;
+
+	const char amp[2] = "&";
+	token = strtok( query + 1, amp );
+	while (token != NULL && i < max_params) {
+		params[i].key = token;
+		params[i].val = NULL;
+		if ((params[i].val = strchr( params[i].key, '=' )) != NULL) {
+			size_t val_len = strlen( params[i].val );
+			*(params[i].val) = '\0';
+			if (val_len > 1) {
+				params[i].val++;
+				if (params[i].key[0])
+					i++;
+			};
+		}
+		token = strtok( NULL, amp );
+	}
+	return i;
 }
 
 int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local)

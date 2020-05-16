@@ -7,7 +7,7 @@
 #include "log-private.h"
 #include "time-shim.h"
 #include "stdio-shim.h"
-#include "udpsocket.h"
+#include "librist_udpsocket.h"
 
 static int loglevel = RIST_LOG_WARN;
 

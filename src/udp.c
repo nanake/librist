@@ -678,6 +678,15 @@ void rist_create_socket(struct rist_peer *peer)
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
+	// Increase default OS buffer size
+	if (udpsocket_set_buffer_size(peer->sd, UDPSOCKET_SOCK_BUFSIZE)) {
+		msg(receiver_id, sender_id, RIST_LOG_WARN, "[WARNING] Unable to set the socket buffer size to %d Bytes. %s\n", 
+			UDPSOCKET_SOCK_BUFSIZE, strerror(errno));
+	} else {
+		msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] Configured the starting socket buffer size to %d Bytes.\n", 
+			UDPSOCKET_SOCK_BUFSIZE);
+	}
+
 	if (peer->cname[0] == 0)
 		rist_populate_cname(peer);
 	msg(receiver_id, sender_id, RIST_LOG_INFO, "[INFO] Peer cname is %s\n", peer->cname);
