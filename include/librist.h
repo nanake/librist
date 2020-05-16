@@ -57,7 +57,7 @@ __BEGIN_DECLS
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
 #define RIST_API_VERSION (8)
-#define RIST_SUBVERSION (1)
+#define RIST_SUBVERSION (2)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */
@@ -79,7 +79,7 @@ __BEGIN_DECLS
 #define RIST_DEFAULT_SESSION_TIMEOUT (60000)
 #define RIST_DEFAULT_KEEPALIVE_INTERVAL (1000)
 
-/* Rist URL parameter names (per peer) */
+/* Rist URL parameter names for peer config */
 #define RIST_URL_PARAM_BUFFER_SIZE     "buffer"
 #define RIST_URL_PARAM_SECRET          "secret"
 #define RIST_URL_PARAM_AES_TYPE        "aes-type"
