@@ -57,7 +57,7 @@ int rist_logs_set(int fd, char *url)
 	return ret;
 }
 
-int parse_url_options(const char* url, 	struct rist_peer_config *output_peer_config)
+int parse_url_options(const char* url, struct rist_peer_config *output_peer_config)
 {
 	uint32_t clean_url_len = 0;
 	struct udpsocket_url_param url_params[32];
@@ -3125,18 +3125,20 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	free(ctx->sender_retry_queue);
 	struct rist_buffer *b = NULL;
 	while(1) {
+		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {
+			break;
+		}
 		b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		while (!b) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
+			if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index)
+				break;
 		}
 		ctx->sender_queue_bytesize -= b->size;
 		free_rist_buffer(&ctx->common, b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
-		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {
-			break;
-		}
 	}
 	free(ctx);
 	ctx = NULL;
