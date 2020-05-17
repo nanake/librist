@@ -381,7 +381,7 @@ typedef signed int ssize_t;
 		rist_receiver_stats_callback_set(ctx, statsinterval, cb_stats, NULL);
 	}
 
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < INPUT_COUNT; i++) {
 		if (addr[i] == NULL) {
 			continue;
 		}
@@ -433,21 +433,21 @@ typedef signed int ssize_t;
 
 	/* Mpeg side */
 	bool atleast_one_socket_opened = false;
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (url[i] == NULL) {
 			continue;
 		}
 		char hostname[200] = {0};
-		int inputlisten;
-		uint16_t inputport;
-		if (udpsocket_parse_url(url[i], hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
+		int outputlisten;
+		uint16_t outputport;
+		if (udpsocket_parse_url(url[i], hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
 			fprintf(stderr, "Could not parse input url %s\n", url[i]);
 			continue;
 		}
-		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
-		mpeg[i] = udpsocket_open_connect(hostname, inputport, miface[i]);
+		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
+		mpeg[i] = udpsocket_open_connect(hostname, outputport, miface[i]);
 		if (mpeg[i] <= 0) {
-			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, inputport);
+			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			continue;
 		} else {
 			fprintf(stderr, "Output socket is open and bound\n");
