@@ -55,6 +55,7 @@ librist = library('rist',
 	install: true)
 
 install_headers('include/librist.h')
+install_headers('include/librist_udpsocket.h')
 
 if get_option('test')
 	subdir('test')
