@@ -4,6 +4,7 @@
  */
 
 #include <librist.h>
+#include <librist_udpsocket.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -12,7 +13,8 @@
 #include "getopt-shim.h"
 #include <stdbool.h>
 #include <signal.h>
-#include "network.h"
+
+extern char* stats_to_json(struct rist_stats *stats);
 
 #define INPUT_COUNT 2
 #define OUTPUT_COUNT 4
@@ -98,9 +100,8 @@ void usage(char *name)
 	exit(1);
 }
 
-static int mpeg[INPUT_COUNT];
+static int mpeg[OUTPUT_COUNT];
 static int keep_running = 1;
-static struct network_url parsed_url[INPUT_COUNT];
 
 struct rist_port_filter {
 	uint16_t virt_src_port;
@@ -124,8 +125,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 
 	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (mpeg[i] > 0) {
-			sendto(mpeg[i], b->payload, b->payload_len, 0, (struct sockaddr *)&(parsed_url[i].u),
-				sizeof(struct sockaddr_in));
+			udpsocket_send(mpeg[i], b->payload, b->payload_len);
 		}
 	}
 
@@ -437,28 +437,22 @@ typedef signed int ssize_t;
 		if (url[i] == NULL) {
 			continue;
 		}
-
-		// TODO: support ipv6 destinations
-		if (parse_url(url[i], &parsed_url[i]) != 0) {
-			fprintf(stderr, "[ERROR] %s / %s\n", parsed_url[i].error, url[i]);
+		char hostname[200] = {0};
+		int inputlisten;
+		uint16_t inputport;
+		if (udpsocket_parse_url(url[i], hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
+			fprintf(stderr, "Could not parse input url %s\n", url[i]);
 			continue;
-		} {
-			fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n",
-				(char *) parsed_url[i].hostname, parsed_url[i].port);
 		}
-
-		mpeg[i] = udp_Connect_Simple(AF_INET, -1, miface[i]);
-		if (mpeg <= 0) {
-			char *msgbuf = malloc(256);
-			msgbuf = udp_GetErrorDescription(mpeg[i], msgbuf);
-			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d. %s\n",
-				(char *) parsed_url[i].hostname, parsed_url[i].port, msgbuf);
-			free(msgbuf);
-			exit(1);
+		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+		mpeg[i] = udpsocket_open_connect(hostname, inputport, miface[i]);
+		if (mpeg[i] <= 0) {
+			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, inputport);
+			continue;
+		} else {
+			fprintf(stderr, "Output socket is open and bound\n");
+			atleast_one_socket_opened = true;
 		}
-
-		fprintf(stderr, "Socket %i is open\n", (int)(i + 1));
-		atleast_one_socket_opened = true;
 	}
 
 	if (!atleast_one_socket_opened) {

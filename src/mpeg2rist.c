@@ -4,6 +4,7 @@
  */
 
 #include <librist.h>
+#include <librist_udpsocket.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -11,7 +12,8 @@
 #include <sys/types.h>
 #include "getopt-shim.h"
 #include <signal.h>
-#include "network.h"
+
+extern char* stats_to_json(struct rist_stats *stats);
 
 #define PEER_COUNT 4
 #define MPEG_BUFFER_SIZE 10000
@@ -318,22 +320,17 @@ int main(int argc, char *argv[])
 	}
 
 	/* MPEG Side: listen to the given address */
-	struct network_url parsed_url;
-	if (parse_url(url, &parsed_url) != 0) {
-		fprintf(stderr, "[ERROR] %s / %s\n", parsed_url.error, url);
+	char hostname[200] = {0};
+	int inputlisten;
+	uint16_t inputport;
+	if (udpsocket_parse_url(url, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
+		fprintf(stderr, "Could not parse input url %s\n", url);
 		exit(1);
-	} else {
-		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n",
-			(char *) parsed_url.hostname, parsed_url.port);
 	}
-
-	mpeg = udp_Open(parsed_url.hostname, parsed_url.port, NULL, 0, 0, miface);
+	fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+	mpeg = udpsocket_open_bind(hostname, inputport, miface);
 	if (mpeg <= 0) {
-		char *msgbuf = malloc(256);
-		msgbuf = udp_GetErrorDescription(mpeg, msgbuf);
-		fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d. %s\n",
-			(char *) parsed_url.hostname, parsed_url.port, msgbuf);
-		free(msgbuf);
+		fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, inputport);
 		exit(1);
 	} else {
 		fprintf(stderr, "Input socket is open and bound\n");

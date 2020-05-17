@@ -2,7 +2,6 @@
  * rist2rist receive simple profile rist and expose it as main profile
  * author: Gijs Peskens
  */
-#include "common.h"
 
 #include <librist.h>
 #include <stdio.h>
@@ -11,6 +10,8 @@
 #include "getopt-shim.h"
 #include <assert.h>
 #include <signal.h>
+
+extern char* stats_to_json(struct rist_stats *stats);
 
 struct rist_sender_args {
 	char* cname;
@@ -183,7 +184,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 {
 	struct rist_cb_arg *cb_arg = (void *) arg;
 	struct rist_data_block *block = (struct rist_data_block*)b;
-	if (RIST_UNLIKELY(cb_arg->client_args->flow_id != b->flow_id)) {
+	if (cb_arg->client_args->flow_id != b->flow_id) {
 		printf("Flow ID %ud\n",b->flow_id);
 		cb_arg->client_args->flow_id = b->flow_id;
 		assert(cb_arg->sender_ctx != NULL);
