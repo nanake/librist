@@ -31,6 +31,7 @@ __BEGIN_DECLS
 #include "linux-crypto.h"
 #endif
 #include <errno.h>
+#include <stdatomic.h>
 
 #define UINT16_SIZE (UINT16_MAX + 1)
 // These 4 control the memory footprint and buffer capacity of the lib
@@ -180,10 +181,10 @@ struct rist_flow {
 	pthread_rwlock_t queue_lock;
 
 	bool receiver_queue_has_items;
-	size_t receiver_queue_size;        /* size in bytes */
+	atomic_ulong receiver_queue_size;  /* size in bytes */
 	uint64_t recovery_buffer_ticks;    /* size in ticks */
 	uint64_t stats_report_time; 	   /* in ticks */
-	size_t receiver_queue_output_idx;  /* next packet to output */
+	atomic_ulong receiver_queue_output_idx;  /* next packet to output */
 	size_t receiver_queue_max;
 
 	/* Missing incoming packets, waiting for retransmission */

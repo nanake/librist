@@ -332,11 +332,16 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 
 	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX /2)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
 	{
-		f->time_offset_old = f->time_offset;
-		f->time_offset = (int64_t)now - (int64_t)source_time;
-		fprintf(stderr, "Clock wrapped, old offset: %" PRIi64 " new offset %" PRIi64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
-		f->max_source_time = 0;
-		f->time_offset_changed_ts = now;
+		int64_t new_offset = (int64_t)now - (int64_t)source_time;
+		int64_t offset_diff = llabs(new_offset - f->time_offset);
+		//Make sure the new and old offsets differ atleast by 10 hrs, otherwise something is wrong.
+		if (offset_diff > (10 * 3600 * 1000 * RIST_CLOCK)) {
+			f->time_offset_old = f->time_offset;
+			f->time_offset = (int64_t)now - (int64_t)source_time;
+			fprintf(stderr, "Clock wrapped, old offset: %" PRIi64 " new offset %" PRIi64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
+			f->max_source_time = 0;
+			f->time_offset_changed_ts = now;
+		}
 	}
 	uint64_t packet_time = source_time + f->time_offset;
 
@@ -369,7 +374,7 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	f->receiver_queue[idx]->peer = peer;
 	f->receiver_queue[idx]->packet_time = packet_time;
 	f->receiver_queue[idx]->target_output_time = packet_time + f->recovery_buffer_ticks;
-	f->receiver_queue_size += len;
+	atomic_fetch_add(&f->receiver_queue_size, len);
 	return 0;
 }
 
@@ -443,6 +448,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	// Now, get the new position and check what is there
 	size_t idx = seq % f->receiver_queue_max;
+	if (idx == atomic_load(&f->receiver_queue_output_idx)) {
+		return -1;
+	}
 	if (f->receiver_queue[idx]) {
 		// TODO: record stats
 		struct rist_buffer *b = f->receiver_queue[idx];
@@ -589,7 +597,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
 	uint64_t now = timestampNTP_u64();
-	while (f->receiver_queue_size > 0) {
+	while (atomic_load(&f->receiver_queue_size) > 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->receiver_queue[f->receiver_queue_output_idx];
 		if (!b) {
@@ -627,7 +635,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 			}
 			f->stats_instant.lost += holes;
-			f->receiver_queue_output_idx = counter;
+			atomic_store(&f->receiver_queue_output_idx, counter);
 			msg(ctx->id, 0, RIST_LOG_ERROR,
 					"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
 					holes, counter, f->receiver_queue_size);
@@ -695,9 +703,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			//	fprintf(stderr, "rtcp skip at %"PRIu32", just removing it from queue\n", b->seq);
 
 			f->last_seq_output = b->seq;
-			f->receiver_queue_size -= b->size;
+			atomic_fetch_sub(&f->receiver_queue_size, b->size);
 			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
-			f->receiver_queue_output_idx = (f->receiver_queue_output_idx + 1) % f->receiver_queue_max;
+			atomic_store(&f->receiver_queue_output_idx, (f->receiver_queue_output_idx + 1) % f->receiver_queue_max);
 			free_rist_buffer(&ctx->common, b);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
@@ -1422,11 +1430,9 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	if (pthread_cond_signal(&(peer->flow->condition)))
 		msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
-	pthread_rwlock_wrlock(&(peer->flow->queue_lock));
 	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port)) {
 		rist_calculate_bitrate(peer, payload->size, &peer->bw); // update bitrate only if not a dupe
 	}
-	pthread_rwlock_unlock(&(peer->flow->queue_lock));
 }
 
 static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
@@ -2405,11 +2411,9 @@ protocol_bypass:
 
 		//uint64_t now = timestampNTP_u64();
 		while (!flow->shutdown) {
-			pthread_rwlock_wrlock(&(flow->queue_lock));
 			if (flow->peer_lst) {
 				receiver_output(receiver_ctx, flow);
 			}
-			pthread_rwlock_unlock(&(flow->queue_lock));
 			pthread_mutex_lock(&(flow->mutex));
 			int ret = pthread_cond_timedwait_ms(&(flow->condition), &(flow->mutex), max_output_jitter_ms);
 			pthread_mutex_unlock(&(flow->mutex));
