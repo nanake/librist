@@ -662,9 +662,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
 					break;
 				}
-				if ((b->seq & 511) == 0) {
-					fprintf(stderr, "Seq is %lu Delay is %lu\n",b->seq, delay/ RIST_CLOCK);
-				}
+
 				// Check sequence number and report lost packet
 				uint32_t next_seq = f->last_seq_output + 1;
 				if (f->short_seq)
