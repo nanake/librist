@@ -325,11 +325,11 @@ void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 	
 }
 
-static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry)
+static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry, uint8_t payload_type)
 {
 	uint64_t now = timestampNTP_u64();
 	//Check and correct timing
-
+	uint64_t packet_time = source_time + f->time_offset;
 	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX /2)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
 	{
 		int64_t new_offset = (int64_t)now - (int64_t)source_time;
@@ -337,20 +337,22 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 		//Make sure the new and old offsets differ atleast by 10 hrs, otherwise something is wrong.
 		if (offset_diff > (10 * 3600 * 1000 * RIST_CLOCK)) {
 			f->time_offset_old = f->time_offset;
-			f->time_offset = (int64_t)now - (int64_t)source_time;
+			//Calculate new offset by getting max time for payload type and adding it to old offset
+			//Fast path for mpegts payload type with clock of 90khz
+			if (RIST_UNLIKELY(payload_type != RTP_PTYPE_RIST))
+				f->time_offset += convertRTPtoNTP(payload_type, 0, UINT32_MAX);
+			else
+				f->time_offset += ((uint64_t)UINT32_MAX << 32) / RTP_PTYPE_MPEGTS_CLOCKHZ;
 			fprintf(stderr, "Clock wrapped, old offset: %" PRIi64 " new offset %" PRIi64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
 			f->max_source_time = 0;
 			f->time_offset_changed_ts = now;
 		}
-	}
-	uint64_t packet_time = source_time + f->time_offset;
-
-	//Packets with old clock will be too big due to the wrong offset.
-	if (RIST_UNLIKELY(packet_time > f->last_packet_ts && ((packet_time - f->last_packet_ts) > UINT32_MAX / 2) && (now - f->time_offset_changed_ts) < 3 * f->recovery_buffer_ticks))
+		packet_time = source_time + f->time_offset;
+		//Packets with old clock will be too big due to the wrong offset.
+	} else 	if (RIST_UNLIKELY(packet_time > f->last_packet_ts && ((packet_time - f->last_packet_ts) > UINT32_MAX / 2) && (now - f->time_offset_changed_ts) < 3 * f->recovery_buffer_ticks))
 	{
 		packet_time = source_time + f->time_offset_old;
-	}
-	else if (source_time > f->max_source_time)
+	} else if (source_time > f->max_source_time)
 	{
 		f->last_packet_ts = packet_time;
 		f->max_source_time = source_time;
@@ -358,7 +360,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	return packet_time;
 }
 
-static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *peer, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool retry)
+static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *peer, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool retry, uint64_t packet_time)
 {
 	/*
 	   msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
@@ -370,11 +372,10 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 		msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "[ERROR] Could not create packet buffer inside receiver buffer, OOM, decrease max bitrate or buffer time length\n");
 		return -1;
 	}
-	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry);
 	f->receiver_queue[idx]->peer = peer;
 	f->receiver_queue[idx]->packet_time = packet_time;
 	f->receiver_queue[idx]->target_output_time = packet_time + f->recovery_buffer_ticks;
-	atomic_fetch_add(&f->receiver_queue_size, len);
+	atomic_fetch_add_explicit(&f->receiver_queue_size, len, memory_order_release);
 	return 0;
 }
 
@@ -409,7 +410,7 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 	}
 }
 
-static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port)
+static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
 {
 	struct rist_flow *f = peer->flow;
 
@@ -439,16 +440,16 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 				"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n",
 				seq, idx_initial, source_time, peer->flow->time_offset/RIST_CLOCK);
-		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, false);
+		uint64_t packet_time = source_time + f->time_offset;
+		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, false, packet_time);
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->receiver_queue_has_items = true;
 		return 0; // not a dupe
 	}
-
 	// Now, get the new position and check what is there
 	size_t idx = seq % f->receiver_queue_max;
-	if (idx == atomic_load(&f->receiver_queue_output_idx)) {
+	if (idx == atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire)) {
 		return -1;
 	}
 	if (f->receiver_queue[idx]) {
@@ -465,9 +466,10 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			f->receiver_queue[idx] = NULL;
 		}
 	}
+	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
 
 	/* Now, we insert the packet into receiver queue */
-	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, retry)) {
+	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, retry, packet_time)) {
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
@@ -545,12 +547,11 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			b->nack_count++;
 
 			if (get_cctx(peer)->debug)
-				msg(f->receiver_id, f->sender_id, RIST_LOG_DEBUG, "[DEBUG] Datagram %"PRIu32
-						" is missing, sending NACK!, next retry in %"PRIu64"ms, age is %"PRIu64"ms, retry #%lu, max_size is %"PRIu64"ms\n",
-						b->seq, (b->next_nack - now) / RIST_CLOCK,
-						(now - b->insertion_time) / RIST_CLOCK,
-						b->nack_count,
-						peer->recovery_buffer_ticks / RIST_CLOCK);
+				msg(f->receiver_id, f->sender_id, RIST_LOG_DEBUG, "[DEBUG] Datagram %" PRIu32 " is missing, sending NACK!, next retry in %" PRIu64 "ms, age is %" PRIu64 "msdelay_rt, retry #%lu, max_size is %" PRIu64 "ms\n",
+					b->seq, (b->next_nack - now) / RIST_CLOCK,
+					(now - b->insertion_time) / RIST_CLOCK,
+					b->nack_count,
+					peer->recovery_buffer_ticks / RIST_CLOCK);
 
 			// update peer information
 			peer->nacks.array[peer->nacks.counter] = b->seq;
@@ -597,7 +598,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
 	uint64_t now = timestampNTP_u64();
-	while (atomic_load(&f->receiver_queue_size) > 0) {
+	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->receiver_queue[f->receiver_queue_output_idx];
 		if (!b) {
@@ -635,16 +636,15 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 			}
 			f->stats_instant.lost += holes;
-			atomic_store(&f->receiver_queue_output_idx, counter);
+			atomic_store_explicit(&f->receiver_queue_output_idx, counter, memory_order_release);
 			msg(ctx->id, 0, RIST_LOG_ERROR,
 					"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
 					holes, counter, f->receiver_queue_size);
 		}
 		if (b) {
-
-			now = timestampNTP_u64();
 			if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 
+				now = timestampNTP_u64();
 				uint64_t delay = (now - b->time);
 
 				if (RIST_UNLIKELY(delay > (2 * recovery_buffer_ticks))) {
@@ -662,7 +662,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
 					break;
 				}
-
+				if ((b->seq & 511) == 0) {
+					fprintf(stderr, "Seq is %lu Delay is %lu\n",b->seq, delay/ RIST_CLOCK);
+				}
 				// Check sequence number and report lost packet
 				uint32_t next_seq = f->last_seq_output + 1;
 				if (f->short_seq)
@@ -703,10 +705,10 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			//	fprintf(stderr, "rtcp skip at %"PRIu32", just removing it from queue\n", b->seq);
 
 			f->last_seq_output = b->seq;
-			atomic_fetch_sub(&f->receiver_queue_size, b->size);
+			atomic_fetch_sub_explicit(&f->receiver_queue_size, b->size, memory_order_relaxed);
 			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
-			atomic_store(&f->receiver_queue_output_idx, (f->receiver_queue_output_idx + 1) % f->receiver_queue_max);
 			free_rist_buffer(&ctx->common, b);
+			atomic_store_explicit(&f->receiver_queue_output_idx, ((f->receiver_queue_output_idx + 1) % f->receiver_queue_max), memory_order_release);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
@@ -1362,7 +1364,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 }
 
 static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t flow_id,
-		uint64_t source_time, struct rist_buffer *payload, uint8_t retry)
+		uint64_t source_time, struct rist_buffer *payload, uint8_t retry, uint8_t payload_type)
 {
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
@@ -1430,7 +1432,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	if (pthread_cond_signal(&(peer->flow->condition)))
 		msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
-	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port)) {
+	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
 		rist_calculate_bitrate(peer, payload->size, &peer->bw); // update bitrate only if not a dupe
 	}
 }
@@ -2131,7 +2133,7 @@ protocol_bypass:
 							msg(receiver_id, sender_id, RIST_LOG_WARN,
 									"[WARNING] Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 						else
-							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry);
+							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
 						break;
 					default:
 						rist_recv_rtcp(p, seq, flow_id, &payload);
