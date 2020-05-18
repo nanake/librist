@@ -909,7 +909,7 @@ static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct ris
 	if (cctx->profile == RIST_PROFILE_ADVANCED) {
 		struct rist_sender *ctx = peer->sender_ctx;
 		pthread_rwlock_wrlock(&ctx->queue_lock);
-		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(cctx, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(cctx, rtcp_buf, payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
 		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
 		{
 			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
@@ -922,7 +922,7 @@ static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct ris
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
 	}
-	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, rtcp_buf, payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
 void rist_sender_periodic_rtcp(struct rist_peer *peer) {
