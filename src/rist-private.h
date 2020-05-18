@@ -35,10 +35,10 @@ __BEGIN_DECLS
 
 #define UINT16_SIZE (UINT16_MAX + 1)
 // These 4 control the memory footprint and buffer capacity of the lib
-#define RIST_SERVER_QUEUE_BUFFERS ((UINT16_SIZE) * 10)
-#define RIST_RETRY_QUEUE_BUFFERS ((UINT16_SIZE) * 5)
-#define RIST_OOB_QUEUE_BUFFERS ((UINT16_SIZE) * 1)
-#define RIST_DATAOUT_QUEUE_BUFFERS (1000)
+#define RIST_SERVER_QUEUE_BUFFERS ((UINT16_SIZE) * 8)
+#define RIST_RETRY_QUEUE_BUFFERS ((UINT16_SIZE) * 4)
+#define RIST_OOB_QUEUE_BUFFERS ((UINT16_SIZE) * 2)
+#define RIST_DATAOUT_QUEUE_BUFFERS (1024)
 // This will restrict the use of the library to the configured maximum packet size
 #define RIST_MAX_PACKET_SIZE (10000)
 
