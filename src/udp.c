@@ -457,7 +457,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
 
-	if (p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000)) {
+	if (RIST_UNLIKELY(p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000))) {
 	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
 		ret = len;
 		//msg(receiver_id, sender_id, RIST_LOG_ERROR,
@@ -918,7 +918,7 @@ static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct ris
 		}
 		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
 		ctx->sender_queue_bytesize += payload_len;
-		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1);
+		atomic_store_explicit(&ctx->sender_queue_write_index, (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
 	}
@@ -1034,8 +1034,8 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return -1;
 	}
-	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
 	ctx->sender_queue_bytesize += len;
+	atomic_store_explicit(&ctx->sender_queue_write_index, (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
 	pthread_rwlock_unlock(&ctx->queue_lock);
 
 	return 0;
