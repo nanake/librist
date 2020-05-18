@@ -127,7 +127,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 		size_t safety_counter = 0;
 		while (!b) {
-			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
+			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 			// This should never happen!
 			msg(0, ctx->id, RIST_LOG_ERROR,
 				"[ERROR] Moving delete index to %zu\n",
@@ -156,7 +156,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 		ctx->sender_queue_bytesize -= b->size;
 		free_rist_buffer(&ctx->common, b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
-		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
+		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 
 	}
 
@@ -923,7 +923,7 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	}
 	ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
 	ctx->sender_queue_bytesize += payload_len;
-	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
 	pthread_rwlock_unlock(&ctx->queue_lock);
 	return;
 }
@@ -951,7 +951,7 @@ int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_tim
 		}
 		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
 		ctx->sender_queue_bytesize += payload_len;
-		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return 0;
 	}
@@ -983,7 +983,7 @@ int rist_request_echo(struct rist_peer *peer) {
 		}
 		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
 		ctx->sender_queue_bytesize += payload_len;
-		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return 0;
 	}
@@ -1049,7 +1049,7 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return -1;
 	}
-	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) % ctx->sender_queue_max;
+	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
 	ctx->sender_queue_bytesize += len;
 	pthread_rwlock_unlock(&ctx->queue_lock);
 
@@ -1154,7 +1154,7 @@ static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq)
 {
 	// This is by design in advanced mode, that is why we push all output data and handshakes 
 	// through the sender_queue, so we can keep the seq and idx in sync
-	size_t idx = (seq + 1) % (uint64_t)ctx->sender_queue_max;
+	size_t idx = (seq + 1)& (ctx->sender_queue_max -1);
 	if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
 		// For simple profile and main profile without extended seq numbers, we use a conversion table
 		idx = ctx->seq_index[(uint16_t)seq];

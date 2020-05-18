@@ -435,7 +435,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		f->last_seq_found = seq;
 		f->max_source_time = source_time;
 		/* This will synchronize idx and seq so we can insert packets into receiver buffer based on seq number */
-		size_t idx_initial = seq % f->receiver_queue_max;
+		size_t idx_initial = seq& (f->receiver_queue_max -1);
 		f->receiver_queue_output_idx = idx_initial;
 		msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 				"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n",
@@ -448,7 +448,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		return 0; // not a dupe
 	}
 	// Now, get the new position and check what is there
-	size_t idx = seq % f->receiver_queue_max;
+	size_t idx = seq& (f->receiver_queue_max -1);
 	if (idx == atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire)) {
 		return -1;
 	}
@@ -607,7 +607,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			size_t counter = 0;
 			counter = f->receiver_queue_output_idx;
 			while (!b) {
-				counter = (counter + 1) % f->receiver_queue_max;
+				counter = (counter + 1)& (f->receiver_queue_max -1);
 				holes++;
 				b = f->receiver_queue[counter];
 				if (counter == f->receiver_queue_output_idx) {
@@ -706,7 +706,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			atomic_fetch_sub_explicit(&f->receiver_queue_size, b->size, memory_order_relaxed);
 			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
 			free_rist_buffer(&ctx->common, b);
-			atomic_store_explicit(&f->receiver_queue_output_idx, ((f->receiver_queue_output_idx + 1) % f->receiver_queue_max), memory_order_release);
+			atomic_store_explicit(&f->receiver_queue_output_idx, ((f->receiver_queue_output_idx + 1)& (f->receiver_queue_max -1)), memory_order_release);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
@@ -756,7 +756,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 	while (mb) {
 		int remove_from_queue_reason = 0;
 		struct rist_peer *peer = mb->peer;
-		ssize_t idx = mb->seq % f->receiver_queue_max;
+		ssize_t idx = mb->seq& (f->receiver_queue_max -1);
 		if (f->receiver_queue[idx]) {
 			if (f->receiver_queue[idx]->seq == mb->seq) {
 				// We filled in the hole already ... packet has been recovered
@@ -1447,7 +1447,7 @@ static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 
 	if (peer->flow && ctx->common.profile == RIST_PROFILE_ADVANCED) {
 		// We must insert a placeholder into the queue to prevent counting it as a hole during missing packet search
-		size_t idx = seq % peer->flow->receiver_queue_max;
+		size_t idx = seq& (peer->flow->receiver_queue_max -1);
 		struct rist_buffer *b = peer->flow->receiver_queue[idx];
 		if (b)
 		{
@@ -2339,7 +2339,7 @@ protocol_bypass:
 				break;
 			}
 
-			size_t idx = (ctx->sender_queue_read_index + 1) % ctx->sender_queue_max;
+			size_t idx = (ctx->sender_queue_read_index + 1)& (ctx->sender_queue_max-1);
 
 			if (idx == ctx->sender_queue_write_index) {
 				//msg(0, ctx->id, RIST_LOG_ERROR,
@@ -3134,7 +3134,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 		}
 		b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		while (!b) {
-			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
+			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
 			if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index)
 				break;
@@ -3142,7 +3142,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 		ctx->sender_queue_bytesize -= b->size;
 		free_rist_buffer(&ctx->common, b);
 		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
-		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1) % ctx->sender_queue_max;
+		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 	}
 	free(ctx);
 	ctx = NULL;
