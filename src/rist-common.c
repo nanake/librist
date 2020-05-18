@@ -360,7 +360,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	return packet_time;
 }
 
-static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *peer, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool retry, uint64_t packet_time)
+static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *peer, size_t idx, const void *buf, size_t len, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint64_t packet_time)
 {
 	/*
 	   msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
@@ -441,7 +441,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 				"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n",
 				seq, idx_initial, source_time, peer->flow->time_offset/RIST_CLOCK);
 		uint64_t packet_time = source_time + f->time_offset;
-		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, false, packet_time);
+		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, packet_time);
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->receiver_queue_has_items = true;
@@ -469,7 +469,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
 
 	/* Now, we insert the packet into receiver queue */
-	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, retry, packet_time)) {
+	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, packet_time)) {
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
