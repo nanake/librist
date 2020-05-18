@@ -922,7 +922,7 @@ static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct ris
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
 	}
-	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, ctx->common.seq++, 0);
+	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
 void rist_sender_periodic_rtcp(struct rist_peer *peer) {
@@ -933,7 +933,6 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
-	struct rist_sender *ctx = peer->sender_ctx;
 	rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 	return;
 }
