@@ -350,10 +350,10 @@ struct rist_sender {
 	bool sender_initialized;
 	uint32_t total_weight;
 	struct rist_buffer *sender_queue[RIST_SERVER_QUEUE_BUFFERS]; /* input queue */
-	size_t sender_queue_bytesize;
-	size_t sender_queue_delete_index;
+	atomic_ulong sender_queue_bytesize;
+	atomic_ulong sender_queue_delete_index;
 	size_t sender_queue_read_index;
-	size_t sender_queue_write_index;
+	atomic_ulong sender_queue_write_index;
 	size_t sender_queue_max;
 	int weight_counter;
 	uint64_t last_datagram_time;

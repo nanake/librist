@@ -904,6 +904,27 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], int a
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
+static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct rist_peer *peer) {
+	struct rist_common_ctx *cctx = get_cctx(peer);
+	if (cctx->profile == RIST_PROFILE_ADVANCED) {
+		struct rist_sender *ctx = peer->sender_ctx;
+		pthread_rwlock_wrlock(&ctx->queue_lock);
+		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(cctx, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
+		{
+			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
+			pthread_rwlock_unlock(&ctx->queue_lock);
+			return;
+		}
+		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
+		ctx->sender_queue_bytesize += payload_len;
+		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1);
+		pthread_rwlock_unlock(&ctx->queue_lock);
+		return;
+	}
+	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, ctx->common.seq++, 0);
+}
+
 void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
 	int payload_len = 0;
@@ -913,18 +934,7 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
 	struct rist_sender *ctx = peer->sender_ctx;
-	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&ctx->common, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
-	{
-		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
-		pthread_rwlock_unlock(&ctx->queue_lock);
-		return;
-	}
-	ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
-	ctx->sender_queue_bytesize += payload_len;
-	ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
-	pthread_rwlock_unlock(&ctx->queue_lock);
+	rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 	return;
 }
 
@@ -940,19 +950,7 @@ int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_tim
 		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 	} else {
 		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
-		struct rist_sender *ctx = peer->sender_ctx;
-		pthread_rwlock_wrlock(&ctx->queue_lock);
-		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&ctx->common, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
-		{
-			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
-			pthread_rwlock_unlock(&ctx->queue_lock);
-			return -1;
-		}
-		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
-		ctx->sender_queue_bytesize += payload_len;
-		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
-		pthread_rwlock_unlock(&ctx->queue_lock);
+		rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 		return 0;
 	}
 }
@@ -972,19 +970,7 @@ int rist_request_echo(struct rist_peer *peer) {
 	else
 	{
 		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
-		struct rist_sender *ctx = peer->sender_ctx;
-		pthread_rwlock_wrlock(&ctx->queue_lock);
-		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&ctx->common, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
-		{
-			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
-			pthread_rwlock_unlock(&ctx->queue_lock);
-			return -1;
-		}
-		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
-		ctx->sender_queue_bytesize += payload_len;
-		ctx->sender_queue_write_index = (ctx->sender_queue_write_index + 1)& (ctx->sender_queue_max -1);
-		pthread_rwlock_unlock(&ctx->queue_lock);
+		rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 		return 0;
 	}
 }
