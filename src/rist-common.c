@@ -457,6 +457,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	   output time than the highest known output time) */
 	size_t idx = seq & (f->receiver_queue_max - 1);
 	size_t reader_idx;
+	bool out_of_order = false;
 	if (packet_time < f->last_packet_ts) {
 		size_t highest_written_idx = f->last_seq_found & (f->receiver_queue_max -1);
 		reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
@@ -468,7 +469,12 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Packet %"PRIu32" too late, dropping!\n", seq);
 			return -1;
 		}
-
+		if (!retry) {
+			msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
+				"[WARNING] Out of order packet received, seq %" PRIu32 " / age %" PRIu64 " ms\n",
+				seq, (timestampNTP_u64() - packet_time) / RIST_CLOCK);
+			out_of_order = true;
+		}
 	}
 	reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 	if (idx == reader_idx)
@@ -500,20 +506,6 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	// Check for missing data and queue retries
 	if (!retry) {
-		bool out_of_order = false;
-		// Report on out of order old packets
-		if (source_time >= f->max_source_time) {
-			f->max_source_time = source_time;
-		} else {
-			// Only print this message when the packet is within one buffer size
-			if ((f->max_source_time - source_time) < f->recovery_buffer_ticks) {
-				uint64_t age = (f->max_source_time - source_time)/RIST_CLOCK;
-				msg(f->receiver_id, f->sender_id, RIST_LOG_WARN,
-						"[WARNING] Out of order packet received, seq %"PRIu32" / age %"PRIu64" ms\n",
-						seq, age);
-				out_of_order = true;
-			}
-		}
 		/* check for missing packets */
 		// We start at the last known good packet, and look forwards till we hit this seq
 		uint32_t missing_seq = seq - 1;
