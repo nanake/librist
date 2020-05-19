@@ -29,6 +29,26 @@ if host_machine.system() == 'linux'
 	platform_files += 'contrib/linux-crypto.c'
 endif
 
+# Header checks
+
+stdatomic_dependency = []
+if not cc.check_header('stdatomic.h')
+    if cc.get_id() == 'msvc'
+        # we have a custom replacement for MSVC
+        stdatomic_dependency = declare_dependency(
+            include_directories : include_directories('compat/msvc'),
+        )
+    elif cc.compiles('''int main() { int v = 0; return __atomic_fetch_add(&v, 1, __ATOMIC_SEQ_CST); }''',
+                     name : 'GCC-style atomics', args : test_args)
+        stdatomic_dependency = declare_dependency(
+            include_directories : include_directories('compat/gcc'),
+        )
+    else
+        error('Atomics not supported')
+    endif
+endif
+
+
 librist = library('rist',
 	'src/crypto.c',
 	'src/flow.c',
