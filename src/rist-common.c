@@ -447,9 +447,33 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		f->receiver_queue_has_items = true;
 		return 0; // not a dupe
 	}
+	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
+
 	// Now, get the new position and check what is there
-	size_t idx = seq& (f->receiver_queue_max -1);
-	if (idx == atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire)) {
+	/* We need to check if the reader queue has progressed passed this packet, if
+	   this is the case we silently drop the packet as it would not be output in a
+	   valid way anyway.
+	   We only check this for packets that arrive out of order (i.e.: with a lower
+	   output time than the highest known output time) */
+	size_t idx = seq & (f->receiver_queue_max - 1);
+	size_t reader_idx;
+	if (packet_time < f->last_packet_ts) {
+		size_t highest_written_idx = f->last_seq_found & (f->receiver_queue_max -1);
+		reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
+		/* Either highest written packet is ahead of read idx, and packet should go in between, or
+		   we have wrapped around and packet idx should be bigger than readidx OR smaller than highest
+		   written idx */
+		if ((highest_written_idx > reader_idx && !(idx < highest_written_idx && idx > reader_idx))
+			|| (highest_written_idx < reader_idx && !(idx < highest_written_idx || idx > reader_idx))) {
+			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Packet %"PRIu32" too late, dropping!\n", seq);
+			return -1;
+		}
+
+	}
+	reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
+	if (idx == reader_idx)
+	{
+		//Buffer full!
 		return -1;
 	}
 	if (f->receiver_queue[idx]) {
@@ -461,12 +485,12 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			return 1;
 		}
 		else {
+			//This case should never occur with the check against the read index above
 			msg(f->receiver_id, f->sender_id, RIST_LOG_ERROR, "Invalid Dupe (possible seq discontinuity)! %"PRIu32", freeing buffer ...\n", seq);
 			free_rist_buffer(get_cctx(peer), b);
 			f->receiver_queue[idx] = NULL;
 		}
 	}
-	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
 
 	/* Now, we insert the packet into receiver queue */
 	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, packet_time)) {
