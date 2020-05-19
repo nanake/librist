@@ -162,6 +162,8 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_mutex_init\n", ret);
 		return NULL;
 	}
+	atomic_init(&f->receiver_queue_size, 0);
+	atomic_init(&f->receiver_queue_output_idx, 0);
 
 	/* Append flow to list */
 	rist_flow_append(&ctx->common.FLOWS, f);

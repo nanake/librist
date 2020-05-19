@@ -2306,7 +2306,7 @@ protocol_bypass:
 		size_t total_bytes = 0;
 
 		// Send no more than maxcounter retries for every packet/loop (for uniform spacing)
-		size_t queued_items = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire);
+		size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
 		while (queued_items < 10) {
 			int ret = rist_retry_dequeue(ctx);
 			if (ret == 0) {
@@ -2320,7 +2320,7 @@ protocol_bypass:
 			if (++counter > maxcounter) {
 				break;
 			}
-			queued_items = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire);
+			queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
 		}
 		if (counter > (maxcounter / 2))
 		{

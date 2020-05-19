@@ -333,6 +333,8 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 	ctx->sender_queue_write_index = 0;
 	ctx->sender_queue_delete_index = 0;
 	ctx->sender_queue_max = RIST_SERVER_QUEUE_BUFFERS;
+	atomic_init(&ctx->sender_queue_delete_index, 0);
+	atomic_init(&ctx->sender_queue_write_index, 0);
 
 	msg(0, ctx->id, RIST_LOG_INFO, "[INIT] RIST Sender Library v%d.%d.%d\n",
 		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
