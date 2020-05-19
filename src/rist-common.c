@@ -2465,6 +2465,7 @@ protocol_bypass:
 		uint64_t now  = timestampNTP_u64();
 		ctx->stats_next_time = now;
 		ctx->checks_next_time = now;
+		uint64_t nacks_next_time = now;
 		while(!ctx->common.shutdown) {
 
 			// Conditional 5ms sleep that is woken by data coming in
@@ -2538,7 +2539,10 @@ protocol_bypass:
 				// TODO: put a minimum on the nack and cleanup sending (maybe group them every 1ms)
 				// otherwise for higher bitrates our CPU will not keep up (20Mbps is about 0.5ms spacing)
 				// because of the tight loop
-				sender_send_nacks(ctx, max_nacksperloop);
+				if (nacks_next_time >= now) {
+					sender_send_nacks(ctx, max_nacksperloop);
+					nacks_next_time += ctx->common.rist_max_jitter;
+				}
 				/* perform queue cleanup */
 				rist_clean_sender_enqueue(ctx);
 			}
