@@ -21,7 +21,9 @@ else
 	add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 endif
 
+test_args = []
 if host_machine.system() == 'linux'
+    test_args += '-D_GNU_SOURCE'
 	add_global_arguments(['-D_GNU_SOURCE'], language: 'c')
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
@@ -30,7 +32,6 @@ if host_machine.system() == 'linux'
 endif
 
 # Header checks
-
 stdatomic_dependency = []
 if not cc.check_header('stdatomic.h')
     if cc.get_id() == 'msvc'
@@ -71,7 +72,10 @@ librist = library('rist',
 	'contrib/lz4/xxhash.c',
 	platform_files,
 	include_directories: inc,
-	dependencies: deps,
+	dependencies: [
+		deps,
+		stdatomic_dependency
+	],
 	install: true)
 
 install_headers('include/librist.h')
