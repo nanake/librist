@@ -55,6 +55,7 @@ typedef enum {
 #define atomic_store(p_a, v)          InterlockedExchange((LONG*)p_a, v)
 #define atomic_load(p_a)              InterlockedCompareExchange((LONG*)p_a, 0, 0)
 #define atomic_load_explicit(p_a, mo) atomic_load(p_a)
+#define atomic_store_explicit(p_a, v, mo) atomic_load(p_a, v)
 
 /*
  * TODO use a special call to increment/decrement
@@ -62,6 +63,10 @@ typedef enum {
  */
 #define atomic_fetch_add(p_a, inc)    InterlockedExchangeAdd(p_a, inc)
 #define atomic_fetch_sub(p_a, dec)    InterlockedExchangeAdd(p_a, -(dec))
+#define atomic_fetch_add_explicit(p_a, inc, mo)   atomic_fetch_add(p_a, inc)
+#define atomic_fetch_sub_explicit(p_a, inc, mo)   atomic_fetch_sub(p_a, inc)
+
+
 
 #endif /* ! stdatomic.h */
 
