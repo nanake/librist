@@ -28,7 +28,7 @@
 #define AF_LOCAL AF_UNSPEC
 #define if_nametoindex(name)  atoi(name)
 #define close(s) closesocket(s)
-typedef uint32_t socklen_t;
+typedef int socklen_t;
 
 /* POSIX */
 #else 

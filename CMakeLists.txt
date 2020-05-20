@@ -10,6 +10,15 @@ ENDIF()
 
 find_package (Threads REQUIRED)
 
+INCLUDE(CheckIncludeFiles)
+
+CHECK_INCLUDE_FILES(stdatomic.h HAVE_STDATOMIC_H)
+IF (NOT HAVE_STDATOMIC_H)
+    IF (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+        include_directories(${CMAKE_CURRENT_SOURCE_DIR}/compat/msvc)
+    ENDIF (CMAKE_CXX_COMPILER_ID STREQUAL "MSVC")
+ENDIF (NOT HAVE_STDATOMIC_H)
+
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/contrib/)
