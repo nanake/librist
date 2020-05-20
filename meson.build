@@ -13,11 +13,14 @@ platform_files = []
 inc = include_directories('include', 'contrib')
 
 add_global_arguments(['-Drist_EXPORTS'], language: 'c')
+subproject = meson.is_subproject()
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
-	add_global_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
-else
+	if not subproject
+		add_global_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
+	endif
+elif not subproject
 	add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 endif
 
