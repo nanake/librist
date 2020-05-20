@@ -27,7 +27,9 @@ endif
 test_args = []
 if host_machine.system() == 'linux'
     test_args += '-D_GNU_SOURCE'
-	add_global_arguments(['-D_GNU_SOURCE'], language: 'c')
+	if not subproject
+		add_global_arguments(['-D_GNU_SOURCE'], language: 'c')
+	endif
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
