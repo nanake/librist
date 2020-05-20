@@ -3,7 +3,9 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 #include "librist_udpsocket.h"
+#ifdef __UNIX
 #include <ifaddrs.h>
+#endif
 
 /* Private functions */
 static const int yes = 1; // no = 0;
@@ -85,7 +87,7 @@ int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 }
 
 int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, uint16_t family) {
-#ifdef __linux
+#ifdef __UNIX
 	if (family != AF_INET)
 		return -1;
 	char address[INET6_ADDRSTRLEN];
