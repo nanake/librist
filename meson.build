@@ -102,3 +102,5 @@ if get_option('static_analyze')
 									  'compile_commands.json')])
 	run_target('analyze', command: ['bash', join_paths(meson.source_root(), 'common/scripts/analyze.sh')])
 endif
+
+librist_dep = declare_dependency(include_directories: inc, link_with : librist)
