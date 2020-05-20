@@ -14,15 +14,15 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/include/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/src/)
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/contrib/)
 file(GLOB base "${CMAKE_CURRENT_SOURCE_DIR}/src/*.c")
-file(GLOB extra "${CMAKE_CURRENT_SOURCE_DIR}/extra/*.c")
-file(GLOB lz4 "${CMAKE_CURRENT_SOURCE_DIR}/extra/lz4/*.c")
+file(GLOB extra "${CMAKE_CURRENT_SOURCE_DIR}/contrib/*.c")
+file(GLOB lz4 "${CMAKE_CURRENT_SOURCE_DIR}/contrib/lz4/*.c")
 
 if(${CMAKE_SYSTEM_NAME} MATCHES "Linux")
     set(LINUX TRUE)
 endif()
 
 if (NOT LINUX)
-    list(REMOVE_ITEM extra "${CMAKE_CURRENT_SOURCE_DIR}/extra/linux-crypto.c")
+    list(REMOVE_ITEM extra "${CMAKE_CURRENT_SOURCE_DIR}/contrib/linux-crypto.c")
 endif()
 
 add_library(rist STATIC ${base} ${extra} ${lz4})
