@@ -165,19 +165,19 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 
 	if (raw.sin6_family == AF_INET6) {
 		addrlen = sizeof(struct sockaddr_in6);
-		proto = IPPROTO_IP;
-		ttlcmd = IP_MULTICAST_TTL;
-	} else {
-		addrlen = sizeof(struct sockaddr_in);
 		proto = IPPROTO_IPV6;
 		ttlcmd = IPV6_MULTICAST_HOPS;
+	} else {
+		addrlen = sizeof(struct sockaddr_in);
+		proto = IPPROTO_IP;
+		ttlcmd = IP_MULTICAST_TTL;
 	}
 
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-	if (setsockopt(sd, proto, ttlcmd, &ttl, sizeof(ttl)) == 0) {
+	if (setsockopt(sd, proto, ttlcmd, &ttl, sizeof(ttl)) < 0) {
 		/* Non-critical error */
 		fprintf(stderr, "Cannot set socket MAX HOPS: %s\n", strerror(errno));
 	}
