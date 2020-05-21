@@ -435,7 +435,7 @@ int main(int argc, char *argv[])
 
 	uint8_t buffer[MPEG_BUFFER_SIZE];
 	while (!signalReceived) {
-		r = recv(mpeg, buffer, MPEG_BUFFER_SIZE, 0);
+		r = udpsocket_recv(mpeg, buffer, MPEG_BUFFER_SIZE);
 		if (r > 0) {
 			struct rist_data_block data_block;
 			data_block.payload = buffer;
