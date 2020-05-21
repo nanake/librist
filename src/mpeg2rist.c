@@ -319,6 +319,13 @@ int main(int argc, char *argv[])
 		}
 	}
 
+	/* We need to initialize the context first for windows socket startup to happen */
+	struct rist_sender *ctx;
+	if (rist_sender_create(&ctx, profile, 0, loglevel) != 0) {
+		fprintf(stderr, "Could not create rist sender context\n");
+		exit(1);
+	}
+
 	/* MPEG Side: listen to the given address */
 	char hostname[200] = {0};
 	int inputlisten;
@@ -330,7 +337,7 @@ int main(int argc, char *argv[])
 	fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 	mpeg = udpsocket_open_bind(hostname, inputport, miface);
 	if (mpeg <= 0) {
-		fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, inputport);
+		fprintf(stderr, "[ERROR] Could not bind to: Host %s, Port %d (%d)\n", (char *) hostname, inputport, mpeg);
 		exit(1);
 	} else {
 		fprintf(stderr, "Input socket is open and bound\n");
@@ -350,12 +357,6 @@ int main(int argc, char *argv[])
 	/* Turn on stderr (2) logs */
 	if (rist_logs_set(STDERR_FILENO, NULL) != 0) {
 		fprintf(stderr, "Could not set logging\n");
-		exit(1);
-	}
-
-	struct rist_sender *ctx;
-	if (rist_sender_create(&ctx, profile, 0, loglevel) != 0) {
-		fprintf(stderr, "Could not create rist sender context\n");
 		exit(1);
 	}
 
