@@ -16,8 +16,8 @@
 
 extern char* stats_to_json(struct rist_stats *stats);
 
-#define INPUT_COUNT 4
-#define OUTPUT_COUNT 2
+#define PEER_COUNT 4
+#define UDP_COUNT 2
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -u | --url ADDRESS:PORT                                         * | Output IP address and port                          |\n"
@@ -100,7 +100,7 @@ void usage(char *name)
 	exit(1);
 }
 
-static int mpeg[OUTPUT_COUNT];
+static int mpeg[UDP_COUNT];
 static int keep_running = 1;
 
 struct rist_port_filter {
@@ -123,7 +123,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 		return -1;
 	}
 
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < UDP_COUNT; i++) {
 		if (mpeg[i] > 0) {
 			udpsocket_send(mpeg[i], b->payload, b->payload_len);
 		}
@@ -179,9 +179,9 @@ static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 int main(int argc, char *argv[])
 {
 	int option_index;
-	char *url[OUTPUT_COUNT];
-	char *miface[OUTPUT_COUNT];
-	char *addr[INPUT_COUNT];
+	char *url[UDP_COUNT];
+	char *miface[UDP_COUNT];
+	char *addr[PEER_COUNT];
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char c;
@@ -221,13 +221,13 @@ typedef signed int ssize_t;
 	sigaction(SIGINT, &act, NULL);
 #endif
 
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < UDP_COUNT; i++) {
 		url[i] = NULL;
 		miface[i] = NULL;
 		mpeg[i] = 0;
 	}
 
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	for (size_t i = 0; i < PEER_COUNT; i++) {
 		addr[i] = NULL;
 	}
 
@@ -327,7 +327,7 @@ typedef signed int ssize_t;
 	// For some reason under windows the empty len is 1
 
 	bool all_url_null = true;
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < UDP_COUNT; i++) {
 		if (url[i] != NULL) {
 			all_url_null = false;
 			break;
@@ -381,7 +381,7 @@ typedef signed int ssize_t;
 		rist_receiver_stats_callback_set(ctx, statsinterval, cb_stats, NULL);
 	}
 
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	for (size_t i = 0; i < PEER_COUNT; i++) {
 		if (addr[i] == NULL) {
 			continue;
 		}
@@ -433,7 +433,7 @@ typedef signed int ssize_t;
 
 	/* Mpeg side */
 	bool atleast_one_socket_opened = false;
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < UDP_COUNT; i++) {
 		if (url[i] == NULL) {
 			continue;
 		}
@@ -447,7 +447,7 @@ typedef signed int ssize_t;
 		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
 		mpeg[i] = udpsocket_open_connect(hostname, outputport, miface[i]);
 		if (mpeg[i] <= 0) {
-			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
+			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d (%d)\n", (char *) hostname, outputport, mpeg);
 			continue;
 		} else {
 			fprintf(stderr, "Output socket is open and bound\n");
@@ -495,7 +495,7 @@ typedef signed int ssize_t;
 		free(shared_secret);
 	if (cname)
 		free(cname);
-	for (ssize_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (ssize_t i = 0; i < UDP_COUNT; i++) {
 		if (url[i])
 			free(url[i]);
 		if (miface[i])
@@ -503,7 +503,7 @@ typedef signed int ssize_t;
 		if (mpeg[i])
 			udpsocket_close(mpeg[i]);
 	}
-	for (ssize_t i = 0; i < INPUT_COUNT; i++) {
+	for (ssize_t i = 0; i < PEER_COUNT; i++) {
 		if (addr[i])
 			free(addr[i]);
 	}
