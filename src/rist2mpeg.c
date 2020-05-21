@@ -16,8 +16,8 @@
 
 extern char* stats_to_json(struct rist_stats *stats);
 
-#define INPUT_COUNT 2
-#define OUTPUT_COUNT 4
+#define INPUT_COUNT 4
+#define OUTPUT_COUNT 2
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -u | --url ADDRESS:PORT                                         * | Output IP address and port                          |\n"
@@ -179,9 +179,9 @@ static int cb_stats(void *arg, struct rist_stats *rist_stats) {
 int main(int argc, char *argv[])
 {
 	int option_index;
-	char *url[INPUT_COUNT];
-	char *miface[INPUT_COUNT];
-	char *addr[OUTPUT_COUNT];
+	char *url[OUTPUT_COUNT];
+	char *miface[OUTPUT_COUNT];
+	char *addr[INPUT_COUNT];
 	char *shared_secret = NULL;
 	char *cname = NULL;
 	char c;
@@ -221,13 +221,13 @@ typedef signed int ssize_t;
 	sigaction(SIGINT, &act, NULL);
 #endif
 
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		url[i] = NULL;
 		miface[i] = NULL;
 		mpeg[i] = 0;
 	}
 
-	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
+	for (size_t i = 0; i < INPUT_COUNT; i++) {
 		addr[i] = NULL;
 	}
 
@@ -327,7 +327,7 @@ typedef signed int ssize_t;
 	// For some reason under windows the empty len is 1
 
 	bool all_url_null = true;
-	for (size_t i = 0; i < INPUT_COUNT; i++) {
+	for (size_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (url[i] != NULL) {
 			all_url_null = false;
 			break;
@@ -495,17 +495,17 @@ typedef signed int ssize_t;
 		free(shared_secret);
 	if (cname)
 		free(cname);
-	for (ssize_t i = 0; i < INPUT_COUNT; i++) {
+	for (ssize_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (url[i])
 			free(url[i]);
 		if (miface[i])
 			free(miface[i]);
-	}
-	for (ssize_t i = 0; i < OUTPUT_COUNT; i++) {
-		if (addr[i])
-			free(addr[i]);
 		if (mpeg[i])
 			udpsocket_close(mpeg[i]);
+	}
+	for (ssize_t i = 0; i < INPUT_COUNT; i++) {
+		if (addr[i])
+			free(addr[i]);
 	}
 	return 0;
 }
