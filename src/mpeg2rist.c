@@ -451,6 +451,8 @@ int main(int argc, char *argv[])
 
 	rist_sender_destroy(ctx);
 
+	if (mpeg)
+		udpsocket_close(mpeg);
 	if (shared_secret)
 		free(shared_secret);
 	if (cname)

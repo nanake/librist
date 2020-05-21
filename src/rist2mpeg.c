@@ -504,6 +504,8 @@ typedef signed int ssize_t;
 	for (ssize_t i = 0; i < OUTPUT_COUNT; i++) {
 		if (addr[i])
 			free(addr[i]);
+		if (mpeg[i])
+			udpsocket_close(mpeg[i]);
 	}
 	return 0;
 }
