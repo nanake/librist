@@ -48,7 +48,13 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 
 int udpsocket_open(uint16_t af)
 {
-	return socket(af, SOCK_DGRAM, 0);
+	int sd = socket(af, SOCK_DGRAM, 0);
+	if (sd < 0) {
+#ifdef _WIN32
+		sd = -1 * WSAGetLastError();
+#endif
+	}
+	return sd;
 }
 
 int udpsocket_set_buffer_size(int sd, uint32_t bufsize)
@@ -159,7 +165,7 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 	if (udpsocket_resolve_host(host, port, (struct sockaddr *)&raw) < 0)
 		return -1;
 
-	sd = socket(raw.sin6_family, SOCK_DGRAM, 0);
+	sd = udpsocket_open(raw.sin6_family);
 	if (sd < 0)
 		return sd;
 
@@ -202,7 +208,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 	if (udpsocket_resolve_host(host, port, (struct sockaddr *)&raw) < 0)
 		return -1;
 
-	sd = socket(raw.sin6_family, SOCK_DGRAM, 0);
+	sd = udpsocket_open(raw.sin6_family);
 	if (sd < 0)
 		return sd;
 
