@@ -56,8 +56,8 @@ __BEGIN_DECLS
 
 /* Track PROTOCOL and API changes */
 #define RIST_PROTOCOL_VERSION (2)
-#define RIST_API_VERSION (8)
-#define RIST_SUBVERSION (2)
+#define RIST_API_VERSION (9)
+#define RIST_SUBVERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
 
 /* Default peer config values */

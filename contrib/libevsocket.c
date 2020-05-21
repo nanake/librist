@@ -333,7 +333,7 @@ static void serve_event(struct evsocket_ctx *ctx, int n)
 
 /*** PUBLIC API ***/
 
-struct evsocket_ctx *evsocket_init(void)
+struct evsocket_ctx *evsocket_create(void)
 {
 	struct evsocket_ctx *ctx;
 
@@ -459,7 +459,7 @@ void evsocket_loop_finalize(struct evsocket_ctx *ctx)
 	free(ctx);
 }
 
-void evsocket_fini(struct evsocket_ctx *ctx)
+void evsocket_destroy(struct evsocket_ctx *ctx)
 {
 	ctx->giveup = 1;
 }

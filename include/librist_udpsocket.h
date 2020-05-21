@@ -42,6 +42,7 @@ typedef int socklen_t;
 #include <netinet/ip6.h>
 #include <netinet/in.h>
 #include <net/if.h>
+#include <poll.h>
 #endif /* Windows / POSIX */
 
 /*** Public API ***/
@@ -108,5 +109,26 @@ RIST_API int udpsocket_close(int sd);
 RIST_API int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local);
 RIST_API int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *params,
          int max_params, uint32_t *clean_url_len);
+
+
+/* evsocket related functions */
+
+#define EVSOCKET_EV_READ POLLIN
+#define EVSOCKET_EV_WRITE POLLOUT
+
+struct evsocket_event;
+struct evsocket_ctx;
+
+RIST_API struct evsocket_ctx *evsocket_create(void);
+RIST_API void evsocket_loop(struct evsocket_ctx *ctx);
+RIST_API void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout);
+RIST_API void evsocket_loop_finalize(struct evsocket_ctx *ctx);
+RIST_API void evsocket_destroy(struct evsocket_ctx *ctx);
+RIST_API struct evsocket_event *evsocket_addevent(struct evsocket_ctx *ctx, int fd, short events,
+			void (*callback)(struct evsocket_ctx *ctx, int fd, short revents, void *arg),
+			void (*err_callback)(struct evsocket_ctx *ctx, int fd, short revents, void *arg),
+			void *arg);
+
+RIST_API void evsocket_delevent(struct evsocket_ctx *ctx, struct evsocket_event *e);
 
 #endif /* ifndef UDPSOCKET_H */

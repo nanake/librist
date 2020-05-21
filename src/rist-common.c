@@ -2590,7 +2590,7 @@ protocol_bypass:
 			return -1;
 		}
 #endif
-		ctx->evctx = evsocket_init();
+		ctx->evctx = evsocket_create();
 		ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
 		if (profile > RIST_PROFILE_ADVANCED) {
 			msg(receiver_id, sender_id, RIST_LOG_ERROR, "[ERROR] Profile not supported (%d), using main profile instead\n", profile);
