@@ -34,10 +34,15 @@ __BEGIN_DECLS
 #endif /* defined(_WIN32) || defined(__CYGWIN__) */
 
 #ifdef _WIN32
+#if defined(__GNUC__)
+# define RIST_PACKED_STRUCT(sname,sbody) \
+struct __attribute__((packed)) sname sbody;
+#else
 # define RIST_PACKED_STRUCT(sname,sbody) \
 __pragma( pack(push, 1) ) \
 struct sname sbody; \
 __pragma( pack(pop) )
+#endif
 #else
 # define RIST_PACKED_STRUCT(sname,sbody) \
 struct __attribute__((packed)) sname sbody;
@@ -62,7 +67,31 @@ struct __attribute__((packed)) sname sbody;
 
 #ifdef _WIN32
 #ifdef _WIN64
+#ifdef __GNUC__
+typedef long long ssize_t;
+enum
+{
+    POLLERR=0x1,
+    POLLHUP=0x2,
+    POLLNVAL=0x4,
+    POLLWRNORM=0x10,
+    POLLWRBAND=0x20,
+    POLLRDNORM=0x100,
+    POLLRDBAND=0x200,
+    POLLPRI=0x400,
+};
+#define POLLIN  (POLLRDNORM|POLLRDBAND)
+#define POLLOUT (POLLWRNORM|POLLWRBAND)
+struct pollfd
+{
+    int fd;
+    unsigned events;
+    unsigned revents;
+};
+struct pollfd;
+#else
 typedef __int64 ssize_t;
+#endif
 #else
 typedef signed int ssize_t;
 #endif

@@ -22,9 +22,9 @@
 
 /* Windows */
 #ifdef _WIN32
-#include <WinSock2.h>
+#include <winsock2.h>
 #define _WINSOCKAPI_
-#include <Windows.h>
+#include <windows.h>
 #include <ws2tcpip.h>
 #define AF_LOCAL AF_UNSPEC
 #define if_nametoindex(name)  atoi(name)
