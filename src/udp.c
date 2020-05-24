@@ -1290,50 +1290,146 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	size_t idx = rist_sender_index_get(ctx, seq);
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
 	struct rist_retry *retry;
+
+	// Even though all the checks are on the dequeue function, we leave one here
+	// to prevent the flooding of our fifo .. It is based on the date of the
+	// last queued item with the same seq for this peer.
+	// The policy of whether to allow or not allow duplicate seq entries in the retry queue
+	// is dependent on the bloat_mode.
+	// bloat_mode disabled mode = unlimited duplicates
+	// bloat_mode normal mode = we enforce spacing but allow duplicates
+	// bloat_mode aggresive mode = no duplicates allowed
+	// This is a safety check to protect against buggy or non compliant receivers that request the
+	// same seq number without waiting one RTT.
+
 	if (!buffer)
 	{
 		msg(0, ctx->id, RIST_LOG_WARN,
-			"[ERROR] Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
+			"[WARNING] Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
 			ctx->sender_recover_min_time);
 		return;
-	} else if (ctx->peer_lst_len == 1) {
-		if (buffer->last_retry_request != 0)
-		{
-			// Even though all the checks are on the dequeue function, we leave this one here
-			// to prevent the flooding of our fifo .. It is only based on the date of the
-			// last queued item with the same seq.
-			// This is a safety check to protect against buggy or non compliant receivers that request the
-			// same seq number without waiting one RTT. We are lenient and even allow 1/2 RTT
-			uint64_t delta = 2 * (now - buffer->last_retry_request) / RIST_CLOCK;
+	} else {
+		uint64_t age_ticks =  (now - buffer->time);
+		if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_OFF) {
+			// All duplicates allowed, just report it
 			if (ctx->common.debug)
 				msg(0, ctx->id, RIST_LOG_DEBUG,
-					"[DEBUG] Nack request for seq %" PRIu32 " with delta %" PRIu64 " and rtt_min %" PRIu32 "\n",
-					buffer->seq, delta, peer->config.recovery_rtt_min);
-			if (delta < peer->config.recovery_rtt_min)
+					"[DEBUG] Nack request for seq %" PRIu32 " with age %" PRIu64 "ms and rtt_min %" PRIu32 " for peer #%d\n",
+					buffer->seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id);
+		} else if (ctx->peer_lst_len == 1) {
+			// Only one peer (faster algorithm with no lookups)
+			if (buffer->last_retry_request != 0)
 			{
-				msg(0, ctx->id, RIST_LOG_WARN,
-					"[ERROR] Nack request for seq %" PRIu32 "/%" PRIu32 " is already queued, %" PRIu64 " < %" PRIu32 "\n",
-					buffer->seq, idx, delta, peer->config.recovery_rtt_min);
-				// TODO: stats?
-				return;
+				// This is a safety check to protect against buggy or non compliant receivers that request the
+				// same seq number without waiting one RTT.
+				uint64_t delta = (now - buffer->last_retry_request) / RIST_CLOCK;
+				if (ctx->common.debug)
+					msg(0, ctx->id, RIST_LOG_DEBUG,
+						"[DEBUG] Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms, age %" PRIu64 "ms and rtt_min %" PRIu32 "\n",
+						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
+				if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+					if (delta < peer->config.recovery_rtt_min)
+					{
+						msg(0, ctx->id, RIST_LOG_WARN,
+							"[WARNING] Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu32 " ms\n",
+							buffer->seq, age_ticks / RIST_CLOCK, delta, peer->config.recovery_rtt_min);
+						peer->stats_sender_instant.bloat_skip++;
+						return;
+					}
+				}
+				else
+				{
+					msg(0, ctx->id, RIST_LOG_WARN,
+						"[WARNING] Nack request for seq %" PRIu32 ", delta/age %"PRIu64"ms/%"PRIu64"ms is already queued, skipped\n",
+						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
+						peer->stats_sender_instant.bloat_skip++;
+					return;
+				}
 			}
-		}
-	} else {
-		// Now insert into the missing queue	
-		size_t index = ctx->sender_retry_queue_read_index;
-		while (index != ctx->sender_retry_queue_write_index) {
-			retry = &ctx->sender_retry_queue[index];
-			if (retry->seq == seq && retry->peer == peer) {
-				msg(0, ctx->id, RIST_LOG_WARN,
-					"[WARNING] Nack request for seq %" PRIu32 "/%" PRIu32 " is already queued, for pear %s\n",
-					buffer->seq, idx, peer->cname);
-				return;
-			} else if (++index >= ctx->sender_retry_queue_size)
+			else
 			{
-				index= 0;
+				if (ctx->common.debug)
+					msg(0, ctx->id, RIST_LOG_DEBUG,
+						"[DEBUG] First nack request for seq %"PRIu32", age %"PRIu64"ms\n", buffer->seq, age_ticks / RIST_CLOCK);
+			}
+		} else {
+			// Multiple peers, we need to search for other retries in the queue for comparison
+			uint64_t delta = 0;
+			size_t index_end = 0;
+			size_t index = 0;
+			// We search forward for aggressive mode and backwards for normal
+			if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
+				index = ctx->sender_retry_queue_read_index;
+				index_end = ctx->sender_retry_queue_write_index;
+			} else {
+				index = ctx->sender_retry_queue_write_index;
+				index_end = ctx->sender_retry_queue_read_index;
+			}
+			while (index != index_end) {
+				if (ctx->sender_retry_queue_size > 10 && (index % 10) == 10) {
+					// We completely bypass this check if/when it takes too long as we are
+					// blocking the protocol thread (it could happen when the queue gets too big)
+					uint64_t loop_time = timestampNTP_u64() - now;
+					if (loop_time > ctx->common.rist_max_jitter) {
+						if (ctx->common.debug)
+							msg(0, ctx->id, RIST_LOG_DEBUG,
+								"[DEBUG] Bypassing duplicate nack request check for seq %"PRIu32" after %"PRIu64"ms, age %"PRIu64"ms, q_size = %zu (taking too long)\n",
+								buffer->seq, loop_time / RIST_CLOCK, age_ticks / RIST_CLOCK, ctx->sender_retry_queue_size);
+						break;
+					}
+				}
+				retry = &ctx->sender_retry_queue[index];
+				if (retry->seq == seq && retry->peer == peer) {
+					delta = (now - retry->insert_time) / RIST_CLOCK;
+					if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+						if (delta < peer->config.recovery_rtt_min)
+						{
+							msg(0, ctx->id, RIST_LOG_WARN,
+								"[WARNING] Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
+								buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+							peer->stats_sender_instant.bloat_skip++;
+							return;
+						}
+						else {
+							// There is only one in the queue for bloat_mode agresive
+							// and we area only interested on the last one queued for bloat_mode normal
+							break;
+						}
+					} else {
+						msg(0, ctx->id, RIST_LOG_WARN,
+							"[WARNING] Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued, skipped, peer #%d '%s'\n",
+							buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+						peer->stats_sender_instant.bloat_skip++;
+						return;
+					}
+				}
+				// We search forward for aggressive mode and backwards for normal
+				if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE)
+				{
+					if (++index >= ctx->sender_retry_queue_size)
+						index= 0;
+				}
+				else
+				{
+					if (--index < 0)
+						index = ctx->sender_retry_queue_size;
+				}
+			}
+			if (ctx->common.debug) {
+				if (delta) {
+					msg(0, ctx->id, RIST_LOG_DEBUG,
+						"[DEBUG] Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) and rtt_min %" PRIu32 " for peer #%d '%s'\n",
+						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
+				} else {
+					msg(0, ctx->id, RIST_LOG_DEBUG,
+						"[DEBUG] First nack request for seq %"PRIu32"ms, age %"PRIu64"ms, peer #%d '%s'\n",
+						buffer->seq, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+				}
 			}
 		}
 	}
+	// Now insert into the missing queue
+	buffer->last_retry_request = now;
 	retry = &ctx->sender_retry_queue[ctx->sender_retry_queue_write_index];
 	retry->seq = seq;
 	retry->peer = peer;
