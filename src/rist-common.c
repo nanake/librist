@@ -563,7 +563,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			b->nack_count++;
 
 			if (get_cctx(peer)->debug)
-				msg(f->receiver_id, f->sender_id, RIST_LOG_DEBUG, "[DEBUG] Datagram %" PRIu32 " is missing, sending NACK!, next retry in %" PRIu64 "ms, age is %" PRIu64 "msdelay_rt, retry #%lu, max_size is %" PRIu64 "ms\n",
+				msg(f->receiver_id, f->sender_id, RIST_LOG_DEBUG, "[DEBUG] Datagram %" PRIu32 " is missing, sending NACK!, next retry in %" PRIu64 "ms, age is %" PRIu64 "ms, retry #%lu, max_size is %" PRIu64 "ms\n",
 					b->seq, (b->next_nack - now) / RIST_CLOCK,
 					(now - b->insertion_time) / RIST_CLOCK,
 					b->nack_count,
@@ -2177,12 +2177,21 @@ protocol_bypass:
 				p->remote_port = payload.src_port;
 				p->local_port = payload.dst_port;
 			}
-			msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u<-%u\n",
+			if (peer->receiver_mode) {
+				msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
 					flow_id, new_peer_id, p->local_port, p->remote_port);
-			if (peer->receiver_mode)
 				p->adv_flow_id = flow_id;
-			else
+			}
+			else {
+				if (flow_id) {
+					msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New reverse RTCP peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+							flow_id, new_peer_id, p->local_port, p->remote_port);
+				} else {
+					msg(receiver_id, sender_id, RIST_LOG_INFO, "[INIT] New reverse RTCP peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
+							new_peer_id, p->local_port, p->remote_port);
+				}
 				p->adv_flow_id = p->sender_ctx->adv_flow_id;
+			}
 			// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
 			p->address_family = family;
 			p->address_len = addrlen;
