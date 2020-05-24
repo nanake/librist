@@ -87,6 +87,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 		struct rist_peer *peer = f->peer_lst[i];
 		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
 		peer->flow = NULL;
+		peer->adv_flow_id = 0;
 	}
 	f->peer_lst_len = 0;
 	free(f->peer_lst);
