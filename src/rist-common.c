@@ -617,9 +617,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->receiver_queue[f->receiver_queue_output_idx];
+		size_t holes = 0;
 		if (!b) {
 			//msg(ctx->id, 0, RIST_LOG_ERROR, "\tLooking for first non-null packet (%zu)\n", f->receiver_queue_size);
-			size_t holes = 0;
 			size_t counter = 0;
 			counter = f->receiver_queue_output_idx;
 			while (!b) {
@@ -683,9 +683,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				uint32_t next_seq = f->last_seq_output + 1;
 				if (f->short_seq)
 					next_seq = (uint16_t)next_seq;
-				if (b->seq != next_seq) {
+				if (b->seq != next_seq && !holes) {
 					msg(ctx->id, 0, RIST_LOG_ERROR,
-							"**** [LOST] Expected %" PRIu32 " got %" PRIu32 "\n",
+							"**** [LOST] Discontinuity, expected %" PRIu32 " got %" PRIu32 "\n",
 							f->last_seq_output + 1, b->seq);
 					f->stats_instant.lost++;
 				}
