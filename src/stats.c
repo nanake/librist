@@ -10,6 +10,12 @@
 #include "udp-private.h"
 #include <string.h>
 
+static double round_two_digits(double number)
+{
+	long new_number = (long)(number * 100);
+	return (double)(new_number) / 100;
+}
+
 void rist_sender_peer_statistics(struct rist_peer *peer)
 {
 	// TODO: print warning here?? stale flow?
@@ -43,6 +49,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	{
 		Q = (double)((peer->stats_sender_instant.sent) * 100.0) /
 			(double)(peer->stats_sender_instant.sent + peer->stats_sender_instant.bloat_skip + peer->stats_sender_instant.retrans_skip + peer->stats_sender_instant.retrans);
+		Q = round_two_digits(Q);
 	}
 
 	uint32_t time_left = 0;
@@ -125,6 +132,7 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 		{
 			QpeerInstant = (double)((peer->stats_receiver_instant.recv) * 100.0) /
 						   (double)(peer->stats_receiver_instant.recv + peer->stats_receiver_instant.missing);
+			QpeerInstant = round_two_digits(QpeerInstant);
 		}
 
 		if ((peer->stats_receiver_instant.recovered - peer->stats_receiver_instant.reordered) > 0)
@@ -249,6 +257,7 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 	{
 		Q = (double)((flow_recv_instant)*100.0) /
 			(double)(flow_recv_instant + flow_missing_instant);
+		Q = round_two_digits(Q);
 	}
 
 	// This last one should trigger buffer protection immediately
