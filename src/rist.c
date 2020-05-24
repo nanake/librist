@@ -3,6 +3,8 @@
 #include "udp-private.h"
 #include <assert.h>
 
+extern uint32_t generate_flowid(uint64_t birthtime, uint32_t pid, const char *phrase);
+
 int rist_sender_jitter_max_set(struct rist_sender *ctx, int t)
 {
 	return rist_max_jitter_set(&ctx->common, t);
@@ -353,14 +355,12 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 
 	if (flow_id == 0)
 	{
-		uint64_t now;
-		struct timeval time;
-		gettimeofday(&time, NULL);
-		now = time.tv_sec * 1000000;
-		now += time.tv_usec;
-		flow_id = (uint32_t)(now >> 16);
-		// It must me an even number
-		flow_id &= ~(1UL << 0);
+		char hostname[RIST_MAX_HOSTNAME];
+		int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
+		if (ret_hostname == -1) {
+			snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
+		}
+		flow_id = generate_flowid(timestampNTP_u64(), getpid(), hostname);
 	}
 
 	ctx->adv_flow_id = flow_id;
