@@ -138,7 +138,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 		}
 
 		/* our buffer size is zero, it must be just building up */
-		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {
+		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
 			break;
 		}
 
@@ -909,16 +909,17 @@ static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct ris
 	if (cctx->profile == RIST_PROFILE_ADVANCED) {
 		struct rist_sender *ctx = peer->sender_ctx;
 		pthread_rwlock_wrlock(&ctx->queue_lock);
-		ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(cctx, rtcp_buf, payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-		if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index]))
+		size_t sender_write_index = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire);
+		ctx->sender_queue[sender_write_index] = rist_new_buffer(cctx, rtcp_buf, payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
+		if (RIST_UNLIKELY(!ctx->sender_queue[sender_write_index]))
 		{
 			msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 			pthread_rwlock_unlock(&ctx->queue_lock);
 			return;
 		}
-		ctx->sender_queue[ctx->sender_queue_write_index]->peer = peer;
+		ctx->sender_queue[sender_write_index]->peer = peer;
 		ctx->sender_queue_bytesize += payload_len;
-		atomic_store_explicit(&ctx->sender_queue_write_index, (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
+		atomic_store_explicit(&ctx->sender_queue_write_index, (sender_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return;
 	}
@@ -1027,15 +1028,16 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint
 
 	/* insert into sender fifo queue */
 	pthread_rwlock_wrlock(&ctx->queue_lock);
-	ctx->sender_queue[ctx->sender_queue_write_index] = rist_new_buffer(&ctx->common, data, len, payload_type, 0, datagram_time, src_port, dst_port);
-	ctx->sender_queue[ctx->sender_queue_write_index]->seq_rtp = seq_rtp;
-	if (RIST_UNLIKELY(!ctx->sender_queue[ctx->sender_queue_write_index])) {
+	size_t sender_write_index = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire);
+	ctx->sender_queue[sender_write_index] = rist_new_buffer(&ctx->common, data, len, payload_type, 0, datagram_time, src_port, dst_port);
+	if (RIST_UNLIKELY(!ctx->sender_queue[sender_write_index])) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_rwlock_unlock(&ctx->queue_lock);
 		return -1;
 	}
+	ctx->sender_queue[sender_write_index]->seq_rtp = seq_rtp;
 	ctx->sender_queue_bytesize += len;
-	atomic_store_explicit(&ctx->sender_queue_write_index, (ctx->sender_queue_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
+	atomic_store_explicit(&ctx->sender_queue_write_index, (sender_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
 	pthread_rwlock_unlock(&ctx->queue_lock);
 
 	return 0;
@@ -1162,7 +1164,7 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 //			ctx->sender_retry_queue_write_index);
 
 	// TODO: Is this logic flawed and we are always one unit behind (look at oob_dequee)
-	size_t sender_retry_queue_read_index = (ctx->sender_retry_queue_read_index + 1) % ctx->sender_retry_queue_size;
+	size_t sender_retry_queue_read_index = (ctx->sender_retry_queue_read_index + 1)& (ctx->sender_retry_queue_size -1);
 
 	if (sender_retry_queue_read_index == ctx->sender_retry_queue_write_index) {
 		//msg(0, ctx->id, RIST_LOG_ERROR,
@@ -1181,22 +1183,22 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 	if (ctx->sender_queue[idx] == NULL) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), consider increasing the buffer size\n",
-			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	} else if (ctx->common.profile == RIST_PROFILE_ADVANCED && ctx->sender_queue[idx]->seq != retry->seq) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), something is very wrong!\n",
-			retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			"[LOST] Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), something is very wrong!\n",
+			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
 	else if (ctx->common.profile < RIST_PROFILE_ADVANCED && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
-			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%"PRIu64"), bitrate is too high, use advanced profile instead\n",
-			(uint16_t)retry->seq, idx, ctx->sender_queue_read_index, ctx->sender_queue_write_index, ctx->sender_queue_delete_index,
+			"[LOST] Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), bitrate is too high, use advanced profile instead\n",
+			(uint16_t)retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;

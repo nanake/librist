@@ -442,7 +442,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			/* Clear the queue if the queue had data */
 			/* f->receiver_queue_has_items can be reset to false when the output queue is emptied */
 			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-					"[INFO] Clearing up old %zu bytes of old buffer data\n", f->receiver_queue_size);
+					"[INFO] Clearing up old %zu bytes of old buffer data\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 			/* Delete all buffer data (if any) */
 			empty_receiver_queue(f, get_cctx(peer));
 		}
@@ -454,12 +454,12 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		f->max_source_time = source_time;
 		/* This will synchronize idx and seq so we can insert packets into receiver buffer based on seq number */
 		size_t idx_initial = seq& (f->receiver_queue_max -1);
-		f->receiver_queue_output_idx = idx_initial;
-		msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-				"[INIT] Storing first packet seq %"PRIu32", idx %zu, %"PRIu64", offset %"PRId64" ms\n",
-				seq, idx_initial, source_time, peer->flow->time_offset/RIST_CLOCK);
+			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
+				"[INIT] Storing first packet seq %" PRIu32 ", idx %zu, %" PRIu64 ", offset %" PRId64 " ms\n",
+				seq, idx_initial, source_time, peer->flow->time_offset / RIST_CLOCK);
 		uint64_t packet_time = source_time + f->time_offset;
 		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, packet_time);
+		atomic_store_explicit(&f->receiver_queue_output_idx, idx_initial, memory_order_release);
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->receiver_queue_has_items = true;
@@ -632,31 +632,32 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
 	uint64_t now = timestampNTP_u64();
+	size_t output_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
 		// Find the first non-null packet in the queuecounter loop
-		struct rist_buffer *b = f->receiver_queue[f->receiver_queue_output_idx];
+		struct rist_buffer *b = f->receiver_queue[output_idx];
 		size_t holes = 0;
 		if (!b) {
 			//msg(ctx->id, 0, RIST_LOG_ERROR, "\tLooking for first non-null packet (%zu)\n", f->receiver_queue_size);
 			size_t counter = 0;
-			counter = f->receiver_queue_output_idx;
+			counter = output_idx;
 			while (!b) {
 				counter = (counter + 1)& (f->receiver_queue_max -1);
 				holes++;
 				b = f->receiver_queue[counter];
-				if (counter == f->receiver_queue_output_idx) {
+				if (counter == output_idx) {
 					// TODO: with the check below, this should never happen
-					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after a full counter loop (%zu)\n", f->receiver_queue_size);
+					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after a full counter loop (%zu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					// if the entire buffer is empty, something is very wrong, reset the queue ...
 					f->receiver_queue_has_items = false;
-					f->receiver_queue_size = 0;
+					atomic_store_explicit(&f->receiver_queue_size, 0, memory_order_release);
 					// exit the function and wait 5ms (max jitter time)
 					return;
 				}
 				if (holes > f->missing_counter_max)
 				{
 					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after %zu holes (%zu bytes in queue)\n",
-							holes, f->receiver_queue_size);
+							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					break;
 				}
 			}
@@ -670,10 +671,10 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 			}
 			f->stats_instant.lost += holes;
-			atomic_store_explicit(&f->receiver_queue_output_idx, counter, memory_order_release);
+			output_idx = counter;
 			msg(ctx->id, 0, RIST_LOG_ERROR,
 					"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
-					holes, counter, f->receiver_queue_size);
+					holes, counter, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 		}
 		if (b) {
 			if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
@@ -738,9 +739,10 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 			f->last_seq_output = b->seq;
 			atomic_fetch_sub_explicit(&f->receiver_queue_size, b->size, memory_order_relaxed);
-			f->receiver_queue[f->receiver_queue_output_idx] = NULL;
+			f->receiver_queue[output_idx] = NULL;
 			free_rist_buffer(&ctx->common, b);
-			atomic_store_explicit(&f->receiver_queue_output_idx, ((f->receiver_queue_output_idx + 1)& (f->receiver_queue_max -1)), memory_order_release);
+			output_idx = (output_idx + 1)& (f->receiver_queue_max -1);
+			atomic_store_explicit(&f->receiver_queue_output_idx, output_idx, memory_order_release);
 			if (f->receiver_queue_size == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
@@ -757,6 +759,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			f->last_output_time = now;
 		}
 	}
+
 }
 
 static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f, struct rist_peer *peer)
@@ -2389,9 +2392,9 @@ protocol_bypass:
 				break;
 			}
 
-			size_t idx = (ctx->sender_queue_read_index + 1)& (ctx->sender_queue_max-1);
+			size_t idx = (atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire) + 1)& (ctx->sender_queue_max-1);
 
-			if (idx == ctx->sender_queue_write_index) {
+			if (idx == atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed)) {
 				//msg(0, ctx->id, RIST_LOG_ERROR,
 				//    "\t[GOOD] We are all up to date, index is %d\n",
 				//    ctx->sender_queue_read_index);
@@ -2403,7 +2406,7 @@ protocol_bypass:
 				// This should never happen!
 				msg(0, ctx->id, RIST_LOG_ERROR,
 						"[ERROR] FIFO data block was null (read/write) (%zu/%zu)\n",
-						ctx->sender_queue_read_index, ctx->sender_queue_write_index);
+						idx, atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed));
 				continue;
 			} else {
 				struct rist_buffer *buffer =  ctx->sender_queue[idx];
@@ -3180,14 +3183,14 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	free(ctx->sender_retry_queue);
 	struct rist_buffer *b = NULL;
 	while(1) {
-		if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index) {
+		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
 			break;
 		}
 		b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		while (!b) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
-			if (ctx->sender_queue_write_index == ctx->sender_queue_delete_index)
+			if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed) == ctx->sender_queue_delete_index)
 				break;
 		}
 		ctx->sender_queue_bytesize -= b->size;

@@ -40,23 +40,22 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 
 void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
 {
-	size_t counter = f->receiver_queue_output_idx;
-	pthread_rwlock_wrlock(&f->queue_lock);
+	size_t output_queue_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
+	size_t counter = output_queue_idx;
 	while (f->receiver_queue_size > 0) {
 		struct rist_buffer *b = f->receiver_queue[counter];
 		if (b)
 		{
 			f->receiver_queue[counter] = NULL;
-			f->receiver_queue_size -= b->size;
 			free_rist_buffer(ctx, b);
+			atomic_fetch_sub_explicit(&f->receiver_queue_size, b->size, memory_order_release);
 		}
 		counter = (counter + 1) % f->receiver_queue_max;
-		if (counter == f->receiver_queue_output_idx) {
+		if (counter == output_queue_idx) {
 			// full loop complete
 			break;
 		}
 	}
-	pthread_rwlock_unlock(&f->queue_lock);
 }
 
 void rist_flush_missing_flow_queue(struct rist_flow *flow)

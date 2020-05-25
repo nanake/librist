@@ -353,7 +353,7 @@ struct rist_sender {
 	uint32_t total_weight;
 	struct rist_buffer *sender_queue[RIST_SERVER_QUEUE_BUFFERS]; /* input queue */
 	size_t sender_queue_bytesize;
-	atomic_ulong sender_queue_delete_index;
+	size_t sender_queue_delete_index;
 	atomic_ulong sender_queue_read_index;
 	atomic_ulong sender_queue_write_index;
 	size_t sender_queue_max;

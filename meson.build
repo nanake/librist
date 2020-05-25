@@ -16,20 +16,18 @@ subproject = meson.is_subproject()
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
-	if not subproject
-		add_global_arguments(['-Drist_EXPORTS'], language: 'c')
-		add_global_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
+	add_project_arguments(['-Drist_EXPORTS'], language: 'c')
+	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
+else
+	if meson.get_compiler('c').get_id() == 'clang'
+		add_project_arguments(['-Watomic-implicit-seq-cst'], language: 'c')
 	endif
-elif not subproject
-	add_global_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 endif
 
 test_args = []
 if host_machine.system() == 'linux'
     test_args += '-D_GNU_SOURCE'
-	if not subproject
-		add_global_arguments(['-D_GNU_SOURCE'], language: 'c')
-	endif
+	add_project_arguments(['-D_GNU_SOURCE'], language: 'c')
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
