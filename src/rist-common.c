@@ -2332,7 +2332,7 @@ protocol_bypass:
 	static void sender_send_nacks(struct rist_sender *ctx)
 	{
 		// Send retries from the queue (if any)
-		int counter = 1;
+		uint32_t counter = 1;
 		int errors = 0;
 		size_t total_bytes = 0;
 

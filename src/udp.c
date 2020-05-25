@@ -1419,8 +1419,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				}
 				else
 				{
-					if (--index < 0)
+					if (index == 0)
 						index = ctx->sender_retry_queue_size;
+					index--;
 				}
 			}
 			if (ctx->common.debug) {
