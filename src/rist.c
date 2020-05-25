@@ -379,6 +379,13 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 		goto free_ctx_and_ret;
 	}
 
+	ret = pthread_mutex_init(&ctx->queue_lock, NULL);
+	if (ret)
+	{
+		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Error %d initializing pthread_mutex\n", ret);
+		goto free_ctx_and_ret;
+	}
+
 	ctx->sender_initialized = true;
 
 	if (pthread_create(&ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)

@@ -3017,8 +3017,6 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	pthread_cond_destroy(&ctx->condition);
 	pthread_mutex_destroy(&ctx->mutex);
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing dataout_fifo_queue_lock\n");
-
 	free(ctx);
 	ctx = NULL;
 }

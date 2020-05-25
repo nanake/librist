@@ -389,7 +389,7 @@ struct rist_sender {
 	size_t peer_lst_len;
 
 	/* Queue lock for fifo buffer */
-	pthread_rwlock_t queue_lock;
+	pthread_mutex_t queue_lock;
 };
 
 struct nacks {
