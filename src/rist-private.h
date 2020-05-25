@@ -338,8 +338,9 @@ struct rist_sender {
 	/* Advertised flow for this context */
 	uint32_t adv_flow_id;
 
-	/* max bitrate of all sender peers (sets the buffer size on sender queue)*/
+	/* max bitrate of all sender peers (sets the buffer size on sender queue) */
 	uint32_t recovery_maxbitrate_max;
+	uint32_t max_nacksperloop;
 
 	/* Sender thread variables */
 	pthread_t sender_thread;

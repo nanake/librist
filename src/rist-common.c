@@ -238,6 +238,12 @@ static void init_peer_settings(struct rist_peer *peer)
 		/* Global context settings */
 		if (peer->config.recovery_maxbitrate > ctx->recovery_maxbitrate_max) {
 			ctx->recovery_maxbitrate_max = peer->config.recovery_maxbitrate;
+			int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
+			// Asume MTU of 1400 for now
+			ctx->max_nacksperloop = ctx->recovery_maxbitrate_max * max_jitter_ms / (8*1400);
+			// Anything less that 2240Kbps at 5ms will round down to zero (100Mbps is 44)
+			if (ctx->max_nacksperloop == 0)
+				ctx->max_nacksperloop = 1;
 		}
 
 		if (peer->config.weight > 0) {
@@ -2323,14 +2329,19 @@ protocol_bypass:
 		return;
 	}
 
-	static void sender_send_nacks(struct rist_sender *ctx, int maxcounter)
+	static void sender_send_nacks(struct rist_sender *ctx)
 	{
 		// Send retries from the queue (if any)
 		int counter = 1;
 		int errors = 0;
 		size_t total_bytes = 0;
 
-		// Send no more than maxcounter retries for every packet/loop (for uniform spacing)
+		if (ctx->max_nacksperloop == 0)
+			return; // No peers yet
+
+		// Send nack retries. Stop when the retry queue is empty or when the data in the
+		// send fifo queue grows to 10 packets (we do not want to harm real-time data)
+		// We also stop on maxcounter (jitter control and max bandwidth protection)
 		size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
 		while (queued_items < 10) {
 			int ret = rist_retry_dequeue(ctx);
@@ -2342,12 +2353,12 @@ protocol_bypass:
 			} else {
 				total_bytes += ret;
 			}
-			if (++counter > maxcounter) {
+			if (++counter > ctx->max_nacksperloop) {
 				break;
 			}
 			queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
 		}
-		if (counter > (maxcounter / 2))
+		if (counter > (ctx->max_nacksperloop / 2))
 		{
 			msg(ctx->id, 0, RIST_LOG_WARN,
 					"[WARNING] Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu\n",
@@ -2479,7 +2490,6 @@ protocol_bypass:
 		// loop behavior parameters
 		int max_dataperloop = 100;
 		int max_oobperloop = 100;
-		int max_nacksperloop = RIST_MAX_NACKS;
 
 		int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 		uint64_t rist_stats_interval = ctx->common.stats_report_time; // 1 second
@@ -2561,11 +2571,9 @@ protocol_bypass:
 			// Send data and process nacks
 			if (ctx->sender_queue_bytesize > 0) {
 				sender_send_data(ctx, max_dataperloop);
-				// TODO: put a minimum on the nack and cleanup sending (maybe group them every 1ms)
-				// otherwise for higher bitrates our CPU will not keep up (20Mbps is about 0.5ms spacing)
-				// because of the tight loop
-				if (nacks_next_time >= now) {
-					sender_send_nacks(ctx, max_nacksperloop);
+				// Group nacks and send them all at rist_max_jitter intervals
+				if (now > nacks_next_time) {
+					sender_send_nacks(ctx);
 					nacks_next_time += ctx->common.rist_max_jitter;
 				}
 				/* perform queue cleanup */
