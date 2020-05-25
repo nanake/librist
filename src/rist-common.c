@@ -240,10 +240,20 @@ static void init_peer_settings(struct rist_peer *peer)
 			ctx->recovery_maxbitrate_max = peer->config.recovery_maxbitrate;
 			int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 			// Asume MTU of 1400 for now
-			ctx->max_nacksperloop = ctx->recovery_maxbitrate_max * max_jitter_ms / (8*1400);
+			uint32_t max_nacksperloop = ctx->recovery_maxbitrate_max * max_jitter_ms / (8*1400);
+			//normalize with the total buffer size / 1 second
+			if (peer->config.recovery_length_min)
+				max_nacksperloop = max_nacksperloop * 1000 / peer->config.recovery_length_min;
+			else
+				max_nacksperloop = max_nacksperloop * 2000 / peer->config.recovery_length_max;
 			// Anything less that 2240Kbps at 5ms will round down to zero (100Mbps is 44)
-			if (ctx->max_nacksperloop == 0)
-				ctx->max_nacksperloop = 1;
+			if (max_nacksperloop == 0)
+				max_nacksperloop = 1;
+			if (max_nacksperloop > ctx->max_nacksperloop) {
+				ctx->max_nacksperloop = (uint32_t)max_nacksperloop;
+				msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Setting max nacks per cycle to %"PRIu32"\n",
+				max_nacksperloop);
+			}
 		}
 
 		if (peer->config.weight > 0) {
@@ -254,8 +264,10 @@ static void init_peer_settings(struct rist_peer *peer)
 		/* Set target recover size (buffer) */
 		if ((peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max)) > ctx->sender_recover_min_time) {
 			ctx->sender_recover_min_time = peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max);
-			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Setting buffer size to %zu\n", ctx->sender_recover_min_time);
+			msg(0, ctx->id, RIST_LOG_INFO, "[INIT] Setting buffer size to %zums\n", ctx->sender_recover_min_time);
+			// TODO: adjust this size based on the dynamic RTT measurement
 		}
+
 	}
 }
 
@@ -2358,10 +2370,10 @@ protocol_bypass:
 			}
 			queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
 		}
-		if (counter > (ctx->max_nacksperloop / 2))
+		if (ctx->common.debug && 2 * (counter - 1) > ctx->max_nacksperloop)
 		{
-			msg(ctx->id, 0, RIST_LOG_WARN,
-					"[WARNING] Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu\n",
+			msg(ctx->id, 0, RIST_LOG_DEBUG,
+					"[DEBUG] Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu\n",
 					counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx));
 		}
 

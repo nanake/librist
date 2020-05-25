@@ -26,8 +26,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
-	size_t retry_buf_size = (peer->sender_ctx->sender_retry_queue_write_index - peer->sender_ctx->sender_retry_queue_read_index)
-							& (peer->sender_ctx->sender_retry_queue_size - 1);
+	size_t retry_buf_size = rist_get_sender_retry_queue_size(peer->sender_ctx);
 
 	struct rist_bandwidth_estimation *cli_bw = &peer->bw;
 	struct rist_bandwidth_estimation *retry_bw = &peer->retry_bw;
