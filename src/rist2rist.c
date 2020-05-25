@@ -6,7 +6,6 @@
 #include <librist.h>
 #include <stdio.h>
 #include <string.h>
-#include <unistd.h>
 #include "getopt-shim.h"
 #include <assert.h>
 #include <signal.h>
@@ -218,9 +217,17 @@ int main (int argc, char **argv) {
 	client_args.flow_id = 0;
 	int statsinterval = 1000;
 	enum rist_log_level loglevel = RIST_LOG_WARN;
-	struct sigaction act = {0};
+#ifdef _WIN32
+#define STDERR_FILENO 2
+	signal(SIGINT, intHandler);
+	signal(SIGTERM, intHandler);
+	signal(SIGABRT, intHandler);
+#else
+	struct sigaction act;
 	act.sa_handler = intHandler;
+	act.sa_flags = 0;
 	sigaction(SIGINT, &act, NULL);
+#endif
 
 	int option_index;
 	char c;
@@ -329,7 +336,11 @@ int main (int argc, char **argv) {
 	}
 	/* Start the rist protocol thread */
 	if (enable_data_callback == 1) {
+#ifdef _WIN32
+		system("pause");
+#else
 		pause();
+#endif
 	}
 	else {
 		// Master loop
