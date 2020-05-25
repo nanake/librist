@@ -259,9 +259,9 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 	return ret;
 }
 
-uint32_t rist_best_rtt_index(struct rist_flow *f)
+size_t rist_best_rtt_index(struct rist_flow *f)
 {
-	uint32_t index = 0;
+	size_t index = 0;
 	uint32_t rtt = UINT32_MAX;
 	for (size_t i = 0; i < f->peer_lst_len; i++) {
 		if (!f->peer_lst[i]->is_rtcp)

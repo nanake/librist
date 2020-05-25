@@ -211,12 +211,12 @@ static void init_peer_settings(struct rist_peer *peer)
 
 		switch (peer->config.recovery_mode) {
 			case RIST_RECOVERY_MODE_BYTES:
-				peer->missing_counter_max = peer->recovery_buffer_ticks /
-					(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
+				peer->missing_counter_max = (uint32_t)(peer->recovery_buffer_ticks /
+					(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t)));
 				break;
 			case RIST_RECOVERY_MODE_TIME:
 				peer->missing_counter_max =
-					(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
+					(uint32_t)(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
 					(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
 				peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
 				break;
@@ -1526,7 +1526,7 @@ static void rist_rtcp_handle_echo_request(struct rist_peer *peer, struct rist_rt
 static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_rtcp_echoext *echoreq) {
 	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
 	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
-	peer->last_mrtt = rtt / RIST_CLOCK;
+	peer->last_mrtt = (uint32_t)rtt / RIST_CLOCK;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
 	peer->eight_times_rtt += peer->last_mrtt;
 }
@@ -1545,7 +1545,7 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 	if (lsr_ntp == lsr_tmp) {
 		uint64_t now = timestampNTP_u64();
 		uint64_t rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
-		peer->last_mrtt = rtt / RIST_CLOCK;
+		peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
 		peer->eight_times_rtt -= peer->eight_times_rtt / 8;
 		peer->eight_times_rtt += peer->last_mrtt;
 	}
@@ -1798,12 +1798,12 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		switch(sa->sa_family) {
 			case AF_INET:
 				inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
-						s, maxlen);
+						s, (socklen_t)maxlen);
 				break;
 
 			case AF_INET6:
 				inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
-						s, maxlen);
+						  s, (socklen_t)maxlen);
 				break;
 
 			default:
@@ -1835,7 +1835,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		pthread_rwlock_t *peerlist_lock = &cctx->peerlist_lock;
 		socklen_t addrlen = peer->address_len;
-		int recv_bufsize = -1;
+		ssize_t recv_bufsize = -1;
 		uint16_t family = AF_INET;
 		struct sockaddr_in addr4 = {0};
 		struct sockaddr_in6 addr6 = {0};
@@ -2008,7 +2008,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 						k->aes_key_sched, k->key_size, IV);
 #else
 				if (peer->cryptoctx)
-					linux_crypto_decrypt((void *)(recv_buf + gre_size), recv_bufsize - gre_size, IV, peer->cryptoctx);
+					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx);
 				else
 					aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 							k->aes_key_sched, k->key_size, IV);
@@ -2048,7 +2048,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			// Decompress if necessary
 			if (compression) {
 				void *dbuf = get_cctx(p)->buf.dec;
-				int dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, payload.size, RIST_MAX_PACKET_SIZE);
+				int dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, (int)payload.size, RIST_MAX_PACKET_SIZE);
 				if (dlen < 0) {
 					msg(receiver_id, sender_id, RIST_LOG_ERROR,
 							"[ERROR] Could not decompress data packet (%d), assuming normal data ...\n", dlen);
@@ -2359,7 +2359,7 @@ protocol_bypass:
 		// We also stop on maxcounter (jitter control and max bandwidth protection)
 		size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
 		while (queued_items < 10) {
-			int ret = rist_retry_dequeue(ctx);
+			ssize_t ret = rist_retry_dequeue(ctx);
 			if (ret == 0) {
 				// ret == 0 is valid (nothing to send)
 				break;
@@ -2421,7 +2421,7 @@ protocol_bypass:
 				else {
 					rist_sender_send_data_balanced(ctx, buffer);
 					// For non-advanced mode seq to index mapping
-					ctx->seq_index[buffer->seq_rtp] = idx;
+					ctx->seq_index[buffer->seq_rtp] = (uint32_t)idx;
 				}
 			}
 

@@ -232,7 +232,7 @@ void xor_buf(const uint8_t in[], uint8_t out[], size_t len)
 int aes_encrypt_cbc(const uint8_t in[], size_t in_len, uint8_t out[], const uint32_t key[], int keysize, const uint8_t iv[])
 {
 	uint8_t buf_in[AES_BLOCK_SIZE], buf_out[AES_BLOCK_SIZE], iv_buf[AES_BLOCK_SIZE];
-	int blocks, idx;
+	size_t blocks, idx;
 
 	if (in_len % AES_BLOCK_SIZE != 0)
 		return(FALSE);
@@ -255,7 +255,7 @@ int aes_encrypt_cbc(const uint8_t in[], size_t in_len, uint8_t out[], const uint
 int aes_encrypt_cbc_mac(const uint8_t in[], size_t in_len, uint8_t out[], const uint32_t key[], int keysize, const uint8_t iv[])
 {
 	uint8_t buf_in[AES_BLOCK_SIZE], buf_out[AES_BLOCK_SIZE], iv_buf[AES_BLOCK_SIZE];
-	int blocks, idx;
+	size_t blocks, idx;
 
 	if (in_len % AES_BLOCK_SIZE != 0)
 		return(FALSE);
@@ -280,7 +280,7 @@ int aes_encrypt_cbc_mac(const uint8_t in[], size_t in_len, uint8_t out[], const 
 int aes_decrypt_cbc(const uint8_t in[], size_t in_len, uint8_t out[], const uint32_t key[], int keysize, const uint8_t iv[])
 {
 	uint8_t buf_in[AES_BLOCK_SIZE], buf_out[AES_BLOCK_SIZE], iv_buf[AES_BLOCK_SIZE];
-	int blocks, idx;
+	size_t blocks, idx;
 
 	if (in_len % AES_BLOCK_SIZE != 0)
 		return(FALSE);

@@ -92,7 +92,7 @@ struct rist_key {
 
 struct rist_buffer {
 	void *data;
-	uint32_t size;
+	size_t size;
 	uint8_t type;
 	uint16_t src_port;
 	uint16_t dst_port;
@@ -535,7 +535,7 @@ RIST_PRIV void rist_sender_peer_statistics(struct rist_peer *peer);
 RIST_PRIV void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f);
 RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt);
 RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id);
-RIST_PRIV uint32_t rist_best_rtt_index(struct rist_flow *f);
+RIST_PRIV size_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b);
 RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);

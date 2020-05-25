@@ -45,7 +45,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	uint32_t time_left = 0;
 	if (peer->sender_ctx->cooldown_time > 0)
 	{
-		time_left = (timestampNTP_u64() - peer->sender_ctx->cooldown_time) / 1000;
+		time_left = (uint32_t)(timestampNTP_u64() - peer->sender_ctx->cooldown_time) / 1000;
 	}
 
 	uint32_t avg_rtt = (peer->eight_times_rtt / 8);
@@ -112,9 +112,9 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 		struct rist_peer *peer = flow->peer_lst[i];
 		uint32_t avg_rtt = (peer->eight_times_rtt / 8);
 		uint32_t bitrate;
-		uint32_t eight_times_bitrate;
+		size_t eight_times_bitrate;
 
-		bitrate = peer->bw.bitrate;
+		bitrate = (uint32_t)peer->bw.bitrate;
 		eight_times_bitrate = peer->bw.eight_times_bitrate;
 
 		double QpeerInstant = 100;
@@ -168,8 +168,8 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 		stats->peers[i].dead = peer->dead;
 		stats->peers[i].peer_id = peer->adv_peer_id;
 		stats->peers[i].peer_num = (uint32_t)(i + 1);
-		stats->peers[i].flow_peer_list_len = flow->peer_lst_len;
-		stats->peers[i].received = peer->stats_receiver_instant.recv;
+		stats->peers[i].flow_peer_list_len = (uint32_t)flow->peer_lst_len;
+		stats->peers[i].received = (uint32_t)peer->stats_receiver_instant.recv;//FIXME
 		stats->peers[i].missing = peer->stats_receiver_instant.missing;
 		stats->peers[i].quality = QpeerInstant;
 		stats->peers[i].recovered_total = peer->stats_receiver_instant.recovered;
@@ -190,7 +190,7 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 		stats->peers[i].rtt = peer->last_mrtt;
 		stats->peers[i].avg_rtt = avg_rtt;
 		stats->peers[i].bitrate = bitrate;
-		stats->peers[i].avg_bitrate = eight_times_bitrate / 8;
+		stats->peers[i].avg_bitrate = (uint32_t)(eight_times_bitrate / 8);
 		
 		// Calculate flow instant stats
 		flow_recv_instant += peer->stats_receiver_instant.recv;
@@ -278,7 +278,7 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 	stats->min_inter_packet_spacing = flow->stats_instant.min_ips;
 	stats->cur_inter_packet_spacing = flow->stats_instant.cur_ips;
 	stats->max_inter_packet_spacing = flow->stats_instant.max_ips;
-	stats->peer_list_len = flow->peer_lst_len;
+	stats->peer_list_len = (uint32_t)flow->peer_lst_len;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)

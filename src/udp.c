@@ -330,7 +330,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		if (p->compression) {
 			int clen;
 			void *cbuf = ctx->buf.dec;
-			clen = LZ4_compress_default((const char *)_payload, cbuf, payload_len, RIST_MAX_PACKET_SIZE);
+			clen = LZ4_compress_default((const char *)_payload, cbuf, (int)payload_len, RIST_MAX_PACKET_SIZE);
 			if (clen < 0) {
 				msg(receiver_id, sender_id, RIST_LOG_ERROR,
 					"[ERROR] Compression failed (%d), not sending\n", clen);
@@ -409,7 +409,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #else
 			if (p->cryptoctx)
-				linux_crypto_encrypt((void *) (_payload - hdr_len), hdr_len + payload_len, IV, p->cryptoctx);
+				linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx);
 			else
 				aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
 					(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
@@ -804,7 +804,7 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
-int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], int array_len)
+int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
@@ -840,7 +840,7 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], int a
 			uint32_t boundary = tmp_seq +16;
 			rec->start = htons(tmp_seq);
 			uint16_t extra = 0;
-			for (int i = 1; i < array_len; i++)
+			for (size_t i = 1; i < array_len; i++)
 			{
 				tmp_seq = seq_array[i];
 				if (last_seq < tmp_seq && tmp_seq <= boundary) {
@@ -871,7 +871,7 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], int a
 			uint16_t last_seq = tmp_seq;
 			rec->start = htons(tmp_seq);
 			uint16_t extra = 0;
-			for (int i = 1; i < array_len; i++)
+			for (size_t i = 1; i < array_len; i++)
 			{
 				tmp_seq = (uint16_t)seq_array[i];
 				if (RIST_UNLIKELY(extra == UINT16_MAX)) {
@@ -1015,7 +1015,7 @@ void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
 	}
 }
 
-int rist_sender_enqueue(struct rist_sender *ctx, const void *data, int len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
+int rist_sender_enqueue(struct rist_sender *ctx, const void *data, size_t len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;
 
@@ -1157,7 +1157,7 @@ size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx)
 }
 
 /* This function must return, 0 when there is nothing to send, < 0 on error and > 0 for bytes sent */
-int rist_retry_dequeue(struct rist_sender *ctx)
+ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 {
 //	msg(0, ctx->id, RIST_LOG_ERROR,
 //			"\tCurrent read/write index are %zu/%zu \n", ctx->sender_retry_queue_read_index,
@@ -1254,19 +1254,18 @@ int rist_retry_dequeue(struct rist_sender *ctx)
 	}
 
 	buffer->transmit_count++;
-	uint32_t ret = 0;
+	size_t ret = 0;
 	if (buffer->transmit_count >= retry->peer->config.buffer_bloat_hard_limit) {
 		msg(0, ctx->id, RIST_LOG_ERROR, "[ERROR] Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
 	}
 	else {
-		ret = rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port);
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port);
 	}
 
 	// update bandwidh value
 	rist_calculate_bitrate_sender(ret, retry_bw);
-
 	if (ret < buffer->size) {
 		msg(0, ctx->id, RIST_LOG_ERROR,
 			"[ERROR] Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, buffer->seq);

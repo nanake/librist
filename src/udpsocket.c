@@ -252,7 +252,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 
 int udpsocket_send(int sd, const void *buf, size_t size)
 {
-	return send(sd, buf, size, 0);
+	return (int)send(sd, buf, size, 0);
 }
 
 int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port)
@@ -266,12 +266,12 @@ int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uin
 		addrlen = sizeof(struct sockaddr_in6);
 	else
 		addrlen = sizeof(struct sockaddr_in);
-	return sendto(sd, buf, size, 0, (struct sockaddr *)(&raw), addrlen);
+	return (int)sendto(sd, buf, size, 0, (struct sockaddr *)(&raw), addrlen);
 }
 
 int udpsocket_recv(int sd, void *buf, size_t size)
 {
-	return recv(sd, buf, size, 0);
+	return (int)recv(sd, buf, size, 0);
 }
 
 int udpsocket_close(int sd)
@@ -288,9 +288,9 @@ int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *param
 
 	query = strchr( url, '?' );
 	if (query != NULL)
-		*clean_url_len = query - url + 1;
+		*clean_url_len = (uint32_t)(query - url + 1);
 	else
-		*clean_url_len = strlen(url) + 1;
+		*clean_url_len = (uint32_t)(strlen(url) + 1);
 
 	if (!query || *query == '\0')
 		return -1;

@@ -79,7 +79,7 @@ int32_t _linux_crypto_send_crypt(struct linux_crypto *ctx,
 	memcpy(alg_iv->iv, iv, 16);
 
 
-	ret = sendmsg(ctx->cryptofd, &msg, 0);
+	ret = (int32_t)sendmsg(ctx->cryptofd, &msg, 0);
 	if (RIST_UNLIKELY(ret < 0))
 		ret = -errno;
 
@@ -97,7 +97,7 @@ int32_t _linux_crypto_read(struct linux_crypto *ctx,
 
 	if (RIST_LIKELY(outlen)) {
 		do {
-			ret = read(ctx->cryptofd, out, outlen);
+			ret = (int32_t)read(ctx->cryptofd, out, outlen);
 			if (ret > 0) {
 				out += ret;
 				outlen -= ret;

@@ -172,7 +172,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 	uint64_t ts_ntp = data_block->ts_ntp == 0 ? timestampNTP_u64() : data_block->ts_ntp;
 	uint32_t seq_rtp;
 	if (data_block->flags & RIST_DATA_FLAGS_USE_SEQ)
-		seq_rtp = data_block->seq;
+		seq_rtp = (uint32_t)data_block->seq;
 	else
 		seq_rtp = ctx->common.seq_rtp++;
 	//When we support 32bit seq this should be changed

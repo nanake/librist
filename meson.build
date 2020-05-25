@@ -20,9 +20,15 @@ if host_machine.system() == 'windows'
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 else
 	add_project_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
-	if meson.get_compiler('c').get_id() == 'clang'
-		add_project_arguments(['-Watomic-implicit-seq-cst'], language: 'c')
-	endif
+	add_project_arguments(cc.get_supported_arguments([
+		'-Wundef',
+		'-Werror=vla',
+		'-Wno-maybe-uninitialized',
+		'-Wno-missing-field-initializers',
+		'-Wno-unused-parameter',
+		'-Wshorten-64-to-32',
+		'-Watomic-implicit-seq-cst',
+		]), language : 'c')
 endif
 
 test_args = []
