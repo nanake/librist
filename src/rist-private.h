@@ -35,6 +35,7 @@ __BEGIN_DECLS
 
 #define UINT16_SIZE (UINT16_MAX + 1)
 // These 4 control the memory footprint and buffer capacity of the lib
+// They MUST be a power of two or wrap-around index calculations will break
 #define RIST_SERVER_QUEUE_BUFFERS ((UINT16_SIZE) * 8)
 #define RIST_RETRY_QUEUE_BUFFERS ((UINT16_SIZE) * 4)
 #define RIST_OOB_QUEUE_BUFFERS ((UINT16_SIZE) * 2)

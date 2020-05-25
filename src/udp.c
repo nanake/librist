@@ -1372,14 +1372,8 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					// blocking the protocol thread (it could happen when the queue gets too big)
 					uint64_t loop_time = timestampNTP_u64() - now;
 					if (loop_time > rist_max_jitter_ticks) {
-						size_t retry_queue_size = 0;
-						if (ctx->sender_retry_queue_write_index > ctx->sender_retry_queue_read_index) {
-							retry_queue_size = ctx->sender_retry_queue_write_index -
-											ctx->sender_retry_queue_read_index - 1;
-						} else {
-							retry_queue_size = ctx->sender_retry_queue_size + ctx->sender_retry_queue_write_index -
-											ctx->sender_retry_queue_read_index - 1;
-						}
+						size_t retry_queue_size = (ctx->sender_retry_queue_write_index - ctx->sender_retry_queue_read_index)
+													& (ctx->sender_retry_queue_size - 1);
 						msg(0, ctx->id, RIST_LOG_WARN,
 							"[WARNING] Bypassing duplicate nack request check for seq %"PRIu32" after %"PRIu64"us, age %"PRIu64"ms, q_size = %zu (taking too long)\n",
 							buffer->seq, 1000 * loop_time / RIST_CLOCK, age_ticks / RIST_CLOCK, retry_queue_size);
