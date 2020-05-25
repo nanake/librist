@@ -714,19 +714,20 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					uint32_t flags = 0;
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;
-					pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
-					ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index] = new_data_block(
-							ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index], b,
+					uint16_t dataout_fifo_write_index = atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire);
+					struct rist_data_block *block = ctx->dataout_fifo_queue[dataout_fifo_write_index];
+					ctx->dataout_fifo_queue[dataout_fifo_write_index] = new_data_block(
+							block, b,
 							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
 					if (ctx->receiver_data_callback) {
 						// send to callback synchronously
 						ctx->receiver_data_callback(ctx->receiver_data_callback_argument,
-								ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_write_index]);
+								ctx->dataout_fifo_queue[dataout_fifo_write_index]);
 					}
-					ctx->dataout_fifo_queue_write_index = (ctx->dataout_fifo_queue_write_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
+					atomic_store_explicit(&ctx->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
 					ctx->dataout_fifo_queue_bytesize += b->size;
-					ctx->dataout_fifo_queue_counter = (ctx->dataout_fifo_queue_counter + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
-					pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
+					uint16_t dataout_counter = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_relaxed);
+					atomic_store_explicit(&ctx->dataout_fifo_queue_counter, (dataout_counter + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_release);
 					// Wake up the fifo read thread (poll)
 					if (pthread_cond_signal(&(ctx->condition)))
 						msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
@@ -2998,7 +2999,6 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	}
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Freeing data output fifo\n");
-	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
 	for (int i = 0; i < RIST_DATAOUT_QUEUE_BUFFERS; i++)
 	{
 		if (ctx->dataout_fifo_queue[i])
@@ -3012,14 +3012,12 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 			ctx->dataout_fifo_queue[i] = NULL;
 		}
 	}
-	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing data fifo signaling variables (condition and mutex)\n");
 	pthread_cond_destroy(&ctx->condition);
 	pthread_mutex_destroy(&ctx->mutex);
 
 	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing dataout_fifo_queue_lock\n");
-	pthread_rwlock_destroy(&ctx->dataout_fifo_queue_lock);
 
 	free(ctx);
 	ctx = NULL;

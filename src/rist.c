@@ -75,29 +75,28 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
 	   risks are tolerable */
-	uint16_t num = ctx->dataout_fifo_queue_counter;
+	uint16_t num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
 	if (!num && timeout > 0) {
 		pthread_mutex_lock(&(ctx->mutex));
 		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
 		pthread_mutex_unlock(&(ctx->mutex));
 	}
 
-	pthread_rwlock_wrlock(&ctx->dataout_fifo_queue_lock);
-	if (ctx->dataout_fifo_queue_read_index != ctx->dataout_fifo_queue_write_index)
+	uint16_t dataout_read_index = atomic_load_explicit(&ctx->dataout_fifo_queue_read_index, memory_order_relaxed);
+	if (atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
 	{
-		data_block = ctx->dataout_fifo_queue[ctx->dataout_fifo_queue_read_index];
-		//Now we are inside the lock, so the counter is now guarenteed to remain the same
-		num = ctx->dataout_fifo_queue_counter;
-		ctx->dataout_fifo_queue_read_index = (ctx->dataout_fifo_queue_read_index + 1) % RIST_DATAOUT_QUEUE_BUFFERS;
+		data_block = ctx->dataout_fifo_queue[dataout_read_index];
+		num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
+		atomic_store_explicit(&ctx->dataout_fifo_queue_read_index, (dataout_read_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_release);
 		if (data_block)
 		{
 			//msg(0, 0, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
 			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
-			ctx->dataout_fifo_queue_counter--;
+			
 			ctx->dataout_fifo_queue_bytesize -= data_block->payload_len;
+			atomic_fetch_sub_explicit(&ctx->dataout_fifo_queue_counter, 1, memory_order_release);
 		}
 	}
-	pthread_rwlock_unlock(&ctx->dataout_fifo_queue_lock);
 
 	if (RIST_UNLIKELY(data_block == NULL && num > 0))
 	{
@@ -260,6 +259,10 @@ int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
 	}
 
 	*_ctx = ctx;
+
+	atomic_init(&ctx->dataout_fifo_queue_counter, 0);
+	atomic_init(&ctx->dataout_fifo_queue_write_index, 0);
+	atomic_init(&ctx->dataout_fifo_queue_read_index, 0);
 	return 0;
 
 fail:
@@ -607,12 +610,6 @@ int rist_receiver_data_callback_set(struct rist_receiver *ctx,
 
 int rist_receiver_start(struct rist_receiver *ctx)
 {
-	if (pthread_rwlock_init(&ctx->dataout_fifo_queue_lock, NULL) != 0)
-	{
-		msg(0, 0, RIST_LOG_ERROR, "[ERROR] Failed to init dataout_fifo_queue_lock\n");
-		return -1;
-	}
-
 	if (!ctx->receiver_thread)
 	{
 		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0)
