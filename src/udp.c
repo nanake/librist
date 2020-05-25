@@ -1430,7 +1430,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
 				} else {
 					msg(0, ctx->id, RIST_LOG_DEBUG,
-						"[DEBUG] First nack request for seq %"PRIu32"ms, age %"PRIu64"ms, peer #%d '%s'\n",
+						"[DEBUG] First nack request for seq %"PRIu32", age %"PRIu64"ms, peer #%d '%s'\n",
 						buffer->seq, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 				}
 			}
