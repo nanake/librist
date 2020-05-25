@@ -105,6 +105,7 @@ RIST_API int udpsocket_resolve_host(const char *host, uint16_t port, struct sock
 RIST_API int udpsocket_send(int sd, const void *buf, size_t size);
 RIST_API int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port);
 RIST_API int udpsocket_recv(int sd, void *buf, size_t size);
+RIST_API int udpsocket_recvfrom(int sd, void *buf, size_t size, int flags, struct sockaddr *addr, socklen_t *addr_len);
 RIST_API int udpsocket_close(int sd);
 RIST_API int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *port, int *local);
 RIST_API int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *params,

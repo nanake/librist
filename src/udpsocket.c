@@ -274,6 +274,11 @@ int udpsocket_recv(int sd, void *buf, size_t size)
 	return (int)recv(sd, buf, size, 0);
 }
 
+int udpsocket_recvfrom(int sd, void *buf, size_t size, int flags, struct sockaddr *addr, socklen_t *addr_len)
+{
+	return (int)recvfrom(sd, buf, size, flags, addr, addr_len);
+}
+
 int udpsocket_close(int sd)
 {
 	return close(sd);
