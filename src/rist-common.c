@@ -727,7 +727,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					atomic_store_explicit(&ctx->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
 					ctx->dataout_fifo_queue_bytesize += b->size;
 					uint16_t dataout_counter = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_relaxed);
-					atomic_store_explicit(&ctx->dataout_fifo_queue_counter, (dataout_counter + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_release);
+					atomic_fetch_add_explicit(&ctx->dataout_fifo_queue_counter, 1, memory_order_release);
 					// Wake up the fifo read thread (poll)
 					if (pthread_cond_signal(&(ctx->condition)))
 						msg(ctx->id, 0, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");

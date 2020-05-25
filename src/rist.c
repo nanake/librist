@@ -75,7 +75,7 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
 	   risks are tolerable */
-	uint16_t num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
+	int num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
 	if (!num && timeout > 0) {
 		pthread_mutex_lock(&(ctx->mutex));
 		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
@@ -92,7 +92,6 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 		{
 			//msg(0, 0, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
 			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
-			
 			ctx->dataout_fifo_queue_bytesize -= data_block->payload_len;
 			atomic_fetch_sub_explicit(&ctx->dataout_fifo_queue_counter, 1, memory_order_release);
 		}
