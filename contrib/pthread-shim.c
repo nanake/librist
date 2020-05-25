@@ -109,15 +109,6 @@ int pthread_cond_destroy(pthread_cond_t *cond)
 	return 0;
 }
 
-int pthread_cond_wait(pthread_cond_t *cond, pthread_mutex_t *mutex)
-{
-	if (cond == NULL || mutex == NULL) {
-		return 1;
-	}
-
-	return pthread_cond_timedwait_broken(cond, mutex, NULL);
-}
-
 int pthread_cond_timedwait_broken(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	const timespec_t *abstime)
 {
@@ -139,6 +130,15 @@ int pthread_cond_timedwait_broken(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	}
 
 	return 0;
+}
+
+int pthread_cond_wait(pthread_cond_t* cond, pthread_mutex_t* mutex)
+{
+	if (cond == NULL || mutex == NULL) {
+		return 1;
+	}
+
+	return pthread_cond_timedwait_broken(cond, mutex, NULL);
 }
 
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t reltime_ms)

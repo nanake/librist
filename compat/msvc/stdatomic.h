@@ -40,10 +40,12 @@
 #include <windows.h>
 
 #include <stddef.h>
+#include <stdint.h>
 
 typedef volatile LONG  __declspec(align(32)) atomic_int;
 typedef volatile ULONG __declspec(align(32)) atomic_uint;
 typedef volatile ULONG __declspec(align(32)) atomic_ulong;
+typedef volatile ULONG _declspec(align(16)) atomic_uint_fast16_t;
 
 typedef enum {
     memory_order_relaxed,
