@@ -77,14 +77,10 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
 }
 
-struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow)
+void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow)
 {
 	if (!flow)
-	{
-		return NULL;
-	}
-
-	struct rist_flow *nextflow = flow->next;
+		return;
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -289,5 +285,4 @@ struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struc
 	memset(&flow->stats_instant, 0, sizeof(flow->stats_instant));
 	flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
 
-	return nextflow;
 }

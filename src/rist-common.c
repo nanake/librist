@@ -288,7 +288,7 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
 	} else {
 		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
-		b= malloc(sizeof(*b));
+		b = malloc(sizeof(*b));
 		if (!b) {
 			fprintf(stderr, "OOM\n");
 			return NULL;
@@ -394,6 +394,7 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	f->receiver_queue[idx]->packet_time = packet_time;
 	f->receiver_queue[idx]->target_output_time = packet_time + f->recovery_buffer_ticks;
 	atomic_fetch_add_explicit(&f->receiver_queue_size, len, memory_order_release);
+
 	return 0;
 }
 
@@ -434,10 +435,11 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 	//	seq, source_time);
+	uint64_t now = timestampNTP_u64();
 
 	if (!f->receiver_queue_has_items) {
 		/* we just received our first packet for this flow */
-		if (f->receiver_queue_size > 0)
+		if (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0)
 		{
 			/* Clear the queue if the queue had data */
 			/* f->receiver_queue_has_items can be reset to false when the output queue is emptied */
@@ -446,26 +448,33 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			/* Delete all buffer data (if any) */
 			empty_receiver_queue(f, get_cctx(peer));
 		}
+		/* Initialize flow session timeout and stats timers */
+		f->last_recv_ts = now;
+		f->checks_next_time = now;
 		/* Calculate and store clock offset with respect to source */
-		f->time_offset = (int64_t)timestampNTP_u64() - (int64_t)source_time;
+		f->time_offset = (int64_t)now - (int64_t)source_time;
 		/* This ensures the next packet does not trigger nacks */
 		f->last_seq_output = seq - 1;
 		f->last_seq_found = seq;
 		f->max_source_time = source_time;
 		/* This will synchronize idx and seq so we can insert packets into receiver buffer based on seq number */
-		size_t idx_initial = seq& (f->receiver_queue_max -1);
+		size_t idx_initial = seq & (f->receiver_queue_max -1);
 			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
 				"[INIT] Storing first packet seq %" PRIu32 ", idx %zu, %" PRIu64 ", offset %" PRId64 " ms\n",
 				seq, idx_initial, source_time, peer->flow->time_offset / RIST_CLOCK);
 		uint64_t packet_time = source_time + f->time_offset;
+
 		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, packet_time);
 		atomic_store_explicit(&f->receiver_queue_output_idx, idx_initial, memory_order_release);
+
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->receiver_queue_has_items = true;
 		return 0; // not a dupe
 	}
+
 	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
+	f->last_recv_ts = now;
 
 	// Now, get the new position and check what is there
 	/* We need to check if the reader queue has progressed passed this packet, if
@@ -498,6 +507,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	if (idx == reader_idx)
 	{
 		//Buffer full!
+		msg(f->receiver_id, f->sender_id, RIST_LOG_WARN, "[WARNING] Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
 		return -1;
 	}
 	if (f->receiver_queue[idx]) {
@@ -663,7 +673,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			}
 			if (b) {
 				uint64_t delay1 = (now - b->time);
-				if (RIST_UNLIKELY(delay1 > (2 * recovery_buffer_ticks))) {
+				if (RIST_UNLIKELY(delay1 > (2LLU * recovery_buffer_ticks))) {
 					// According to the real time clock, it is too late, continue.
 				} else if (b->target_output_time > now) {
 					// The block we found is not ready for output, so we wait.
@@ -673,23 +683,22 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			f->stats_instant.lost += holes;
 			output_idx = counter;
 			msg(ctx->id, 0, RIST_LOG_ERROR,
-					"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
+					"**** [LOST] Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %lu\n",
 					holes, counter, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 		}
 		if (b) {
 			if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
 
 				now = timestampNTP_u64();
-				uint64_t delay = (now - b->time);
+				uint64_t delay_rtc = (now - b->time);
 
-				if (RIST_UNLIKELY(delay > (2 * recovery_buffer_ticks))) {
+				if (RIST_UNLIKELY(delay_rtc > (2LLU * recovery_buffer_ticks))) {
 					// Double check the age of the packet within our receiver queue
 					// Safety net for discontinuities in source timestamp, clock drift or improperly scaled timestamp
-					uint64_t target_time = b->packet_time;
-					uint64_t delay_rtc = now > (uint64_t)target_time ? (now - (uint64_t)target_time) : 0;
+					uint64_t delay = now > b->packet_time ? (now - b->packet_time) : 0;
 					msg(ctx->id, 0, RIST_LOG_WARN,
-							"[WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, , clock drift of discontinuity, applying corrective measures\n",
-							b->seq, b->size, delay / RIST_CLOCK, delay_rtc / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
+							"[WARNING] Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, releasing data\n",
+							b->seq, b->size, delay_rtc / RIST_CLOCK, delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
 				}
 				else if (b->target_output_time >= now) {
 					// This is how we keep the buffer at the correct level
@@ -743,7 +752,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			free_rist_buffer(&ctx->common, b);
 			output_idx = (output_idx + 1)& (f->receiver_queue_max -1);
 			atomic_store_explicit(&f->receiver_queue_output_idx, output_idx, memory_order_release);
-			if (f->receiver_queue_size == 0) {
+			if (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) == 0) {
 				uint64_t delta = now - f->last_output_time;
 				msg(ctx->id, 0, RIST_LOG_WARN, "[WARNING] Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
 						delta / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
@@ -1389,11 +1398,8 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 
 	// The flow is added after we completed authentication
 	if (peer->flow) {
-		peer->flow->stats_total.last_recv_ts = timestampNTP_u64();
 		return true;
-	}
-	else
-	{
+	} else {
 		return false;
 	}
 }
@@ -3036,41 +3042,38 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		now  = timestampNTP_u64();
 		// Limit scope of `struct rist_flow *f` for clarity since it is used again later in this loop.
 		{
-			// stats timer
+			// stats and session timeout timer
 			struct rist_flow *f = ctx->common.FLOWS;
 			while (f) {
+				if (!f->receiver_queue_has_items) {
+					f = f->next;
+					continue;
+				}
 				if (now > f->checks_next_time) {
 					f->checks_next_time += f->recovery_buffer_ticks;
-					uint64_t timeout = f->session_timeout > f->recovery_buffer_ticks ? f->session_timeout: f->recovery_buffer_ticks;
-					if ((f->stats_total.last_recv_ts != 0) && (now - f->stats_total.last_recv_ts > timeout))
+
+					if ((now - f->last_recv_ts) > f->session_timeout)
 					{
-						if ((now- f->stats_total.last_recv_ts) < (1.5 * (uint64_t)timeout))
-						{
-							struct rist_flow *next = f->next;
-							// Do nothing
-							msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-									"\t************** STALE FLOW:%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 ", Deleting! ***************\n",
-									now,
-									f->stats_total.last_recv_ts,
-									now - f->stats_total.last_recv_ts,
-									(uint64_t)timeout);
-							pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-							pthread_rwlock_wrlock(peerlist_lock);
-							rist_delete_flow(ctx, f);
-							pthread_rwlock_unlock(peerlist_lock);
-							f = next;
-							continue;
-						}
+						struct rist_flow *next = f->next;
+						msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
+								"\t************** STALE FLOW:%" PRIu64 "/%" PRIu64 "/%" PRIu64 "/%" PRIu64 ", Deleting! ***************\n",
+								now,
+								f->last_recv_ts,
+								now - f->last_recv_ts,
+								f->session_timeout);
+						pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
+						pthread_rwlock_wrlock(peerlist_lock);
+						rist_delete_flow(ctx, f);
+						pthread_rwlock_unlock(peerlist_lock);
+						f = next;
+						continue;
 					}
 				}
 				if (now > f->stats_next_time) {
 					f->stats_next_time += f->stats_report_time;
-					f = rist_receiver_flow_statistics(ctx, f);
+					rist_receiver_flow_statistics(ctx, f);
 				}
-				else
-				{
-					f = f->next;
-				}
+				f = f->next;
 			}
 		}
 

@@ -42,7 +42,7 @@ void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
 {
 	size_t output_queue_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 	size_t counter = output_queue_idx;
-	while (f->receiver_queue_size > 0) {
+	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
 		struct rist_buffer *b = f->receiver_queue[counter];
 		if (b)
 		{
@@ -162,8 +162,11 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_mutex_init\n", ret);
 		return NULL;
 	}
+
 	atomic_init(&f->receiver_queue_size, 0);
 	atomic_init(&f->receiver_queue_output_idx, 0);
+
+	f->session_timeout = RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK;
 
 	/* Append flow to list */
 	rist_flow_append(&ctx->common.FLOWS, f);
@@ -231,6 +234,9 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		if (f->stats_report_time == f->recovery_buffer_ticks)
 			f->stats_report_time = p->recovery_buffer_ticks;
 		f->recovery_buffer_ticks = p->recovery_buffer_ticks;
+		// This only happens when the buffer is greater than 60 seconds
+		if (f->recovery_buffer_ticks > f->session_timeout)
+			f->session_timeout = 2ULL * f->recovery_buffer_ticks;
 	}
 	uint64_t stats_report_time = get_cctx(p)->stats_report_time;
 	if (stats_report_time != 0 && stats_report_time != f->stats_report_time) 

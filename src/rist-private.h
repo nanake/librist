@@ -142,9 +142,6 @@ struct rist_peer_flow_stats {
 	uint64_t cur_ips;
 	uint32_t avg_count;
 	uint64_t total_ips;
-
-	/* Used to track flow session timeouts */
-	uint64_t last_recv_ts;
 };
 
 struct rist_peer_sender_stats {
@@ -220,7 +217,6 @@ struct rist_flow {
 	uint64_t last_packet_ts;//Last packet time
 
 	bool authenticated;
-	uint32_t session_timeout;
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;
@@ -230,6 +226,10 @@ struct rist_flow {
 
 	/* variable used for seq number length (16bit or 32bit) */
 	bool short_seq;
+
+	/* Session timeouts variables */
+	uint64_t session_timeout;
+	uint64_t last_recv_ts;
 };
 
 struct rist_retry {
@@ -529,7 +529,7 @@ struct rist_peer {
 };
 
 /* defined in flow.c */
-RIST_PRIV struct rist_flow *rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);
+RIST_PRIV void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);
 RIST_PRIV void rist_sender_peer_statistics(struct rist_peer *peer);
 RIST_PRIV void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f);
 RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt);
