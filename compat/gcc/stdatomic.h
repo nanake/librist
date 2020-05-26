@@ -37,7 +37,7 @@ typedef unsigned long atomic_ulong;
 #define memory_order_acquire __ATOMIC_ACQUIRE
 #define memory_order_release __ATOMIC_RELEASE
 
-#define atomic_init(p_a, v)           do { *(p_a) = (v); } while(0)
+#define atomic_init(p_a, v)           __atomic_store_n(p_a, v, memory_order_relaxed)
 #define atomic_store(p_a, v)          __atomic_store_n(p_a, v, __ATOMIC_SEQ_CST)
 #define atomic_load(p_a)              __atomic_load_n(p_a, __ATOMIC_SEQ_CST)
 #define atomic_load_explicit(p_a, mo) __atomic_load_n(p_a, mo)

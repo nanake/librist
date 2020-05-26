@@ -53,11 +53,11 @@ typedef enum {
     memory_order_release
 } msvc_atomic_memory_order;
 
-#define atomic_init(p_a, v)           do { *(p_a) = (v); } while(0)
+#define atomic_init(p_a, v)           atomic_store(p_a, v)
 #define atomic_store(p_a, v)          InterlockedExchange((LONG*)p_a, v)
 #define atomic_load(p_a)              InterlockedCompareExchange((LONG*)p_a, 0, 0)
 #define atomic_load_explicit(p_a, mo) atomic_load(p_a)
-#define atomic_store_explicit(p_a, v, mo) atomic_load(p_a, v)
+#define atomic_store_explicit(p_a, v, mo) atomic_store(p_a, v)
 
 /*
  * TODO use a special call to increment/decrement
