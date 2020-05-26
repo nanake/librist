@@ -361,7 +361,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 				f->time_offset += convertRTPtoNTP(payload_type, 0, UINT32_MAX);
 			else
 				f->time_offset += ((uint64_t)UINT32_MAX << 32) / RTP_PTYPE_MPEGTS_CLOCKHZ;
-			fprintf(stderr, "Clock wrapped, old offset: %" PRIi64 " new offset %" PRIi64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
+			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO, "[INFO] Clock wrapped, old offset: %" PRId64 " new offset %" PRId64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
 			f->max_source_time = 0;
 			f->time_offset_changed_ts = now;
 		}
