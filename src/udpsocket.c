@@ -371,7 +371,7 @@ int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *
 	if (strlen(p_addr) > 0) {
 		strncpy(address, p_addr, address_maxlen);
 	} else {
-		sprintf(address, "::1");
+		sprintf(address, "::");
 	}
 	return 0;
 }
