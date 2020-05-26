@@ -45,7 +45,7 @@ __BEGIN_DECLS
 
 #define RIST_RTT_MIN (3)
 // this value is UINT32_MAX 4294967.296
-#define RIST_CLOCK (4294967L)
+#define RIST_CLOCK (4294967LL)
 /* nack requests are sent every time a data packet is received. */
 /* this timer will be triggered to ensure we output nacks even when there is no data coming in */
 #define RIST_MAX_JITTER (5) /* In milliseconds */

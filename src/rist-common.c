@@ -353,7 +353,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 		int64_t new_offset = (int64_t)now - (int64_t)source_time;
 		int64_t offset_diff = llabs(new_offset - f->time_offset);
 		//Make sure the new and old offsets differ atleast by 10 hrs, otherwise something is wrong.
-		if (offset_diff > (10 * 3600 * 1000 * RIST_CLOCK)) {
+		if (offset_diff > (int64_t)(10LL * 3600LL * 1000LL * RIST_CLOCK)) {
 			f->time_offset_old = f->time_offset;
 			//Calculate new offset by getting max time for payload type and adding it to old offset
 			//Fast path for mpegts payload type with clock of 90khz
@@ -3121,7 +3121,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 	pthread_rwlock_wrlock(peerlist_lock);
-	fprintf(stderr, "peer list len %lu\n",ctx->peer_lst_len);
+	//fprintf(stderr, "peer list len %zu\n",ctx->peer_lst_len);
 	struct rist_peer *peer, *next;
 	peer = ctx->common.PEERS;
 	for (;;) {

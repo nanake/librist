@@ -18,6 +18,7 @@ if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
 	add_project_arguments(['-Drist_EXPORTS'], language: 'c')
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
+	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
 else
 	add_project_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 	add_project_arguments(cc.get_supported_arguments([
