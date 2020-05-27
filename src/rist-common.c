@@ -444,7 +444,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			/* Clear the queue if the queue had data */
 			/* f->receiver_queue_has_items can be reset to false when the output queue is emptied */
 			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-					"[INFO] Clearing up old %zu bytes of old buffer data\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
+					"[INFO] Clearing up old %lu bytes of old buffer data\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 			/* Delete all buffer data (if any) */
 			empty_receiver_queue(f, get_cctx(peer));
 		}
@@ -460,8 +460,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		/* This will synchronize idx and seq so we can insert packets into receiver buffer based on seq number */
 		size_t idx_initial = seq & (f->receiver_queue_max -1);
 			msg(f->receiver_id, f->sender_id, RIST_LOG_INFO,
-				"[INIT] Storing first packet seq %" PRIu32 ", idx %zu, %" PRIu64 ", offset %" PRId64 " ms\n",
-				seq, idx_initial, source_time, peer->flow->time_offset / RIST_CLOCK);
+				"[INIT] Storing first packet seq %" PRIu32 ", idx %zu, %" PRIu64 ", offset %" PRId64 " ms, output_idx %zu\n",
+				seq, idx_initial, source_time, peer->flow->time_offset / RIST_CLOCK, idx_initial);
 		uint64_t packet_time = source_time + f->time_offset;
 
 		receiver_insert_queue_packet(f, peer, idx_initial, buf, len, seq, source_time, src_port, dst_port, packet_time);
@@ -657,7 +657,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				b = f->receiver_queue[counter];
 				if (counter == output_idx) {
 					// TODO: with the check below, this should never happen
-					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after a full counter loop (%zu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
+					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after a full counter loop (%lu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					// if the entire buffer is empty, something is very wrong, reset the queue ...
 					f->receiver_queue_has_items = false;
 					atomic_store_explicit(&f->receiver_queue_size, 0, memory_order_release);
@@ -666,7 +666,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 				if (holes > f->missing_counter_max)
 				{
-					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after %zu holes (%zu bytes in queue)\n",
+					msg(ctx->id, 0, RIST_LOG_WARN, "[ERROR] Did not find any data after %zu holes (%lu bytes in queue)\n",
 							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					break;
 				}
