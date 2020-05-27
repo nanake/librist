@@ -208,8 +208,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 			{
 				if (!peer->buffer_bloat_active)
 				{
-					msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO,
-						"\t[INFO] Activating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
+					rist_log(&ctx->common, RIST_LOG_INFO,
+						"\tActivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
 						peer->stats_receiver_instant.recovered_slope,
 						peer->stats_receiver_instant.recovered_slope_inverted,
@@ -222,8 +222,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 			{
 				if (peer->buffer_bloat_active)
 				{
-					msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO,
-						"\t[INFO] Deactivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
+					rist_log(&ctx->common, RIST_LOG_INFO,
+						"\tDeactivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
 						peer->stats_receiver_instant.recovered_slope,
 						peer->stats_receiver_instant.recovered_slope_inverted,
@@ -252,7 +252,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		flow_recv_instant > 10 &&
 		flow_recv_instant < flow_missing_instant)
 	{
-		msg(flow->receiver_id, flow->sender_id, RIST_LOG_INFO, "\t[STATS]The flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
+		rist_log(&ctx->common, RIST_LOG_INFO, "\tThe flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
 			flow_missing_instant, flow_recv_instant);
 		/* Delete all missing queue elements (if any) */
 		rist_flush_missing_flow_queue(flow);

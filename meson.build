@@ -64,7 +64,7 @@ endif
 librist = library('rist',
 	'src/crypto.c',
 	'src/flow.c',
-	'src/log.c',
+	'src/logging.c',
 	'src/rist.c',
 	'src/rist-common.c',
 	'src/udp.c',

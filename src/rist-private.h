@@ -242,6 +242,16 @@ struct rist_common_ctx {
 	volatile int shutdown;
 	volatile bool startup_complete;
 
+	/* Used by logging */
+	intptr_t sender_id;
+	intptr_t receiver_id;
+	enum rist_log_level log_level;
+	int (*log_cb)(void *arg, int loglevel, const char *msg);
+	void *log_cb_arg;
+	int log_socket;
+	FILE* log_stream;
+
+
 	/* Flows */
 	struct rist_flow *FLOWS;
 
@@ -568,10 +578,6 @@ RIST_PRIV int rist_auth_handler(struct rist_common_ctx *ctx,
 								int (*disconn_cb)(void *arg, struct rist_peer *peer),
 								void *arg);
 RIST_PRIV void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer);
-
-/* defined in log.c */
-RIST_PRIV int rist_set_stats_fd(int fd);
-RIST_PRIV int rist_set_stats_socket(char * hostname, int port);
 
 /* Get common context */
 RIST_PRIV struct rist_common_ctx *get_cctx(struct rist_peer *peer);

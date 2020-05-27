@@ -7,6 +7,7 @@
 #define LIBRIST_H
 
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 /* __BEGIN_DECLS should be used at the beginning of your declarations,
@@ -121,12 +122,13 @@ enum rist_profile {
 };
 
 enum rist_log_level {
-	RIST_LOG_QUIET = -1,
-	RIST_LOG_INFO = 0,
-	RIST_LOG_ERROR = 1,
-	RIST_LOG_WARN = 2,
-	RIST_LOG_DEBUG = 3,
-	RIST_LOG_SIMULATE = 4,
+	RIST_LOG_DISABLE =-1,
+	RIST_LOG_ERROR =3,
+	RIST_LOG_WARN =4,
+	RIST_LOG_NOTICE =5,
+	RIST_LOG_INFO =6,	
+	RIST_LOG_DEBUG =7,
+	RIST_LOG_SIMULATE = 100,
 };
 
 enum rist_recovery_mode {
@@ -691,16 +693,32 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
 RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
 
 /**
- * @brief Set custom file descriptor and target ip:port to be used for printing logs
+ * @brief Set logging options, logging defaults to stderr when not called.
  *
- * Set fd or configure remote udp address:port to print librist logs
+ * When log_cb is non null all other options are ignored. Both log socket and log file pointer can be provided.
  *
- * @param fd file descriptor to be used for statistics (default is no logs or -1, 2 is stderr)
+ * @param ctx RIST Receiver context
+ * @param log_cb Callback function that will be called for logs. Calling application must free the provided char pointer
+ * @param cb_arg Optional log callback arguments
  * @param address ipaddress:port combination to send the logs using udp (NULL to disable)
  *
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_logs_set(int fd, char *address);
+RIST_API int rist_receiver_logging_set(struct rist_receiver *ctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE* logfp);
+
+/**
+ * @brief Set logging options, logging defaults to stderr when not called.
+ *
+ * When log_cb is non null all other options are ignored. Both log socket and log file pointer can be provided.
+ *
+ * @param ctx RIST Sender context
+ * @param log_cb Callback function that will be called for logs. Calling application must free the provided char pointer
+ * @param cb_arg Optional log callback arguments
+ * @param address ipaddress:port combination to send the logs using udp (NULL to disable)
+ *
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_logging_set(struct rist_sender *ctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp);
 
 /**
  * @brief Set callback for receiving stats structs

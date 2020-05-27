@@ -6,6 +6,7 @@
 #include <stdlib.h>
 #include <limits.h>
 
+#ifdef _MSC_VER
 int vasprintf(char** strp, const char* fmt, va_list ap)
 {
 #ifdef _WIN32
@@ -49,3 +50,4 @@ int asprintf(char** strp, const char* fmt, ...)
 	va_end(ap);
 	return r;
 }
+#endif

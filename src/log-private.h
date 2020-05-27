@@ -11,8 +11,8 @@
 
 __BEGIN_DECLS
 
-RIST_PRIV void msg(intptr_t receiver_ctx, intptr_t sender_ctx, enum rist_log_level level, const char *format, ...);
-RIST_PRIV void set_loglevel(enum rist_log_level level);
+RIST_PRIV void rist_log(struct rist_common_ctx *cctx, enum rist_log_level level, const char *format, ...);
+RIST_PRIV int rist_set_logging_options(struct rist_common_ctx *cctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp);
 
 __END_DECLS
 

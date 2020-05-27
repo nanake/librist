@@ -22,8 +22,8 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 	f->missing_counter++;
 	peer->stats_receiver_instant.missing++;
 	if (get_cctx(peer)->debug)
-		msg(f->receiver_id, 0, RIST_LOG_DEBUG,
-			"[DEBUG] Datagram %" PRIu32 " is missing, inserting into the missing queue "
+		rist_log(get_cctx(peer), RIST_LOG_DEBUG,
+			"Datagram %" PRIu32 " is missing, inserting into the missing queue "
 			"with deadline in %" PRIu64 "ms (queue=%d), last_seq_found %"PRIu32"\n",
 		seq, (m->next_nack - now) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
 
@@ -74,14 +74,14 @@ void rist_flush_missing_flow_queue(struct rist_flow *flow)
 
 void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Triggering data output thread termination\n");
+	rist_log(&ctx->common, RIST_LOG_INFO, "Triggering data output thread termination\n");
 	f->shutdown = 1;
 	while (f->shutdown != 2) {
-		msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Waiting for data output thread to exit\n");
+		rist_log(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
 		usleep(5000);
 	}
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Removing all peers from flow list\n");
+	rist_log(&ctx->common, RIST_LOG_INFO, "Removing all peers from flow list\n");
 	for (size_t i = 0; i < f->peer_lst_len; i++) {
 		struct rist_peer *peer = f->peer_lst[i];
 		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
@@ -92,16 +92,16 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	free(f->peer_lst);
 	f->peer_lst = NULL;
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting missing queue elements\n");
+	rist_log(&ctx->common, RIST_LOG_INFO, "Deleting missing queue elements\n");
 	/* Delete all missing queue elements (if any) */
 	rist_flush_missing_flow_queue(f);
 
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting output buffer data\n");
+	rist_log(&ctx->common, RIST_LOG_INFO, "Deleting output buffer data\n");
 	/* Delete all buffer data (if any) */
 	empty_receiver_queue(f, &ctx->common);
 
 	// Delete flow
-	msg(ctx->id, 0, RIST_LOG_INFO, "[CLEANUP] Deleting flow\n");
+	rist_log(&ctx->common, RIST_LOG_INFO, "Deleting flow\n");
 	struct rist_flow **prev_flow = &ctx->common.FLOWS;
 	struct rist_flow *current_flow = *prev_flow;
 	while (current_flow)
@@ -139,8 +139,8 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 {
 	struct rist_flow *f = calloc(1, sizeof(*f));
 	if (!f) {
-		msg(ctx->id, 0, RIST_LOG_ERROR,
-			"[ERROR] Could not create receiver buffer of size %d MB, OOM\n", sizeof(*f) / 1000000);
+		rist_log(&ctx->common, RIST_LOG_ERROR,
+			"Could not create receiver buffer of size %d MB, OOM\n", sizeof(*f) / 1000000);
 		return NULL;
 	}
 
@@ -151,7 +151,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	int ret = pthread_cond_init(&f->condition, NULL);
 	if (ret) {
 		free(f);
-		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_cond_init\n", ret);
+		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_cond_init\n", ret);
 		return NULL;
 	}
 
@@ -159,7 +159,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	if (ret){
 		pthread_cond_destroy(&f->condition);
 		free(f);
-		msg(ctx->id, 0, RIST_LOG_ERROR, "[ERROR] Error %d calling pthread_mutex_init\n", ret);
+		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_mutex_init\n", ret);
 		return NULL;
 	}
 
@@ -214,15 +214,15 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		else
 			f->receiver_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
-		msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32" created (short=%d)\n", flow_id, f->short_seq);
+		rist_log(&ctx->common, RIST_LOG_INFO, "FLOW #%"PRIu32" created (short=%d)\n", flow_id, f->short_seq);
 	} else {
 		/* double check that this peer is not a member of this flow already */
 		if (flow_has_peer(f, flow_id, p->adv_peer_id)) {
-			msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32", Existing peer (id=%"PRIu32") re-joining existing flow ...\n",
+			rist_log(&ctx->common, RIST_LOG_INFO, "FLOW #%"PRIu32", Existing peer (id=%"PRIu32") re-joining existing flow ...\n",
 				flow_id, p);
 			ret = 2;
 		} else {
-			msg(ctx->id, 0, RIST_LOG_INFO, "[INIT] FLOW #%"PRIu32": New peer (id=%u) joining existing flow ...\n",
+			rist_log(&ctx->common, RIST_LOG_INFO, "FLOW #%"PRIu32": New peer (id=%u) joining existing flow ...\n",
 				flow_id, p->adv_peer_id);
 			ret = 1;
 		}
@@ -256,11 +256,11 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		f->peer_lst_len++;
 	}
 
-	msg(ctx->id, 0, RIST_LOG_INFO,
-		"[INIT] Peer with id #%u associated with flow #%" PRIu64 "\n", p->adv_peer_id, flow_id);
+	rist_log(&ctx->common, RIST_LOG_INFO,
+		"Peer with id #%u associated with flow #%" PRIu64 "\n", p->adv_peer_id, flow_id);
 
-	msg(ctx->id, 0, RIST_LOG_INFO,
-		"[INIT] Flow #%" PRIu64 " has now %d peers.\n", flow_id, f->peer_lst_len);
+	rist_log(&ctx->common, RIST_LOG_INFO,
+		"Flow #%" PRIu64 " has now %d peers.\n", flow_id, f->peer_lst_len);
 
 	return ret;
 }
