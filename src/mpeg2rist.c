@@ -3,8 +3,8 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include <librist.h>
-#include <librist_udpsocket.h>
+#include <librist/librist.h>
+#include <librist/udpsocket.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>

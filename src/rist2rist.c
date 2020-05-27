@@ -3,7 +3,7 @@
  * author: Gijs Peskens
  */
 
-#include <librist.h>
+#include <librist/librist.h>
 #include <stdio.h>
 #include <string.h>
 #include "getopt-shim.h"
