@@ -72,8 +72,8 @@ int clock_gettime(clockid_t clock, timespec_t *tp)
 	// In windows, we settle for microseconds
 	gettimeofday(&tv, NULL);
 
-	tp->tv_sec = tv->tv_sec;
-	tp->tv_nsec = tv->tv_usec * 1000ULL;
+	tp->tv_sec = tv.tv_sec;
+	tp->tv_nsec = tv.tv_usec * 1000ULL;
 
 	return 0;
 }
