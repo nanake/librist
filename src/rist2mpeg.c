@@ -29,14 +29,14 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -b | --receiver2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of second local rist receiver               |\n"
 "       -c | --receiver3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of third local rist receiver                |\n"
 "       -d | --receiver4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of fourth local rist receiver               |\n"
-"       -S | --statsinterval value (ms)                                   | Interval at which stats get printed, 0 to disable      |\n"
+"       -S | --statsinterval value (ms)                                   | Interval at which stats get printed, 0 to disable   |\n"
 "       -e | --encryption-password PWD                                    | Pre-shared encryption password                      |\n"
 "       -t | --encryption-type TYPE                                       | Encryption type (1 = AES-128, 2 = AES-256)          |\n"
 "       -p | --profile number                                             | Rist profile (0 = simple, 1 = main)                 |\n"
 "       -n | --gre-src-port port                                          | Reduced profile src port to filter (0 = no filter)  |\n"
 "       -N | --gre-dst-port port                                          | Reduced profile dst port to filter (0 = no filter)  |\n"
 "       -C | --cname identifier                                           | Manually configured identifier                      |\n"
-"       -v | --verbose-level value                                        | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4   |\n"
+"       -v | --verbose-level value          							  | To disable logging: -1, levels match syslog levels  |\n"
 "       -h | --help                                                       | Show this help                                      |\n"
 "       -m | --min-buf ms                                               * | Minimum rist recovery buffer size                   |\n"
 "       -M | --max-buf ms                                               * | Maximum rist recovery buffer size                   |\n"
@@ -61,7 +61,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --gre-src-port 0          \\\n"
 "       --gre-dst-port 0          \\\n"
 "       --json 1                  \\\n"
-"       --verbose-level 2         \n";
+"       --verbose-level 4         \n";
 
 static struct option long_options[] = {
 	{ "url",             required_argument, NULL, 'u' },
@@ -110,7 +110,7 @@ struct rist_port_filter {
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
 {
-	struct rist_port_filter *port_filter = (void *) arg;
+	struct rist_port_filter *port_filter = (struct rist_port_filter *)arg;
 
 
 	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
@@ -162,7 +162,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
-	if (oob_block->payload_len > 4 && strncmp(oob_block->payload, "auth,", 5) == 0) {
+	if (oob_block->payload_len > 4 && strncmp((char*)oob_block->payload, "auth,", 5) == 0) {
 		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
 	}
 	return 0;
@@ -296,7 +296,7 @@ typedef signed int ssize_t;
 			encryption_type = atoi(optarg);
 		break;
 		case 'p':
-			profile = atoi(optarg);
+			profile = (enum rist_profile)atoi(optarg);
 		break;
 		case 'n':
 			port_filter.virt_src_port = atoi(optarg);
@@ -311,7 +311,7 @@ typedef signed int ssize_t;
 			shared_secret = strdup(optarg);
 		break;
 		case 'v':
-			loglevel = atoi(optarg);
+			loglevel = (enum rist_log_level)atoi(optarg);
 		break;
 		case 'S':
 			statsinterval = atoi(optarg);
@@ -353,16 +353,16 @@ typedef signed int ssize_t;
 			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
-	/* Turn on stderr (2) logs */
-	if (rist_logs_set(STDERR_FILENO, NULL) != 0) {
-		fprintf(stderr, "Could not set logging\n");
-		exit(1);
-	}
-
 	struct rist_receiver *ctx;
 
 	if (rist_receiver_create(&ctx, profile, loglevel) != 0) {
 		fprintf(stderr, "Could not create rist receiver context\n");
+		exit(1);
+	}
+
+	/* Turn on stderr (2) logs */
+	if (rist_receiver_logging_set(ctx, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr, "Could not set logging\n");
 		exit(1);
 	}
 
@@ -390,7 +390,7 @@ typedef signed int ssize_t;
 		// (used for reverse connection gre-dst-port inside main profile)
 		// Applications defaults and/or command line options
 		int keysize = encryption_type * 128;
-		const struct rist_peer_config app_peer_config = {
+		struct rist_peer_config app_peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
 			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
 			.recovery_mode = recovery_mode,
@@ -409,16 +409,16 @@ typedef signed int ssize_t;
 		};
 
 		if (shared_secret != NULL) {
-			strncpy((void *)&app_peer_config.secret[0], shared_secret, 128);
+			strncpy(app_peer_config.secret, shared_secret, 128);
 		}
 
 		if (cname != NULL) {
-			strncpy((void *)&app_peer_config.cname[0], cname, 128);
+			strncpy(app_peer_config.cname, cname, 128);
 		}
 
 		// URL overrides (also cleans up the URL)
 		const struct rist_peer_config *peer_config = &app_peer_config;
-		if (rist_parse_address(addr[i], (void *)&peer_config))
+		if (rist_parse_address(addr[i], &peer_config))
 		{
 			fprintf(stderr, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
@@ -444,10 +444,10 @@ typedef signed int ssize_t;
 			fprintf(stderr, "Could not parse input url %s\n", url[i]);
 			continue;
 		}
-		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
+		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n",hostname, outputport);
 		mpeg[i] = udpsocket_open_connect(hostname, outputport, miface[i]);
 		if (mpeg[i] <= 0) {
-			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d (%d)\n", (char *) hostname, outputport, mpeg);
+			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d (%d)\n", hostname, outputport, mpeg[i]);
 			continue;
 		} else {
 			fprintf(stderr, "Output socket is open and bound\n");

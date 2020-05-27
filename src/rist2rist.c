@@ -9,6 +9,9 @@
 #include "getopt-shim.h"
 #include <assert.h>
 #include <signal.h>
+#ifdef __unix
+#include <unistd.h>
+#endif
 
 extern char* stats_to_json(struct rist_stats *stats);
 
@@ -39,7 +42,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -e | --encryption-password PWD           | Pre-shared encryption password                         |\n"
 "       -t | --encryption-type TYPE              | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)   |\n"
 "       -C | --cname identifier                  | Manually configured identifier                         |\n"
-"       -v | --verbose-level                     | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
+"       -v | --verbose-level value               | To disable logging: -1, log levels match syslog levels |\n"
 "       -h | --help                              | Show this help                                         |\n"
 ;
 
@@ -111,6 +114,11 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
+	if (rist_sender_logging_set(ctx, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr, "Could not set logging\n");
+		exit(1);
+	}
+
 	rist = rist_sender_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
 		fprintf(stderr, "Could not initialize rist auth handler\n");
@@ -128,7 +136,7 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 
 	// Applications defaults and/or command line options
 	int keysize =  setup->encryption_type * 128;
-	const struct rist_peer_config app_peer_config = {
+	struct rist_peer_config app_peer_config = {
 		.version = RIST_PEER_CONFIG_VERSION,
 		.virt_dst_port = setup->dst_port+1,
 		.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
@@ -147,11 +155,11 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 	};
 
 	if (setup->shared_secret != NULL) {
-		strncpy((void *)&app_peer_config.secret[0], setup->shared_secret, 128);
+		strncpy(app_peer_config.secret, setup->shared_secret, 128);
 	}
 
 	if (setup->cname != NULL) {
-		strncpy((void *)&app_peer_config.cname[0], setup->cname, 128);
+		strncpy(app_peer_config.cname, setup->cname, 128);
 	}
 
 	// URL overrides (also cleans up the URL)
@@ -181,7 +189,7 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
 {
-	struct rist_cb_arg *cb_arg = (void *) arg;
+	struct rist_cb_arg *cb_arg = (struct rist_cb_arg *) arg;
 	struct rist_data_block *block = (struct rist_data_block*)b;
 	if (cb_arg->client_args->flow_id != b->flow_id) {
 		printf("Flow ID %ud\n",b->flow_id);
@@ -278,7 +286,7 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
-	const struct rist_peer_config app_peer_config = {
+	struct rist_peer_config app_peer_config = {
 		.version = RIST_PEER_CONFIG_VERSION,
 		.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
 		.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
@@ -297,7 +305,7 @@ int main (int argc, char **argv) {
 	};
 
 	if (cname != NULL) {
-		strncpy((void *)&app_peer_config.cname[0], cname, 128);
+		strncpy(app_peer_config.cname, cname, 128);
 	}
 
 	if (statsinterval) {
@@ -306,7 +314,7 @@ int main (int argc, char **argv) {
 
 	// URL overrides (also cleans up the URL)
 	const struct rist_peer_config *peer_config = &app_peer_config;
-	if (rist_parse_address(inputurl, (void *)&peer_config))
+	if (rist_parse_address(inputurl, &peer_config))
 	{
 		fprintf(stderr, "Could not parse peer options for receiver \n");
 		exit(1);

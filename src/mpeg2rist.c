@@ -79,7 +79,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -n | --gre-src-port port               | Reduced profile src port to forward                    |\n"
 "       -N | --gre-dst-port port               | Reduced profile dst port to forward                    |\n"
 "       -C | --cname identifier                | Manually configured identifier                         |\n"
-"       -v | --verbose-level value             | QUIET=-1,INFO=0,ERROR=1,WARN=2,DEBUG=3,SIMULATE=4      |\n"
+"       -v | --verbose-level value             | To disable logging: -1, log levels match syslog levels |\n"
 "       -h | --help                            | Show this help                                         |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
@@ -96,7 +96,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --gre-src-port 1971       \\\n"
 "       --gre-dst-port 1968       \\\n"
 
-"       --verbose-level 2         \n";
+"       --verbose-level 4         \n";
 
 static void usage(char *cmd)
 {
@@ -334,10 +334,10 @@ int main(int argc, char *argv[])
 		fprintf(stderr, "Could not parse input url %s\n", url);
 		exit(1);
 	}
-	fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+	fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", hostname, inputport);
 	mpeg = udpsocket_open_bind(hostname, inputport, miface);
 	if (mpeg <= 0) {
-		fprintf(stderr, "[ERROR] Could not bind to: Host %s, Port %d (%d)\n", (char *) hostname, inputport, mpeg);
+		fprintf(stderr, "[ERROR] Could not bind to: Host %s, Port %d (%d)\n",hostname, inputport, mpeg);
 		exit(1);
 	} else {
 		fprintf(stderr, "Input socket is open and bound\n");
@@ -355,7 +355,7 @@ int main(int argc, char *argv[])
 	}
 
 	/* Turn on stderr (2) logs */
-	if (rist_logs_set(STDERR_FILENO, NULL) != 0) {
+	if (rist_sender_logging_set(ctx, NULL, NULL, NULL, stderr) != 0) {
 		fprintf(stderr, "Could not set logging\n");
 		exit(1);
 	}
@@ -384,7 +384,7 @@ int main(int argc, char *argv[])
 
 		// Applications defaults and/or command line options
 		int keysize =  encryption_type * 128;
-		const struct rist_peer_config app_peer_config = {
+		struct rist_peer_config app_peer_config = {
 			.version = RIST_PEER_CONFIG_VERSION,
 			.virt_dst_port = virt_dst_port,
 			.recovery_mode = recovery_mode,
@@ -403,11 +403,11 @@ int main(int argc, char *argv[])
 		};
 
 		if (shared_secret != NULL) {
-			strncpy((void *)&app_peer_config.secret[0], shared_secret, 128);
+			strncpy(app_peer_config.secret, shared_secret, 128);
 		}
 
 		if (cname != NULL) {
-			strncpy((void *)&app_peer_config.cname[0], cname, 128);
+			strncpy(app_peer_config.cname, cname, 128);
 		}
 
 		// URL overrides (also cleans up the URL)
