@@ -60,23 +60,20 @@ int gettimeofday(struct timeval *tv, void * not_implemented)
 
 int clock_gettime(clockid_t clock, timespec_t *tp)
 {
-	(void)tp;
+	struct timeval tv;
+	char *str_content;
+	char *str_udp;
 
 	if (clock != CLOCK_MONOTONIC) {
 		errno = EINVAL;
 		return -1;
 	}
 
-	LARGE_INTEGER now, frequency;
-	if (QueryPerformanceFrequency(&frequency)) {
-		QueryPerformanceCounter(&now);
-		/* fill in the timespec structure */
-		tp->tv_sec = now.QuadPart / frequency.QuadPart;
-		tp->tv_nsec = (now.QuadPart * 1000000000 / frequency.QuadPart) - (tp->tv_sec * 1000000000);
-	} else {
-		errno = EINVAL;
-		return -1;
-	}
+	// In windows, we settle for microseconds
+	gettimeofday(&tv, NULL);
+
+	tp->tv_sec = tv->tv_sec;
+	tp->tv_nsec = tv->tv_usec * 1000ULL;
 
 	return 0;
 }
