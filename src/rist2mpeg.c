@@ -102,6 +102,7 @@ void usage(char *name)
 
 static int mpeg[UDP_COUNT];
 static int keep_running = 1;
+static struct rist_logging_settings *logging_settings;
 
 struct rist_port_filter {
 	uint16_t virt_src_port;
@@ -114,12 +115,12 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 
 
 	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
-		fprintf(stderr, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
+		rist_log(logging_settings, RIST_LOG_ERROR, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
 		return -1;
 	}
 
 	if (port_filter->virt_dst_port && port_filter->virt_dst_port != b->virt_dst_port) {
-		fprintf(stderr, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, b->virt_dst_port);
+		rist_log(logging_settings, RIST_LOG_ERROR, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, b->virt_dst_port);
 		return -1;
 	}
 
@@ -142,7 +143,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
-	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
+	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending auth message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = message;
@@ -163,7 +164,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	struct rist_receiver *ctx = (struct rist_receiver *)arg;
 	(void)ctx;
 	if (oob_block->payload_len > 4 && strncmp((char*)oob_block->payload, "auth,", 5) == 0) {
-		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
+		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
 	}
 	return 0;
 }
@@ -321,6 +322,10 @@ typedef signed int ssize_t;
 		break;
 		}
 	}
+	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr, "Failed to setup logging\n");
+		exit(1);
+	}
 
 	// For some reason under windows the empty len is 1
 
@@ -333,7 +338,7 @@ typedef signed int ssize_t;
 	}
 
 	if (all_url_null) {
-		fprintf(stderr, "No address provided\n");
+		rist_log(logging_settings, RIST_LOG_ERROR, "No address provided\n");
 		usage(argv[0]);
 	}
 
@@ -347,31 +352,25 @@ typedef signed int ssize_t;
 	}
 
 	/* rist side */
-	fprintf(stderr, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+	rist_log(logging_settings, RIST_LOG_INFO, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
 			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
 	struct rist_receiver *ctx;
 
-	if (rist_receiver_create(&ctx, profile, loglevel) != 0) {
-		fprintf(stderr, "Could not create rist receiver context\n");
-		exit(1);
-	}
-
-	/* Turn on stderr (2) logs */
-	if (rist_receiver_logging_set(ctx, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr, "Could not set logging\n");
+	if (rist_receiver_create(&ctx, profile, logging_settings) != 0) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 		exit(1);
 	}
 
 	if (rist_receiver_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
-		fprintf(stderr, "Could not init rist auth handler\n");
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exit(1);
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
 		if (rist_receiver_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
-			fprintf(stderr, "Could not add enable out-of-band data\n");
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
 	}
@@ -418,13 +417,13 @@ typedef signed int ssize_t;
 		const struct rist_peer_config *peer_config = &app_peer_config;
 		if (rist_parse_address(addr[i], &peer_config))
 		{
-			fprintf(stderr, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
 		struct rist_peer *peer;
 		if (rist_receiver_peer_create(ctx, &peer, peer_config) == -1) {
-			fprintf(stderr, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
 	}
@@ -439,16 +438,16 @@ typedef signed int ssize_t;
 		int outputlisten;
 		uint16_t outputport;
 		if (udpsocket_parse_url(url[i], hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
-			fprintf(stderr, "Could not parse input url %s\n", url[i]);
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", url[i]);
 			continue;
 		}
-		fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n",hostname, outputport);
+		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n",hostname, outputport);
 		mpeg[i] = udpsocket_open_connect(hostname, outputport, miface[i]);
 		if (mpeg[i] <= 0) {
-			fprintf(stderr, "[ERROR] Could not connect to: Host %s, Port %d (%d)\n", hostname, outputport, mpeg[i]);
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d (%d)\n", hostname, outputport, mpeg[i]);
 			continue;
 		} else {
-			fprintf(stderr, "Output socket is open and bound\n");
+			rist_log(logging_settings, RIST_LOG_INFO,"Output socket is open and bound\n");
 			atleast_one_socket_opened = true;
 		}
 	}
@@ -460,13 +459,13 @@ typedef signed int ssize_t;
 	if (enable_data_callback == 1) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &port_filter))
 		{
-			fprintf(stderr, "Could not set data_callback pointer");
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
 			exit(1);
 		}
 	}
 
 	if (rist_receiver_start(ctx)) {
-		fprintf(stderr, "Could not start rist receiver\n");
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 		exit(1);
 	}
 	/* Start the rist protocol thread */

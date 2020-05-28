@@ -98,6 +98,8 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 "       --verbose-level 4         \n";
 
+static struct rist_logging_settings *logging_settings;
+
 static void usage(char *cmd)
 {
 	fprintf(stderr, "%s%s", help_str, cmd);
@@ -109,7 +111,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	struct rist_sender *ctx = (struct rist_sender *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
-	fprintf(stderr,"Peer has been authenticated, sending auth message: %s\n", message);
+	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending auth message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = message;
@@ -130,7 +132,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	struct rist_sender *ctx = (struct rist_sender *)arg;
 	(void)ctx;
 	if (oob_block->payload_len > 4 && strncmp(oob_block->payload, "auth,", 5) == 0) {
-		fprintf(stderr,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
+		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
 	}
 	return 0;
 }
@@ -143,7 +145,7 @@ static int cb_stats(void *arg, const char *rist_stats) {
 
 static int signalReceived = 0;
 static void intHandler(int signal) {
-	fprintf(stderr, "Signal %d received\n", signal);
+	rist_log(logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
 	signalReceived = signal;
 }
 
@@ -301,6 +303,11 @@ int main(int argc, char *argv[])
 		break;
 		}
 	}
+	/* Turn on stderr (2) logs */
+	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr, "Failed to setup logging\n");
+		exit(1);
+	}
 
 	if (url == NULL) {
 		usage(argv[0]);
@@ -319,8 +326,8 @@ int main(int argc, char *argv[])
 
 	/* We need to initialize the context first for windows socket startup to happen */
 	struct rist_sender *ctx;
-	if (rist_sender_create(&ctx, profile, 0, loglevel) != 0) {
-		fprintf(stderr, "Could not create rist sender context\n");
+	if (rist_sender_create(&ctx, profile, 0, logging_settings) != 0) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
 		exit(1);
 	}
 
@@ -329,38 +336,32 @@ int main(int argc, char *argv[])
 	int inputlisten;
 	uint16_t inputport;
 	if (udpsocket_parse_url(url, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
-		fprintf(stderr, "Could not parse input url %s\n", url);
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", url);
 		exit(1);
 	}
-	fprintf(stderr, "[INFO] URL parsed successfully: Host %s, Port %d\n", hostname, inputport);
+	rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", hostname, inputport);
 	mpeg = udpsocket_open_bind(hostname, inputport, miface);
 	if (mpeg <= 0) {
-		fprintf(stderr, "[ERROR] Could not bind to: Host %s, Port %d (%d)\n",hostname, inputport, mpeg);
+		rist_log(logging_settings, RIST_LOG_ERROR, "[ERROR] Could not bind to: Host %s, Port %d (%d)\n",hostname, inputport, mpeg);
 		exit(1);
 	} else {
-		fprintf(stderr, "Input socket is open and bound\n");
+		rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound\n");
 	}
 
 	/* rist side */
-	fprintf(stderr, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+	rist_log(logging_settings, RIST_LOG_INFO, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
 			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
 			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
 	for (size_t i = 0; i < PEER_COUNT; i++) {
 		if (address[i] != NULL) {
-			fprintf(stderr, "Connecting to Peer %i: %s\n", (int)(i + 1), address[i]);
+			rist_log(logging_settings, RIST_LOG_INFO, "Connecting to Peer %i: %s\n", (int)(i + 1), address[i]);
 		}
-	}
-
-	/* Turn on stderr (2) logs */
-	if (rist_sender_logging_set(ctx, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr, "Could not set logging\n");
-		exit(1);
 	}
 
 	rist = rist_sender_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
-		fprintf(stderr, "Could not initialize rist auth handler\n");
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		exit(1);
 	}
 
@@ -370,7 +371,7 @@ int main(int argc, char *argv[])
 
 	if (profile != RIST_PROFILE_SIMPLE) {
 		if (rist_sender_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
-			fprintf(stderr, "Could not add enable out-of-band data\n");
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
 	}
@@ -412,13 +413,13 @@ int main(int argc, char *argv[])
 		const struct rist_peer_config *peer_config = &app_peer_config;
 		if (rist_parse_address(address[i], &peer_config))
 		{
-			fprintf(stderr, "Could not parse peer options for sender #%d\n", (int)(i + 1));
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
 		struct rist_peer *peer;
 		if (rist_sender_peer_create(ctx, &peer, peer_config) == -1) {
-			fprintf(stderr, "Could not add peer connector to sender #%d\n", (int)(i + 1));
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender #%d\n", (int)(i + 1));
 			exit(1);
 		}
 	}
@@ -428,7 +429,7 @@ int main(int argc, char *argv[])
 	//rist_sender_keepalive_timeout_set(ctx, 5000);
 
 	if (rist_sender_start(ctx) == -1) {
-		fprintf(stderr, "Could not start rist sender\n");
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 		exit(1);
 	}
 
