@@ -66,12 +66,14 @@ int rist_parse_address(const char *url, const struct rist_peer_config **peer_con
 int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_buffer, int timeout)
 {
 	if (!ctx)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_data_read call!\n");
-		return -1;
-	}
+		1590688060.562348 | 0.139775491854352 | [INFO] Peer cname is gijs - desktop @10.0.1.243 : 1234 1590688060.562355 | 0.139775491854352 | [INFO] Setting max nacks per cycle to 44
 
-	const struct rist_data_block *data_block = NULL;
+		{
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_data_read call!\n");
+			return -1;
+		}
+
+			const struct rist_data_block *data_block = NULL;
 	/* We could enter the lock now, to read the counter. However performance penalties apply.
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
