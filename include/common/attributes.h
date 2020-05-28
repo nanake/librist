@@ -3,24 +3,8 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#ifndef RIST_EXTRA_COMMON_H
-#define RIST_EXTRA_COMMON_H
-
-/* __BEGIN_DECLS should be used at the beginning of your declarations,
- * so that C++ compilers don't mangle their names.  Use __END_DECLS at
- * the end of C declarations.
- */
-#undef __BEGIN_DECLS
-#undef __END_DECLS
-#ifdef __cplusplus
-# define __BEGIN_DECLS extern "C" {
-# define __END_DECLS }
-#else
-# define __BEGIN_DECLS /* empty */
-# define __END_DECLS /* empty */
-#endif
-
-__BEGIN_DECLS
+#ifndef RIST_COMMON_ATTRIBUTES_H
+#define RIST_COMMON_ATTRIBUTES_H
 
 /* Reference: http://gcc.gnu.org/wiki/Visibility */
 #if defined(_WIN32) || defined(__CYGWIN__)
@@ -96,7 +80,5 @@ typedef __int64 ssize_t;
 typedef signed int ssize_t;
 #endif
 #endif
-
-__END_DECLS
 
 #endif

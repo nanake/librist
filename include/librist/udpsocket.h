@@ -8,7 +8,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <stdio.h>
-#include <librist.h>
+#include "common.h"
 
 /* TODO: check errno on windows */
 #include <errno.h>

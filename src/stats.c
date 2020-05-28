@@ -9,6 +9,7 @@
 #include "log-private.h"
 #include "udp-private.h"
 #include <string.h>
+#include "cjson/cJSON.h"
 
 static double round_two_digits(double number)
 {
@@ -51,29 +52,32 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	uint32_t avg_rtt = (peer->eight_times_rtt / 8);
 
 	struct rist_common_ctx *cctx = get_cctx(peer);
-	struct rist_stats *rist_stats = malloc(sizeof(struct rist_stats));
-	rist_stats->stats_type = RIST_STATS_SENDER_PEER;
-	struct rist_stats_sender_peer *peer_stats = &rist_stats->stats.rist_stats_sender_peer;
-	strncpy(peer_stats->cname, peer->receiver_name, 128 );
-	peer_stats->peer_id = peer->adv_peer_id;
-	peer_stats->bandwidth = cli_bw->bitrate;
-	peer_stats->retry_bandwidth = retry_bw->bitrate;
-	peer_stats->sent = peer->stats_sender_instant.sent;
-	peer_stats->received = peer->stats_sender_instant.received;
-	peer_stats->retransmitted = peer->stats_sender_instant.retrans;
-	peer_stats->bloat_skipped = peer->stats_sender_instant.bloat_skip;
-	peer_stats->retransmit_skipped = peer->stats_sender_instant.retrans_skip;
-	peer_stats->quality = Q;
-	peer_stats->rtt = peer->last_mrtt;
-	peer_stats->avg_rtt = avg_rtt;
-	peer_stats->retry_buffer_size = retry_buf_size;
-	peer_stats->cooldown_time = time_left;
 
+	cJSON *stats = cJSON_CreateObject();
+	cJSON *rist_sender_stats = cJSON_AddObjectToObject(stats, "sender-stats");
+	cJSON *peer_obj = cJSON_AddObjectToObject(rist_sender_stats, "peer");
+	cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
+	cJSON_AddStringToObject(peer_obj, "cname", peer->receiver_name);
+	cJSON *peer_stats = cJSON_AddObjectToObject(peer_obj, "stats");
+	cJSON_AddNumberToObject(peer_stats, "quality", Q);
+	cJSON_AddNumberToObject(peer_stats, "sent", peer->stats_sender_instant.sent);
+	cJSON_AddNumberToObject(peer_stats, "received", peer->stats_sender_instant.received);
+	cJSON_AddNumberToObject(peer_stats, "retransmitted", peer->stats_sender_instant.retrans);
+	cJSON_AddNumberToObject(peer_stats, "bandwidth", cli_bw->bitrate);
+	cJSON_AddNumberToObject(peer_stats, "retry_bandwidth", retry_bw->bitrate);
+	cJSON_AddNumberToObject(peer_stats, "bloat_skipped", peer->stats_sender_instant.bloat_skip);
+	cJSON_AddNumberToObject(peer_stats, "retransmit_skipped", peer->stats_sender_instant.retrans_skip);
+	cJSON_AddNumberToObject(peer_stats, "rtt", peer->last_mrtt);
+	cJSON_AddNumberToObject(peer_stats, "avg_rtt", avg_rtt);
+	cJSON_AddNumberToObject(peer_stats, "retry_buffer_size", retry_buf_size);
+	cJSON_AddNumberToObject(peer_stats, "cooldown_time", time_left);
+	char *stats_string = cJSON_PrintUnformatted(stats);
+	cJSON_Delete(stats);
 	if (cctx->stats_callback != NULL)
-		cctx->stats_callback(cctx->stats_callback_argument, rist_stats);
-	else
-		free(rist_stats);
-
+		cctx->stats_callback(cctx->stats_callback_argument, stats_string);
+	else 
+		free(stats_string);
+	
 	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
 }
 
@@ -99,10 +103,12 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	uint32_t flow_recovered_morenack_instant = 0;
 	uint32_t flow_reordered_instant = 0;
 
-	struct rist_stats *rist_stats = malloc(sizeof(struct rist_stats)+ sizeof(struct rist_stats_receiver_flow_peer) * (flow->peer_lst_len -1));
-	rist_stats->stats_type = RIST_STATS_RECEIVER_FLOW;
-	struct rist_stats_receiver_flow *stats = &rist_stats->stats.rist_stats_receiver_flow;
-
+	cJSON *stats = cJSON_CreateObject();
+	cJSON *stats_obj = cJSON_AddObjectToObject(stats, "receiver-stats");
+	cJSON *flow_obj = cJSON_AddObjectToObject(stats_obj, "flowinstant");
+	cJSON_AddNumberToObject(flow_obj, "flow_id", flow->flow_id);
+	cJSON *flow_stats = cJSON_AddObjectToObject(flow_obj, "stats");
+	cJSON *peers = cJSON_AddArrayToObject(flow_obj, "peers");
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
 	{
 		struct rist_peer *peer = flow->peer_lst[i];
@@ -159,35 +165,32 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 													   peer->stats_receiver_total.recovered_average -
 													   (peer->stats_receiver_total.recovered_average / 8);
 
-		strncpy(stats->peers[i].cname, peer->receiver_name, 128);
-		stats->peers[i].flow_id = flow->flow_id;
-		stats->peers[i].dead = peer->dead;
-		stats->peers[i].peer_id = peer->adv_peer_id;
-		stats->peers[i].peer_num = (uint32_t)(i + 1);
-		stats->peers[i].flow_peer_list_len = (uint32_t)flow->peer_lst_len;
-		stats->peers[i].received = (uint32_t)peer->stats_receiver_instant.recv;//FIXME
-		stats->peers[i].missing = peer->stats_receiver_instant.missing;
-		stats->peers[i].quality = QpeerInstant;
-		stats->peers[i].recovered_total = peer->stats_receiver_instant.recovered;
-		stats->peers[i].recovered_no_nack = peer->stats_receiver_instant.recovered_0nack;
-		stats->peers[i].recovered_one_nack = peer->stats_receiver_instant.recovered_1nack;
-		stats->peers[i].recovered_two_nacks = peer->stats_receiver_instant.recovered_2nack;
-		stats->peers[i].recovered_three_nacks = peer->stats_receiver_instant.recovered_3nack;
-		stats->peers[i].recovered_more_nacks = peer->stats_receiver_instant.recovered_morenack;
-		stats->peers[i].recovered_average = peer->stats_receiver_instant.recovered_average;
-		stats->peers[i].recovered_slope = peer->stats_receiver_instant.recovered_slope;
-		stats->peers[i].recovered_slope_inverse = peer->stats_receiver_instant.recovered_slope_inverted;
-		stats->peers[i].reordered = peer->stats_receiver_instant.reordered;
-		stats->peers[i].duplicates = peer->stats_receiver_instant.dups;
-		stats->peers[i].retries = peer->stats_receiver_instant.retries;
-		stats->peers[i].recovery_buffer_length = peer->recovery_buffer_ticks / RIST_CLOCK;
-		stats->peers[i].missing_queue = peer->flow->missing_counter;
-		stats->peers[i].missing_queue_max = peer->missing_counter_max;
-		stats->peers[i].rtt = peer->last_mrtt;
-		stats->peers[i].avg_rtt = avg_rtt;
-		stats->peers[i].bitrate = bitrate;
-		stats->peers[i].avg_bitrate = (uint32_t)(eight_times_bitrate / 8);
-		
+		cJSON *peer_obj = cJSON_CreateObject();
+		cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
+		cJSON_AddBoolToObject(peer_obj, "dead", peer->dead);
+		cJSON *peer_stats = cJSON_AddObjectToObject(peer_obj, "stats");
+		cJSON_AddNumberToObject(peer_stats, "quality", QpeerInstant);
+		cJSON_AddNumberToObject(peer_stats, "received", peer->stats_receiver_instant.recv);
+		cJSON_AddNumberToObject(peer_stats, "missing", peer->stats_receiver_instant.missing);
+		cJSON_AddNumberToObject(peer_stats, "recovered_total", peer->stats_receiver_instant.recovered);
+		cJSON_AddNumberToObject(peer_stats, "reordered", peer->stats_receiver_instant.reordered);
+		cJSON_AddNumberToObject(peer_stats, "retries", peer->stats_receiver_instant.retries);
+		cJSON_AddNumberToObject(peer_stats, "recovered_one_nack", peer->stats_receiver_instant.recovered_0nack);
+		cJSON_AddNumberToObject(peer_stats, "recovered_two_nacks", peer->stats_receiver_instant.recovered_1nack);
+		cJSON_AddNumberToObject(peer_stats, "recovered_three_nacks", peer->stats_receiver_instant.recovered_2nack);
+		cJSON_AddNumberToObject(peer_stats, "recovered_four_nacks", peer->stats_receiver_instant.recovered_3nack);
+		cJSON_AddNumberToObject(peer_stats, "recovered_more_nacks", peer->stats_receiver_instant.recovered_morenack);
+		cJSON_AddNumberToObject(peer_stats, "recovered_average", peer->stats_receiver_instant.recovered_average);
+		cJSON_AddNumberToObject(peer_stats, "recovered_slope", peer->stats_receiver_instant.recovered_slope);
+		cJSON_AddNumberToObject(peer_stats, "recovered_slope_inverse", peer->stats_receiver_instant.recovered_slope_inverted);
+		cJSON_AddNumberToObject(peer_stats, "duplicates", peer->stats_receiver_instant.dups);
+		cJSON_AddNumberToObject(peer_stats, "recovery_buffer_length", peer->recovery_buffer_ticks / RIST_CLOCK);
+		cJSON_AddNumberToObject(peer_stats, "rtt", peer->last_mrtt);
+		cJSON_AddNumberToObject(peer_stats, "avg_rtt", avg_rtt);
+		cJSON_AddNumberToObject(peer_stats, "bitrate", bitrate);
+		cJSON_AddNumberToObject(peer_stats, "avg_bitrate", eight_times_bitrate / 8);
+		cJSON_AddItemToArray(peers, peer_obj);
+	
 		// Calculate flow instant stats
 		flow_recv_instant += peer->stats_receiver_instant.recv;
 		flow_missing_instant += peer->stats_receiver_instant.missing;
@@ -208,7 +211,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 			{
 				if (!peer->buffer_bloat_active)
 				{
-					rist_log(&ctx->common, RIST_LOG_INFO,
+					rist_log_priv(&ctx->common, RIST_LOG_INFO,
 						"\tActivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
 						peer->stats_receiver_instant.recovered_slope,
@@ -222,7 +225,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 			{
 				if (peer->buffer_bloat_active)
 				{
-					rist_log(&ctx->common, RIST_LOG_INFO,
+					rist_log_priv(&ctx->common, RIST_LOG_INFO,
 						"\tDeactivating buffer protection for peer %d, avg_slope=%d, avg_inverted=%d (%u/%u)\n",
 						peer->adv_peer_id,
 						peer->stats_receiver_instant.recovered_slope,
@@ -252,35 +255,39 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		flow_recv_instant > 10 &&
 		flow_recv_instant < flow_missing_instant)
 	{
-		rist_log(&ctx->common, RIST_LOG_INFO, "\tThe flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "\tThe flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
 			flow_missing_instant, flow_recv_instant);
 		/* Delete all missing queue elements (if any) */
 		rist_flush_missing_flow_queue(flow);
 	}
-	stats->flow_id = flow->flow_id;
-	stats->received = flow_recv_instant;
-	stats->missing = flow_missing_instant;
-	stats->quality = Q;
-	stats->recovered_total = flow_recovered_instant;
-	stats->recovered_no_nack = flow_recovered_0nack_instant;
-	stats->recovered_one_nack = flow_recovered_1nack_instant;
-	stats->recovered_two_nacks = flow_recovered_2nack_instant;
-	stats->recovered_three_nacks = flow_recovered_3nack_instant;
-	stats->recovered_more_nacks = flow_recovered_morenack_instant;
-	stats->lost = flow->stats_instant.lost;
-	stats->reordered = flow_reordered_instant;
-	stats->duplicates = flow_dups_instant;
-	stats->retries = flow_retries_instant;
-	stats->min_inter_packet_spacing = flow->stats_instant.min_ips;
-	stats->cur_inter_packet_spacing = flow->stats_instant.cur_ips;
-	stats->max_inter_packet_spacing = flow->stats_instant.max_ips;
-	stats->peer_list_len = (uint32_t)flow->peer_lst_len;
+
+	cJSON_AddNumberToObject(flow_stats, "quality", Q);
+	cJSON_AddNumberToObject(flow_stats, "received", flow_recv_instant);
+	cJSON_AddNumberToObject(flow_stats, "missing", flow_missing_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_total", flow_recovered_instant);
+	cJSON_AddNumberToObject(flow_stats, "reordered", flow_reordered_instant);
+	cJSON_AddNumberToObject(flow_stats, "retries", flow_retries_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_one_nack", flow_recovered_0nack_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_two_nacks", flow_recovered_1nack_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_three_nacks", flow_recovered_2nack_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_four_nacks", flow_recovered_3nack_instant);
+	cJSON_AddNumberToObject(flow_stats, "recovered_more_nacks", flow_recovered_morenack_instant);
+	cJSON_AddNumberToObject(flow_stats, "lost", flow->stats_instant.lost);
+	cJSON_AddNumberToObject(flow_stats, "duplicates", flow_dups_instant);
+	cJSON_AddNumberToObject(flow_stats, "missing_queue", flow->missing_counter);
+	cJSON_AddNumberToObject(flow_stats, "missing_queue_max", flow->missing_counter_max);
+	cJSON_AddNumberToObject(flow_stats, "min_inter_packet_spacing", flow->stats_instant.min_ips);
+	cJSON_AddNumberToObject(flow_stats, "cur_inter_packet_spacing", flow->stats_instant.cur_ips);
+	cJSON_AddNumberToObject(flow_stats, "max_inter_packet_spacing", flow->stats_instant.max_ips);
+	
+	char *stats_string = cJSON_PrintUnformatted(stats);
+	cJSON_Delete(stats);
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
-		ctx->common.stats_callback(ctx->common.stats_callback_argument, rist_stats);
+		ctx->common.stats_callback(ctx->common.stats_callback_argument, stats_string);
 	else
-		free(rist_stats);
+		free(stats_string);
 
 	memset(&flow->stats_instant, 0, sizeof(flow->stats_instant));
 	flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;

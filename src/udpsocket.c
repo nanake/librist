@@ -2,7 +2,7 @@
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
-#include "librist_udpsocket.h"
+#include "librist/udpsocket.h"
 #ifdef __unix
 #include <ifaddrs.h>
 #endif
@@ -33,7 +33,7 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 		struct addrinfo *res;
 		int gai_ret = getaddrinfo(host, NULL, NULL, &res);
 		if (gai_ret < 0) {
-			rist_log(NULL, RIST_LOG_ERROR, "Failure resolving host %s: %s\n", host, gai_strerror(gai_ret));
+			rist_log_priv3( RIST_LOG_ERROR, "Failure resolving host %s: %s\n", host, gai_strerror(gai_ret));
 			return -1;
 		}
 		if (res[0].ai_family == AF_INET6) {
@@ -105,7 +105,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	inet_ntop(AF_INET, &(mcast_v4->sin_addr), mcastaddress, INET_ADDRSTRLEN);
 
 	if (getifaddrs(&ifaddr) == -1) {
-		rist_log(NULL, RIST_LOG_ERROR, "Error on getifaddrs\n");
+		rist_log_priv3( RIST_LOG_ERROR, "Error on getifaddrs\n");
 		return -1;
 	}
 
@@ -135,17 +135,17 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	}
 
 	if (!found) {
-		rist_log(NULL, RIST_LOG_ERROR, "Could not find an IP for interface %s\n", miface);
+		rist_log_priv3( RIST_LOG_ERROR, "Could not find an IP for interface %s\n", miface);
 		goto fail;
 	}
 	struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
 	inet_ntop(AF_INET, &(v4->sin_addr), address, INET_ADDRSTRLEN);
-	rist_log(NULL, RIST_LOG_INFO, "Joining multicast address: %s from IP %s on interface %s\n", mcastaddress, address, found->ifa_name);
+	rist_log_priv3( RIST_LOG_INFO, "Joining multicast address: %s from IP %s on interface %s\n", mcastaddress, address, found->ifa_name);
 	struct ip_mreq group;
 	group.imr_multiaddr.s_addr = mcast_v4->sin_addr.s_addr;
 	group.imr_interface.s_addr = v4->sin_addr.s_addr;
 	if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0) {
-		rist_log(NULL, RIST_LOG_ERROR, "Failed to join multicast group\n");
+		rist_log_priv3( RIST_LOG_ERROR, "Failed to join multicast group\n");
 		goto fail;
 	}
 	freeifaddrs(ifaddr);
@@ -188,11 +188,11 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 		/* Non-critical error */
-		rist_log(NULL, RIST_LOG_ERROR,"Cannot set SO_REUSEADDR: %s\n", strerror(errno));
+		rist_log_priv3( RIST_LOG_ERROR,"Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
 	if (setsockopt(sd, proto, ttlcmd, &ttl, sizeof(ttl)) < 0) {
 		/* Non-critical error */
-		rist_log(NULL, RIST_LOG_ERROR,"Cannot set socket MAX HOPS: %s\n", strerror(errno));
+		rist_log_priv3( RIST_LOG_ERROR,"Cannot set socket MAX HOPS: %s\n", strerror(errno));
 	}
 	if (mciface && mciface[0] != '\0')
 		udpsocket_set_mcast_iface(sd, mciface, raw.sin6_family);
@@ -231,18 +231,18 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 	}
 	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
 		/* Non-critical error */
-		rist_log(NULL, RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
+		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
 
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
-		rist_log(NULL, RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
+		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
 		close(sd);
 		return -1;
 	}
 
 	if (is_multicast) {
 		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0) {
-			rist_log(NULL, RIST_LOG_ERROR, "Could not join multicast group: %s on %s\n", host, mciface);
+			rist_log_priv3( RIST_LOG_ERROR, "Could not join multicast group: %s on %s\n", host, mciface);
 			return -1;
 		}
 	}

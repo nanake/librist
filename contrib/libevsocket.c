@@ -3,7 +3,7 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include "common.h"
+#include "common/attributes.h"
 #include <stdlib.h>
 #include <string.h>
 #include <errno.h>

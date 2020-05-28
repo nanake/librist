@@ -6,10 +6,8 @@
 #ifndef RIST_UDP_PRIVATE_H
 #define RIST_UDP_PRIVATE_H
 
-#include "common.h"
+#include "common/attributes.h"
 #include "rist-private.h"
-
-__BEGIN_DECLS
 
 #define SET_BIT(value, pos) (value |= (1U<< pos))
 
@@ -368,7 +366,5 @@ static inline uint32_t get_rtp_ts_clock(uint8_t ptype) {
 	}
 	return clock;
 }
-
-__END_DECLS
 
 #endif

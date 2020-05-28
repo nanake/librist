@@ -6,14 +6,11 @@
 #ifndef RIST_LOG_PRIVATE_H
 #define RIST_LOG_PRIVATE_H
 
-#include "common.h"
+#include "common/attributes.h"
 #include "rist-private.h"
 
-__BEGIN_DECLS
-
-RIST_PRIV void rist_log(struct rist_common_ctx *cctx, enum rist_log_level level, const char *format, ...);
-RIST_PRIV int rist_set_logging_options(struct rist_common_ctx *cctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp);
-
-__END_DECLS
-
+RIST_PRIV void rist_log_priv(struct rist_common_ctx *cctx, enum rist_log_level level, const char *format, ...);
+RIST_PRIV void rist_log_priv2(struct rist_logging_settings *logging_settings, enum rist_log_level level, const char *format, ...);
+RIST_PRIV void rist_log_priv3(enum rist_log_level level, const char *format, ...);
+RIST_PRIV struct rist_logging_settings *rist_get_global_logging_settings();
 #endif

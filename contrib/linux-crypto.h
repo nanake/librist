@@ -5,7 +5,7 @@
 #ifndef __LINUX_CRYPTO_H
 #define __LINUX_CRYPTO_H
 
-#include "common.h"
+#include "common/attributes.h"
 
 #include <sys/syscall.h>
 #include <sys/socket.h>

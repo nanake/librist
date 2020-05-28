@@ -6,11 +6,8 @@
 #ifndef RIST_RIST_PRIVATE_H
 #define RIST_RIST_PRIVATE_H
 
-#include "common.h"
+#include "common/attributes.h"
 
-__BEGIN_DECLS
-
-#include <librist.h>
 #include <stdint.h>
 #include <stdlib.h>
 #include <sys/types.h>
@@ -25,13 +22,15 @@ __BEGIN_DECLS
 #include "time-shim.h"
 #include "socket-shim.h"
 #include "libevsocket.h"
-#include "librist_udpsocket.h"
+#include "librist.h"
+#include "udpsocket.h"
 #include "aes.h"
 #ifdef __linux
 #include "linux-crypto.h"
 #endif
 #include <errno.h>
 #include <stdatomic.h>
+#include "librist/logging.h"
 
 #define UINT16_SIZE (UINT16_MAX + 1)
 // These 4 control the memory footprint and buffer capacity of the lib
@@ -245,11 +244,7 @@ struct rist_common_ctx {
 	/* Used by logging */
 	intptr_t sender_id;
 	intptr_t receiver_id;
-	enum rist_log_level log_level;
-	int (*log_cb)(void *arg, int loglevel, const char *msg);
-	void *log_cb_arg;
-	int log_socket;
-	FILE* log_stream;
+	struct rist_logging_settings *logging_settings;
 
 
 	/* Flows */
@@ -303,7 +298,7 @@ struct rist_common_ctx {
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
 
-	int (*stats_callback)(void *arg, struct rist_stats *stats);
+	int (*stats_callback)(void *arg, const char *stats);
 	void *stats_callback_argument;
 
 	pthread_rwlock_t oob_queue_lock;
@@ -629,7 +624,5 @@ static inline void peer_append(struct rist_peer *p)
 	}
 	pthread_rwlock_unlock(peerlist_lock);
 }
-
-__END_DECLS
 
 #endif

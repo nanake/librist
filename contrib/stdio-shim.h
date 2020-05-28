@@ -5,7 +5,7 @@
 #ifndef __STDIO_SHIM_H
 #define __STDIO_SHIM_H
 
-#include "common.h"
+#include "common/attributes.h"
 #include <stdio.h>
 #include <stdarg.h>
 

@@ -6,7 +6,7 @@
 #ifndef __PTHREAD_SHIM_H
 #define __PTHREAD_SHIM_H
 
-#include "common.h"
+#include "common/attributes.h"
 
 #ifdef _WIN32
 # include <stdbool.h>

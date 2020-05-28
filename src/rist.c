@@ -1,6 +1,7 @@
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
+#include "vcs_version.h"
 #include <assert.h>
 
 extern uint32_t generate_flowid(uint64_t birthtime, uint32_t pid, const char *phrase);
@@ -20,10 +21,10 @@ int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_bloc
 	RIST_MARK_UNUSED(oob_block);
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_oob_read call!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_oob_read call!\n");
 		return -1;
 	}
-	rist_log(&ctx->common, RIST_LOG_ERROR, "rist_receiver_oob_read not implemented!\n");
+	rist_log_priv(&ctx->common, RIST_LOG_ERROR, "rist_receiver_oob_read not implemented!\n");
 	return 0;
 }
 
@@ -66,7 +67,7 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 {
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_data_read call!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_receiver_data_read call!\n");
 		return -1;
 	}
 
@@ -90,7 +91,7 @@ int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_bl
 		atomic_store_explicit(&ctx->dataout_fifo_queue_read_index, (dataout_read_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_release);
 		if (data_block)
 		{
-			//rist_log(&ctx->common, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
+			//rist_log_priv(&ctx->common, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
 			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
 			ctx->dataout_fifo_queue_bytesize -= data_block->payload_len;
 			atomic_fetch_sub_explicit(&ctx->dataout_fifo_queue_counter, 1, memory_order_release);
@@ -120,7 +121,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 	{
 		if (p->local_port % 2 != 0)
 		{
-			rist_log(&ctx->common, RIST_LOG_ERROR, "Could not create peer, port must be even!\n");
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create peer, port must be even!\n");
 			udpsocket_close(p->sd);
 			free(p);
 			return -1;
@@ -135,7 +136,7 @@ int rist_receiver_peer_create(struct rist_receiver *ctx,
 			return -1;
 		}
 		p_rtcp->is_rtcp = true;
-		rist_log(&ctx->common, RIST_LOG_INFO, "Created RTCP peer: host %s, port %d, new_url %s, %" PRIu32 "\n", p_rtcp->url, p_rtcp->local_port, config->address, p_rtcp->adv_peer_id);
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Created RTCP peer: host %s, port %d, new_url %s, %" PRIu32 "\n", p_rtcp->url, p_rtcp->local_port, config->address, p_rtcp->adv_peer_id);
 
 		peer_append(p_rtcp);
 		/* jumpstart communication */
@@ -163,7 +164,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 
 	if (data_block->payload_len <= 0 || data_block->payload_len > (RIST_MAX_PACKET_SIZE - 32))
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Dropping pipe packet of size %d, max is %d.\n", data_block->payload_len, RIST_MAX_PACKET_SIZE - 32);
 		return -1;
 	}
@@ -180,7 +181,7 @@ int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block
 	int ret = rist_sender_enqueue(ctx, data_block->payload, data_block->payload_len, ts_ntp, data_block->virt_src_port, data_block->virt_dst_port, seq_rtp);
 	// Wake up data/nack output thread when data comes in
 	if (pthread_cond_signal(&ctx->condition))
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
 	return ret;
 }
@@ -190,10 +191,10 @@ int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob_block **
 	RIST_MARK_UNUSED(oob_block);
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_sender_oob_read call!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null on rist_sender_oob_read call!\n");
 		return -1;
 	}
-	rist_log(&ctx->common, RIST_LOG_ERROR, "rist_sender_oob_read not implemented!\n");
+	rist_log_priv(&ctx->common, RIST_LOG_ERROR, "rist_sender_oob_read not implemented!\n");
 	return 0;
 }
 
@@ -202,7 +203,7 @@ int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oob_block *
 	// max protocol overhead for data is gre-header, 16 max
 	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE - 16))
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Dropping oob packet of size %d, max is %d.\n", oob_block->payload_len, RIST_MAX_PACKET_SIZE - 16);
 		return -1;
 	}
@@ -214,7 +215,7 @@ int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_blo
 	// max protocol overhead for data is gre-header, 16 max
 	if (oob_block->payload_len <= 0 || oob_block->payload_len > (RIST_MAX_PACKET_SIZE - 16))
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Dropping oob packet of size %d, max is %d.\n", oob_block->payload_len, RIST_MAX_PACKET_SIZE - 16);
 		return -1;
 	}
@@ -222,12 +223,14 @@ int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_blo
 }
 
 int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
-						 enum rist_log_level log_level)
+						 struct rist_logging_settings *logging_settings)
 {
+	if (!logging_settings)
+		logging_settings = rist_get_global_logging_settings();
 	struct rist_receiver *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
 	{
-		rist_log(NULL, RIST_LOG_ERROR, "Could not create ctx object, OOM!\n");
+		rist_log_priv2(logging_settings, RIST_LOG_ERROR, "Could not create ctx object, OOM!\n");
 		return -1;
 	}
 
@@ -235,28 +238,29 @@ int rist_receiver_create(struct rist_receiver **_ctx, enum rist_profile profile,
 	if (init_common_ctx(ctx, NULL, &ctx->common, profile))
 		goto fail;
 
-	rist_log(&ctx->common, RIST_LOG_INFO, "RIST Receiver Library v%d.%d.%d\n",
-		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
+	ctx->common.logging_settings = logging_settings;
+
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Receiver Library version:%s \n",LIBRIST_VERSION);
 
 	ctx->common.receiver_id = ctx->id;
-	ctx->common.log_level = log_level;
-	ctx->common.log_stream = stderr;
-	if (log_level >= RIST_LOG_DEBUG)
+	ctx->common.sender_id = 0;
+
+	if (logging_settings && logging_settings->log_level >= RIST_LOG_DEBUG)
 		ctx->common.debug = true;
 
-	rist_log(&ctx->common, RIST_LOG_INFO, "Starting in receiver mode\n");
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting in receiver mode\n");
 
 	int ret = pthread_cond_init(&ctx->condition, NULL);
 	if (ret)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_cond_init\n", ret);
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_cond_init\n", ret);
 		goto fail;
 	}
 	ret = pthread_mutex_init(&ctx->mutex, NULL);
 	if (ret)
 	{
 		pthread_cond_destroy(&ctx->condition);
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_mutex_init\n", ret);
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_mutex_init\n", ret);
 		goto fail;
 	}
 
@@ -292,20 +296,22 @@ int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id)
 }
 
 int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
-					   uint32_t flow_id, enum rist_log_level log_level)
+					   uint32_t flow_id, struct rist_logging_settings *logging_settings)
 {
+	if (!logging_settings)
+		logging_settings = rist_get_global_logging_settings();
 	int ret;
 
 	if (flow_id % 2 != 0)
 	{
-		rist_log(NULL, RIST_LOG_ERROR, "Flow ID must be an even number!\n");
+		rist_log_priv2(logging_settings, RIST_LOG_ERROR, "Flow ID must be an even number!\n");
 		return -1;
 	}
 
 	struct rist_sender *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
 	{
-		rist_log(NULL, RIST_LOG_ERROR, "Could not create ctx object, OOM!\n");
+		rist_log_priv2(logging_settings, RIST_LOG_ERROR, "Could not create ctx object, OOM!\n");
 		return -1;
 	}
 
@@ -316,6 +322,8 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 		ctx = NULL;
 		return -1;
 	}
+
+	ctx->common.logging_settings = logging_settings;
 	ctx->common.stats_report_time = (uint64_t)1000 * (uint64_t)RIST_CLOCK;
 	//ctx->common.seq = 9159579;
 	//ctx->common.seq = RIST_SERVER_QUEUE_BUFFERS - 25000;
@@ -325,7 +333,7 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 		ctx->sender_retry_queue = calloc(RIST_RETRY_QUEUE_BUFFERS, sizeof(*ctx->sender_retry_queue));
 		if (RIST_UNLIKELY(!ctx->sender_retry_queue))
 		{
-			rist_log(&ctx->common, RIST_LOG_ERROR, "Could not create sender retry buffer of size %u MB, OOM\n",
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create sender retry buffer of size %u MB, OOM\n",
 				(unsigned)(RIST_SERVER_QUEUE_BUFFERS * sizeof(ctx->sender_retry_queue[0])) / 1000000);
 			ret = -1;
 			goto free_ctx_and_ret;
@@ -341,19 +349,17 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 	atomic_init(&ctx->sender_queue_write_index, 0);
 	atomic_init(&ctx->sender_queue_read_index, 0);
 
-	rist_log(&ctx->common, RIST_LOG_INFO, "RIST Sender Library v%d.%d.%d\n",
-		RIST_PROTOCOL_VERSION, RIST_API_VERSION, RIST_SUBVERSION);
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Sender Library %s\n", LIBRIST_VERSION);
 
 	ctx->common.sender_id = ctx->id;
-	ctx->common.log_level = log_level;
-	ctx->common.log_stream = stderr;
+	ctx->common.receiver_id = 0;
 
-	if (log_level == RIST_LOG_SIMULATE)
+	if (logging_settings && logging_settings->log_level == RIST_LOG_SIMULATE)
 	{
 		ctx->simulate_loss = true;
 	}
 
-	if (log_level >= RIST_LOG_DEBUG)
+	if (logging_settings && logging_settings->log_level >= RIST_LOG_DEBUG)
 	{
 		ctx->common.debug = true;
 	}
@@ -373,21 +379,21 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 	ret = pthread_cond_init(&ctx->condition, NULL);
 	if (ret)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_condition\n", ret);
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_condition\n", ret);
 		goto free_ctx_and_ret;
 	}
 
 	ret = pthread_mutex_init(&ctx->mutex, NULL);
 	if (ret)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_mutex\n", ret);
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_mutex\n", ret);
 		goto free_ctx_and_ret;
 	}
 
 	ret = pthread_mutex_init(&ctx->queue_lock, NULL);
 	if (ret)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_mutex\n", ret);
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d initializing pthread_mutex\n", ret);
 		goto free_ctx_and_ret;
 	}
 
@@ -395,7 +401,7 @@ int rist_sender_create(struct rist_sender **_ctx, enum rist_profile profile,
 
 	if (pthread_create(&ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Could not created sender thread.\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created sender thread.\n");
 		ret = -3;
 		goto free_ctx_and_ret;
 	}
@@ -413,18 +419,18 @@ int rist_sender_peer_destroy(struct rist_sender *ctx, struct rist_peer *peer)
 {
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
 		return -1;
 	}
 	else if (!peer)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
 		return -1;
 	}
 
 	peer->dead = true;
 	rist_peer_remove(&ctx->common, peer);
-	rist_log(&ctx->common, RIST_LOG_WARN, "rist_sender_peer_remove not fully implemented!\n");
+	rist_log_priv(&ctx->common, RIST_LOG_WARN, "rist_sender_peer_remove not fully implemented!\n");
 	return 0;
 }
 
@@ -432,18 +438,18 @@ int rist_receiver_peer_destroy(struct rist_receiver *ctx, struct rist_peer *peer
 {
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
 		return -1;
 	}
 	else if (!peer)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Missing peer pointer\n");
 		return -1;
 	}
 
 	peer->dead = true;
 	rist_peer_remove(&ctx->common, peer);
-	rist_log(&ctx->common, RIST_LOG_WARN, "rist_receiver_peer_remove not fully implemented!\n");
+	rist_log_priv(&ctx->common, RIST_LOG_WARN, "rist_receiver_peer_remove not fully implemented!\n");
 	return 0;
 }
 
@@ -465,7 +471,7 @@ int rist_sender_start(struct rist_sender *ctx)
 	if (ctx->total_weight > 0)
 	{
 		ctx->weight_counter = ctx->total_weight;
-		rist_log(&ctx->common, RIST_LOG_INFO, "Total weight: %lu\n", ctx->total_weight);
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Total weight: %lu\n", ctx->total_weight);
 	}
 
 	ctx->common.startup_complete = true;
@@ -562,17 +568,17 @@ int rist_sender_oob_callback_set(struct rist_sender *ctx,
 {
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
 		return -1;
 	}
 	else if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Out-of-band data is not support for simple profile\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Out-of-band data is not support for simple profile\n");
 		return -1;
 	}
 	if (pthread_rwlock_init(&ctx->common.oob_queue_lock, NULL) != 0)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Failed to init ctx->common.oob_queue_lock\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Failed to init ctx->common.oob_queue_lock\n");
 		return -1;
 	}
 	ctx->common.oob_data_enabled = true;
@@ -590,12 +596,12 @@ int rist_receiver_oob_callback_set(struct rist_receiver *ctx,
 {
 	if (!ctx)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "ctx is null!\n");
 		return -1;
 	}
 	else if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
-		rist_log(&ctx->common, RIST_LOG_ERROR, "Out-of-band data is not support for simple profile\n");
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Out-of-band data is not support for simple profile\n");
 		return -1;
 	}
 	ctx->common.oob_data_enabled = true;
@@ -625,7 +631,7 @@ int rist_receiver_start(struct rist_receiver *ctx)
 	{
 		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0)
 		{
-			rist_log(&ctx->common, RIST_LOG_ERROR, "Could not create receiver protocol thread.\n");
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create receiver protocol thread.\n");
 			return -1;
 		}
 	}
@@ -640,16 +646,16 @@ int rist_sender_destroy(struct rist_sender *ctx)
 		return -1;
 	}
 
-	rist_log(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
 	uint64_t start_time = timestampNTP_u64();
 	while (ctx->sender_thread && ctx->common.shutdown != 2)
 	{
-		rist_log(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
 		usleep(5000);
 		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
 		{
-			rist_log(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
 			assert(0);
 		}
 	}
@@ -666,16 +672,16 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 		return -1;
 	}
 
-	rist_log(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
 	ctx->common.shutdown = 1;
 	uint64_t start_time = timestampNTP_u64();
 	while (ctx->receiver_thread && ctx->common.shutdown != 2)
 	{
-		rist_log(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
 		usleep(5000);
 		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
 		{
-			rist_log(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
 			assert(0);
 		}
 	}
@@ -685,7 +691,7 @@ int rist_receiver_destroy(struct rist_receiver *ctx)
 	return 0;
 }
 
-int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg)
+int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg)
 {
 	if (stats_cb == NULL)
 	{
@@ -699,7 +705,7 @@ int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, i
 	}
 	return 0;
 }
-int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, struct rist_stats *stats), void *arg)
+int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg)
 {
 	if (stats_cb == NULL)
 	{
@@ -720,12 +726,16 @@ int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterva
 	return 0;
 }
 
-int rist_receiver_logging_set(struct rist_receiver *ctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp) {
-	struct rist_common_ctx *cctx = &ctx->common;
-	return rist_set_logging_options(cctx, log_cb, cb_arg, address, logfp);
+int rist_receiver_logging_set(struct rist_receiver *ctx, struct rist_logging_settings *logging_settings) {
+	ctx->common.logging_settings = logging_settings;
+	return 0;
 }
 
-int rist_sender_logging_set(struct rist_sender *ctx, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp) {
-	struct rist_common_ctx *cctx = &ctx->common;
-	return rist_set_logging_options(cctx, log_cb, cb_arg, address, logfp);
+int rist_sender_logging_set(struct rist_sender *ctx, struct rist_logging_settings *logging_settings) {
+	ctx->common.logging_settings = logging_settings;
+	return 0;
+}
+
+const char *librist_version(void) {
+	return LIBRIST_VERSION;
 }

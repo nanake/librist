@@ -6,7 +6,7 @@
 #ifndef __LIBEVSOCKET
 #define __LIBEVSOCKET
 
-#include "common.h"
+#include "common/attributes.h"
 
 struct evsocket_event;
 struct evsocket_ctx;

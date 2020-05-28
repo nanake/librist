@@ -6,7 +6,7 @@
 #ifndef RIST_CRYPTO_PRIVATE_H
 #define RIST_CRYPTO_PRIVATE_H
 
-#include "common.h"
+#include "common/attributes.h"
 
 __BEGIN_DECLS
 
