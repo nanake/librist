@@ -32,8 +32,7 @@ static struct option long_options[] = {
 { "secret",          required_argument, NULL, 's' },
 { "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
-{ "ooboutput",       required_argument, NULL, 'd' },
-{ "oobtype",         required_argument, NULL, 't' },
+{ "tunnel",          required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
@@ -47,8 +46,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
 "       -e | --encryption-type TYPE             | Default Encryption type (0, 1 = AES-128, 2 = AES-256)    |\n"
 "       -p | --profile   number                 | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
-"       -d | --ooboutput IfName                 | TAP/TUN interface name for oob data output               |\n"
-"       -t | --oobtype   [tap|tun]              | TAP/TUN interface mode                                   |\n"
+"       -t | --tunnel IfName                    | TUN interface name for oob data output                   |\n"
 "       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
 "       -h | --help                             | Show this help                                           |\n"
@@ -147,7 +145,6 @@ int main(int argc, char *argv[])
 	char *inputurl = NULL;
 	char *outputurl = NULL;
 	char *oobtap = NULL;
-	char tunmode = 0; /* 0 = Tap */
 	struct rist_callback_object callback_object;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
@@ -171,7 +168,7 @@ int main(int argc, char *argv[])
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s\n", version);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:d:t:S:v:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:t:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -184,9 +181,6 @@ int main(int argc, char *argv[])
 		break;
 		case 'p':
 			profile = atoi(optarg);
-		break;
-		case 't':
-			tunmode = atoi(optarg);
 		break;
 		case 'S':
 			statsinterval = atoi(optarg);
@@ -340,8 +334,8 @@ next:
 		{
 			const struct rist_data_block *b;
 			int queue_size = rist_receiver_data_read(ctx, &b, 5);
-			//if (ret && ret % 10 == 0)
-			//	fprintf(stderr, "rist_receiver_data_read: %d\n", queue_size);
+			if (queue_size && queue_size % 10 == 0)
+				rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
 			if (b && b->payload) cb_recv(&callback_object, b);
 		}
 	}
