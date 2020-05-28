@@ -1,10 +1,9 @@
-/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
- * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
+/* librist. Copyright 2020 SipRadius LLC. All right reserved.
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include <librist/librist.h>
-#include <librist/udpsocket.h>
+#include <librist.h>
+#include <librist_udpsocket.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -14,128 +13,86 @@
 #include <stdbool.h>
 #include <signal.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+# define strtok_r strtok_s
+#endif
+
 extern char* stats_to_json(struct rist_stats *stats);
 
-#define PEER_COUNT 4
-#define UDP_COUNT 2
+#define MAX_INPUT_COUNT 10
+#define MAX_OUTPUT_COUNT 10
 
-const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -u | --url ADDRESS:PORT                                         * | Output IP address and port                          |\n"
-"       -f | --miface name/index                                        * | Multicast Interface name (linux) or index (win)     |\n"
-"       -T | --recovery-type TYPE                                       * | Type of recovery (off, bytes, time)                 |\n"
-"       -x | --url2 ADDRESS:PORT                                        * | Second Output IP address and port                   |\n"
-"       -q | --miface2 name/index                                       * | Multicast Interface2 name (linux) or index (win)    |\n"
-"       -s | --receiver  rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT  * | Address of local rist receiver                      |\n"
-"       -b | --receiver2 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of second local rist receiver               |\n"
-"       -c | --receiver3 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of third local rist receiver                |\n"
-"       -d | --receiver4 rist://@ADDRESS:PORT or rist6://@ADDRESS:PORT    | Address of fourth local rist receiver               |\n"
-"       -S | --statsinterval value (ms)                                   | Interval at which stats get printed, 0 to disable   |\n"
-"       -e | --encryption-password PWD                                    | Pre-shared encryption password                      |\n"
-"       -t | --encryption-type TYPE                                       | Encryption type (1 = AES-128, 2 = AES-256)          |\n"
-"       -p | --profile number                                             | Rist profile (0 = simple, 1 = main)                 |\n"
-"       -n | --gre-src-port port                                          | Reduced profile src port to filter (0 = no filter)  |\n"
-"       -N | --gre-dst-port port                                          | Reduced profile dst port to filter (0 = no filter)  |\n"
-"       -C | --cname identifier                                           | Manually configured identifier                      |\n"
-"       -v | --verbose-level value          							  | To disable logging: -1, levels match syslog levels  |\n"
-"       -h | --help                                                       | Show this help                                      |\n"
-"       -m | --min-buf ms                                               * | Minimum rist recovery buffer size                   |\n"
-"       -M | --max-buf ms                                               * | Maximum rist recovery buffer size                   |\n"
-"       -o | --reorder-buf ms                                           * | Reorder buffer size                                 |\n"
-"       -r | --min-rtt RTT                                              * | Minimum RTT                                         |\n"
-"       -R | --max-rtt RTT                                              * | Maximum RTT                                         |\n"
-"       -B | --bloat-mode MODE                                          * | Buffer bloat mitigation mode (slow, fast, fixed)    |\n"
-"       -l | --bloat-limit NACK_COUNT                                   * | Buffer bloat min nack count for random discard      |\n"
-"       -L | --bloat-hardlimit NACK_COUNT                               * | Buffer bloat max nack count for hard limit discard  |\n"
-"       -W | --max-bitrate Kbps                                         * | rist recovery max bitrate (Kbit/s)                  |\n"
-"   * == mandatory value \n"
-"Default values: %s \n"
-"       --recovery-type time      \\\n"
-"       --min-buf 1000            \\\n"
-"       --max-buf 1000            \\\n"
-"       --reorder-buf 25          \\\n"
-"       --min-rtt 50              \\\n"
-"       --max-rtt 500             \\\n"
-"       --max-bitrate 100000      \\\n"
-"       --encryption-type 0       \\\n"
-"       --profile 1               \\\n"
-"       --gre-src-port 0          \\\n"
-"       --gre-dst-port 0          \\\n"
-"       --json 1                  \\\n"
-"       --verbose-level 4         \n";
+static int signalReceived = 0;
+static struct rist_logging_settings *logging_settings;
 
 static struct option long_options[] = {
-	{ "url",             required_argument, NULL, 'u' },
-	{ "miface",          required_argument, NULL, 'f' },
-	{ "url2",            required_argument, NULL, 'x' },
-	{ "miface2",         required_argument, NULL, 'q' },
-	{ "receiver",          required_argument, NULL, 's' },
-	{ "receiver2",         required_argument, NULL, 'b' },
-	{ "receiver3",         required_argument, NULL, 'c' },
-	{ "receiver4",         required_argument, NULL, 'd' },
-	{ "recovery-type",   required_argument, NULL, 'T' },
-	{ "min-buf",         required_argument, NULL, 'm' },
-	{ "max-buf",         required_argument, NULL, 'M' },
-	{ "reorder-buf",     required_argument, NULL, 'o' },
-	{ "min-rtt",         required_argument, NULL, 'r' },
-	{ "max-rtt",         required_argument, NULL, 'R' },
-	{ "bloat-mode",      required_argument, NULL, 'B' },
-	{ "bloat-limit",     required_argument, NULL, 'l' },
-	{ "bloat-hardlimit", required_argument, NULL, 'L' },
-	{ "max-bitrate",     required_argument, NULL, 'W' },
-	{ "encryption-password", required_argument, NULL, 'e' },
-	{ "encryption-type", required_argument, NULL, 't' },
-	{ "profile",         required_argument, NULL, 'p' },
-	{ "gre-src-port",    required_argument, NULL, 'n' },
-	{ "gre-dst-port",    required_argument, NULL, 'N' },
-	{ "cname",           required_argument, NULL, 'C' },
-	{ "statsinterval",   required_argument, NULL, 'S' },
-	{ "verbose-level",   required_argument, NULL, 'v' },
-	{ "help",            no_argument,       NULL, 'h' },
-	{ 0, 0, 0, 0 },
+{ "inputurl",        required_argument, NULL, 'i' },
+{ "outputurl",       required_argument, NULL, 'o' },
+{ "ooboutput",       required_argument, NULL, 'b' },
+{ "oobtype",         required_argument, NULL, 't' },
+{ "profile",         required_argument, NULL, 'p' },
+{ "stats",           required_argument, NULL, 'S' },
+{ "verbose-level",   required_argument, NULL, 'v' },
+{ "help",            no_argument,       NULL, 'h' },
+{ 0, 0, 0, 0 },
 };
 
-void usage(char *name)
+const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
+"       -i | --inputurl  rist://...      * | Comma separated list of input URLs                          |\n"
+"       -o | --outputurl udp://...       * | Comma separated list of output URLs                         |\n"
+"       -b | --ooboutput IfName            | TAP/TUN interface name for oob data output                  |\n"
+"       -t | --oobtype   [tap|tun]         | TAP/TUN interface mode                                      |\n"
+"       -p | --profile   number            | Rist profile (0 = simple, 1 = main, 2 = advanced)           |\n"
+"       -S | --statsinterval value (ms)    | Interval at which stats get printed, 0 to disable           |\n"
+"       -v | --verbose-level value         | To disable logging: -1, log levels match syslog levels      |\n"
+"       -h | --help                        | Show this help                                              |\n"
+"   * == mandatory value \n"
+"Default values: %s \n"
+"       --profile 1               \\\n"
+"       --stats 1000              \\\n"
+"       --verbose-level 4         \n";
+
+const char version[] = "2.10.0.0";
+
+static void usage(char *cmd)
 {
-	fprintf(stderr, "%s%s", help_str, name);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s%s", help_str, cmd);
 	exit(1);
 }
 
-static int mpeg[UDP_COUNT];
-static int keep_running = 1;
-static struct rist_logging_settings *logging_settings;
-
-struct rist_port_filter {
-	uint16_t virt_src_port;
-	uint16_t virt_dst_port;
+struct rist_callback_object {
+	int mpeg[MAX_OUTPUT_COUNT];
+	uint16_t virt_src_port[MAX_OUTPUT_COUNT];
 };
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
 {
-	struct rist_port_filter *port_filter = (struct rist_port_filter *)arg;
+	struct rist_callback_object *callback_object = (void *) arg;
 
-
-	if (port_filter->virt_src_port && port_filter->virt_src_port != b->virt_src_port) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Source port mismatch %d != %d\n", port_filter->virt_src_port, b->virt_src_port);
-		return -1;
-	}
-
-	if (port_filter->virt_dst_port && port_filter->virt_dst_port != b->virt_dst_port) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Destination port mismatch %d != %d\n", port_filter->virt_dst_port, b->virt_dst_port);
-		return -1;
-	}
-
-	for (size_t i = 0; i < UDP_COUNT; i++) {
-		if (mpeg[i] > 0) {
-			udpsocket_send(mpeg[i], b->payload, b->payload_len);
+	int found = 0;
+	int i = 0;
+	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
+		// look for the correct mapping of source port to output
+		if (callback_object->virt_src_port[i] == 0 || (callback_object->virt_src_port[i] == b->virt_src_port)) {
+			if (callback_object->mpeg[i] > 0) {
+				udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
+				found = 1;
+			}
 		}
+	}
+
+	if (found == 0)
+	{
+		rist_log(logging_settings, RIST_LOG_ERROR, "Source port mismatch, no output found for %d\n", b->virt_src_port);
+		return -1;
 	}
 
 	return 0;
 }
 
 static void intHandler(int signal) {
-	fprintf(stderr, "Signal %d received\n", signal);
-	keep_running = 0;
+	rist_log(logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+	signalReceived = signal;
 }
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
@@ -170,7 +127,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 }
 
 static int cb_stats(void *arg, const char *rist_stats) {
-	fprintf(stderr, "%s\n\n", rist_stats);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", rist_stats);
 	free((void*)rist_stats);
 	return 0;
 }
@@ -178,38 +135,19 @@ static int cb_stats(void *arg, const char *rist_stats) {
 int main(int argc, char *argv[])
 {
 	int option_index;
-	char *url[UDP_COUNT];
-	char *miface[UDP_COUNT];
-	char *addr[PEER_COUNT];
-	char *shared_secret = NULL;
-	char *cname = NULL;
 	char c;
 	int enable_data_callback = 1;
-	int statsinterval = 1000;
+	const struct rist_peer_config *peer_input_config[MAX_INPUT_COUNT];
+	char *inputurl = NULL;
+	char *outputurl = NULL;
+	char *oobtap = NULL;
+	char tunmode = 0; /* 0 = Tap */
+	struct rist_callback_object callback_object;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
-	uint8_t encryption_type = 0;
-	enum rist_recovery_mode recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
-	uint32_t recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
-	uint32_t recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
-	uint32_t recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
-	uint32_t recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
-	uint32_t recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
-	uint32_t recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
-	uint32_t recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
-	enum rist_buffer_bloat_mode buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
-	uint32_t buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
-	uint32_t buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
-	struct rist_port_filter port_filter;
-	port_filter.virt_src_port = 0;
-	port_filter.virt_dst_port = 0;
+	int statsinterval = 1000;
 
 #ifdef _WIN32
-#ifdef _WIN64
-typedef __int64 ssize_t;
-#else
-typedef signed int ssize_t;
-#endif
 #define STDERR_FILENO 2
     signal(SIGINT, intHandler);
     signal(SIGTERM, intHandler);
@@ -220,100 +158,34 @@ typedef signed int ssize_t;
 	sigaction(SIGINT, &act, NULL);
 #endif
 
-	for (size_t i = 0; i < UDP_COUNT; i++) {
-		url[i] = NULL;
-		miface[i] = NULL;
-		mpeg[i] = 0;
+	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr,"Failed to setup logging!\n");
+		exit(1);
 	}
 
-	for (size_t i = 0; i < PEER_COUNT; i++) {
-		addr[i] = NULL;
-	}
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s\n", version);
 
-	while ((c = getopt_long(argc, argv, "u:x:q:v:f:n:e:s:b:c:d:m:M:o:r:R:B:l:L:W:t:p:n:N:C:h:S:", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:b:t:p:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
-		case 'u':
-			url[0] = strdup(optarg);
-		break;
-		case 'x':
-			url[1] = strdup(optarg);
-		break;
-		case 'f':
-			miface[0] = strdup(optarg);
-		break;
-		case 'q':
-			miface[1] = strdup(optarg);
-		break;
-		case 's':
-			addr[0] = strdup(optarg);
-		break;
-		case 'b':
-			addr[1] = strdup(optarg);
-		break;
-		case 'c':
-			addr[2] = strdup(optarg);
-		break;
-		case 'd':
-			addr[3] = strdup(optarg);
-		break;
-		case 'm':
-			recovery_length_min = atoi(optarg);
-		break;
-		case 'M':
-			recovery_length_max = atoi(optarg);
+		case 'i':
+			inputurl = strdup(optarg);
 		break;
 		case 'o':
-			recovery_reorder_buffer = atoi(optarg);
+			outputurl = strdup(optarg);
 		break;
-		case 'r':
-			recovery_rtt_min = atoi(optarg);
-		break;
-		case 'R':
-			recovery_rtt_max = atoi(optarg);
-		break;
-		case 'B':
-			if (!strcmp(optarg, "off")) {
-				buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_OFF;
-			} else if (!strcmp(optarg, "normal")) {
-				buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_NORMAL;
-			} else if (!strcmp(optarg, "aggressive")) {
-				buffer_bloat_mode = RIST_BUFFER_BLOAT_MODE_AGGRESSIVE;
-			} else {
-				usage(argv[0]);
-			}
-		break;
-		case 'l':
-			buffer_bloat_limit = atoi(optarg);
-		break;
-		case 'L':
-			buffer_bloat_hard_limit = atoi(optarg);
-		break;
-		case 'W':
-			recovery_maxbitrate = atoi(optarg);
-		break;
+		case 'b':
+			oobtap = strdup(optarg);
 		case 't':
-			encryption_type = atoi(optarg);
+			tunmode = atoi(optarg);
 		break;
 		case 'p':
-			profile = (enum rist_profile)atoi(optarg);
-		break;
-		case 'n':
-			port_filter.virt_src_port = atoi(optarg);
-		break;
-		case 'N':
-			port_filter.virt_dst_port = atoi(optarg);
-		break;
-		case 'C':
-			cname = strdup(optarg);
-		break;
-		case 'e':
-			shared_secret = strdup(optarg);
-		break;
-		case 'v':
-			loglevel = (enum rist_log_level)atoi(optarg);
+			profile = atoi(optarg);
 		break;
 		case 'S':
 			statsinterval = atoi(optarg);
+		break;
+		case 'v':
+			loglevel = atoi(optarg);
 		break;
 		case 'h':
 			/* Fall through */
@@ -322,48 +194,24 @@ typedef signed int ssize_t;
 		break;
 		}
 	}
-	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr, "Failed to setup logging\n");
-		exit(1);
-	}
 
-	// For some reason under windows the empty len is 1
-
-	bool all_url_null = true;
-	for (size_t i = 0; i < UDP_COUNT; i++) {
-		if (url[i] != NULL) {
-			all_url_null = false;
-			break;
-		}
-	}
-
-	if (all_url_null) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "No address provided\n");
+	if (inputurl == NULL || outputurl == NULL) {
 		usage(argv[0]);
 	}
 
-	// minimum, first addr need to be provided
-	if (addr[0] == NULL) {
-		usage(argv[0]);
-	}
-
-	if (argc < 3) {
+	if (argc < 2) {
 		usage(argv[0]);
 	}
 
 	/* rist side */
-	rist_log(logging_settings, RIST_LOG_INFO, "Configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
-			recovery_maxbitrate, recovery_length_min, recovery_length_max, recovery_reorder_buffer, recovery_rtt_min,
-			recovery_rtt_max, buffer_bloat_mode, buffer_bloat_limit, buffer_bloat_hard_limit);
 
 	struct rist_receiver *ctx;
-
 	if (rist_receiver_create(&ctx, profile, logging_settings) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 		exit(1);
 	}
 
-	if (rist_receiver_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) == -1) {
+	if (rist_receiver_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exit(1);
 	}
@@ -374,90 +222,93 @@ typedef signed int ssize_t;
 			exit(1);
 		}
 	}
-	if (statsinterval) {
-		rist_receiver_stats_callback_set(ctx, statsinterval, cb_stats, NULL);
+
+	if (rist_receiver_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		exit(1);
 	}
 
-	for (size_t i = 0; i < PEER_COUNT; i++) {
-		if (addr[i] == NULL) {
-			continue;
-		}
+	char *saveptr1;
+	char *inputtoken = strtok_r(inputurl, ",", &saveptr1);
+	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
+		if (!inputtoken)
+			break;
 
-		// TODO: make the RIST_DEFAULT_VIRT_DST_PORT configurable 
-		// (used for reverse connection gre-dst-port inside main profile)
-		// Applications defaults and/or command line options
-		int keysize = encryption_type * 128;
-		struct rist_peer_config app_peer_config = {
-			.version = RIST_PEER_CONFIG_VERSION,
-			.virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT,
-			.recovery_mode = recovery_mode,
-			.recovery_maxbitrate = recovery_maxbitrate,
-			.recovery_maxbitrate_return = recovery_maxbitrate_return,
-			.recovery_length_min = recovery_length_min,
-			.recovery_length_max = recovery_length_max,
-			.recovery_reorder_buffer = recovery_reorder_buffer,
-			.recovery_rtt_min = recovery_rtt_min,
-			.recovery_rtt_max = recovery_rtt_max,
-			.weight = 5,
-			.buffer_bloat_mode = buffer_bloat_mode,
-			.buffer_bloat_limit = buffer_bloat_limit,
-			.buffer_bloat_hard_limit = buffer_bloat_hard_limit,
-			.key_size = keysize
-		};
-
-		if (shared_secret != NULL) {
-			strncpy(app_peer_config.secret, shared_secret, 128);
-		}
-
-		if (cname != NULL) {
-			strncpy(app_peer_config.cname, cname, 128);
-		}
-
-		// URL overrides (also cleans up the URL)
-		const struct rist_peer_config *peer_config = &app_peer_config;
-		if (rist_parse_address(addr[i], &peer_config))
+		// Rely on the library to parse the url
+		const struct rist_peer_config *peer_config = NULL;
+		if (rist_parse_address(inputtoken, (void *)&peer_config))
 		{
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
+		/* Print config */
+		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+			peer_config->recovery_maxbitrate, peer_config->recovery_length_min, peer_config->recovery_length_max, 
+			peer_config->recovery_reorder_buffer, peer_config->recovery_rtt_min,peer_config->recovery_rtt_max,
+			peer_config->buffer_bloat_mode, peer_config->buffer_bloat_limit, peer_config->buffer_bloat_hard_limit);
+
+		peer_input_config[i] = peer_config;
+
 		struct rist_peer *peer;
-		if (rist_receiver_peer_create(ctx, &peer, peer_config) == -1) {
+		if (rist_receiver_peer_create(ctx, &peer, peer_input_config[i]) == -1) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
+
+		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
 	/* Mpeg side */
 	bool atleast_one_socket_opened = false;
-	for (size_t i = 0; i < UDP_COUNT; i++) {
-		if (url[i] == NULL) {
-			continue;
+	char *saveptr2;
+	char *outputtoken = strtok_r(outputurl, ",", &saveptr2);
+	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
+
+		if (!outputtoken)
+			break;
+
+		// First parse extra parameters (?miface=lo) and separate the address
+		const struct rist_peer_config *peer_config_udp = NULL;
+		if (rist_parse_address(outputtoken, &peer_config_udp)) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
+			goto next;
 		}
+
+		// Now parse the address 127.0.0.1:5000
 		char hostname[200] = {0};
 		int outputlisten;
 		uint16_t outputport;
-		if (udpsocket_parse_url(url[i], hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", url[i]);
-			continue;
+		if (udpsocket_parse_url((void *)peer_config_udp->address, hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse output url %s\n", outputtoken);
+			goto next;
 		}
-		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n",hostname, outputport);
-		mpeg[i] = udpsocket_open_connect(hostname, outputport, miface[i]);
-		if (mpeg[i] <= 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d (%d)\n", hostname, outputport, mpeg[i]);
-			continue;
+		rist_log(logging_settings, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
+
+		// Open the output socket
+		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, peer_config_udp->miface);
+		if (callback_object.mpeg[i] <= 0) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
+			goto next;
 		} else {
-			rist_log(logging_settings, RIST_LOG_INFO,"Output socket is open and bound\n");
+			rist_log(logging_settings, RIST_LOG_ERROR, "[INFO] Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}
+		callback_object.virt_src_port[i] = peer_config_udp->virt_dst_port;
+
+next:
+		outputtoken = strtok_r(NULL, ",", &saveptr2);
 	}
 
 	if (!atleast_one_socket_opened) {
 		exit(1);
 	}
 
+	// callback is best unless you are using the timestamps passed with the buffer
+	enable_data_callback = 1;
+
 	if (enable_data_callback == 1) {
-		if (rist_receiver_data_callback_set(ctx, cb_recv, &port_filter))
+		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
 		{
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
 			exit(1);
@@ -478,31 +329,24 @@ typedef signed int ssize_t;
 	}
 	else {
 		// Master loop
-		while (keep_running)
+		while (!signalReceived)
 		{
 			const struct rist_data_block *b;
-			int ret = rist_receiver_data_read(ctx, &b, 5);
-			if (ret && b && b->payload) cb_recv(&port_filter, b);
+			int queue_size = rist_receiver_data_read(ctx, &b, 5);
+			//if (ret && ret % 10 == 0)
+			//	fprintf(stderr, "rist_receiver_data_read: %d\n", queue_size);
+			if (b && b->payload) cb_recv(&callback_object, b);
 		}
 	}
 
 	rist_receiver_destroy(ctx);
 
-	if (shared_secret)
-		free(shared_secret);
-	if (cname)
-		free(cname);
-	for (ssize_t i = 0; i < UDP_COUNT; i++) {
-		if (url[i])
-			free(url[i]);
-		if (miface[i])
-			free(miface[i]);
-		if (mpeg[i])
-			udpsocket_close(mpeg[i]);
-	}
-	for (ssize_t i = 0; i < PEER_COUNT; i++) {
-		if (addr[i])
-			free(addr[i]);
-	}
+	if (inputurl)
+		free(inputurl);
+	if (outputurl)
+		free(outputurl);
+	if (oobtap)
+		free(oobtap);
+
 	return 0;
 }
