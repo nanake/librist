@@ -148,6 +148,11 @@ librist = library('librist',
 	soversion: librist_soversion,
 	install: true)
 
+if get_option('built_tools')
+	message('Building tools')
+	subdir('tools')
+endif
+
 if get_option('test')
 	subdir('test')
 endif
