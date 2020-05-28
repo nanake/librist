@@ -78,14 +78,10 @@ The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this pr
 # Compile using meson/nija (preferred method)
 
 1. Install [Meson](https://mesonbuild.com/) (0.47 or higher), [Ninja](https://ninja-build.org/), and, for x86\* targets, [nasm](https://nasm.us/) (2.14 or higher)
+2. Alternatively, use "pip3 install meson" and "pip3 install ninja" to install them.
 2. Run `mkdir build && cd build` to create a build directory and enter it
 3. Run `meson ..` to configure meson, add `--default-library=static` if static linking is desired
 4. Run `ninja` to compile
-
-# Compile using cmake/make (alternative method)
-
-1. Run `cmake -DCMAKE_BUILD_TYPE=Debug .` or `cmake -DCMAKE_BUILD_TYPE=Release .`
-2. Run `make` to compile
 
 # Support
 
@@ -122,6 +118,6 @@ This company can provide support and integration help, should you need it.
 
 ## How can I test it?
 
-- You can use the utils project https://code.videolan.org/rist/rist-utils to compile and build statically command line utilities that have everything you need to get up and running quickly.
+- We have included command line utilities for windows/linux/osx inside this project. They are compiled and placed into the tools folder under the build folder.
 
-- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/rist-utils/-/wikis/home
+- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/librist/-/wikis/tools
