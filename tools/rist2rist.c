@@ -36,30 +36,28 @@ struct rist_cb_arg {
 static int keep_running = 1;
 static struct rist_logging_settings *logging_settings;
 
-
-const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -u | --inurl ADDRESS:PORT              * | Input IP address and port                              |\n"
-"       -o | --outurl ADDRESS:PORT             * | Output IP address and port                             |\n"
-"       -S | --statsinterval value (ms)          | Interval at which stats get printed, 0 to disable      |\n"
-"       -e | --encryption-password PWD           | Pre-shared encryption password                         |\n"
-"       -t | --encryption-type TYPE              | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)   |\n"
-"       -C | --cname identifier                  | Manually configured identifier                         |\n"
-"       -v | --verbose-level value               | To disable logging: -1, log levels match syslog levels |\n"
-"       -h | --help                              | Show this help                                         |\n"
-;
-
 static struct option long_options[] = {
-{ "inurl",             required_argument, NULL, 'u' },
-{ "outurl",             required_argument, NULL, 'o' },
-{ "encryption-password", required_argument, NULL, 'e' },
-{ "encryption-type", required_argument, NULL, 't' },
+{ "inurl",           required_argument, NULL, 'i' },
+{ "outurl",          required_argument, NULL, 'o' },
+{ "secret",          required_argument, NULL, 's' },
+{ "encryption-type", required_argument, NULL, 'e' },
 { "cname",           required_argument, NULL, 'N' },
-{ "statsinterval",   required_argument, NULL, 'S' },
-{ "verbose-level",   required_argument, NULL, 'l' },
+{ "stats",           required_argument, NULL, 'S' },
+{ "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
-
 { 0, 0, 0, 0 },
 };
+
+const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
+"       -i | --inurl ADDRESS:PORT             * | Input IP address and port                                |\n"
+"       -o | --outurl ADDRESS:PORT            * | Output IP address and port                               |\n"
+"       -s | --secret PWD                       | Pre-shared encryption secret                             |\n"
+"       -e | --encryption-type TYPE             | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)     |\n"
+"       -S | --stats value (ms)                 | Interval at which stats get printed, 0 to disable        |\n"
+"       -N | --cname identifier                 | Manually configured identifier                           |\n"
+"       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
+"       -h | --help                             | Show this help                                           |\n"
+;
 
 static void usage(char *cmd)
 {
@@ -234,24 +232,24 @@ int main (int argc, char **argv) {
 
 	int option_index;
 	char c;
-	while ((c = getopt_long(argc, argv, "u:o:e:C:v:t:S:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:s:e:N:v:S:h", long_options, &option_index)) != -1) {
 		switch (c) {
-		case 'u':
+		case 'i':
 			inputurl = strdup(optarg); 
 			break;
 		case 'o':
 			outputurl = strdup(optarg); 
 			break;
-		case 'e':
+		case 's':
 			client_args.shared_secret = strdup(optarg); 
 			break;
-		case 't':
+		case 'e':
 			client_args.encryption_type = atoi(optarg);
 			break;
 		case 'N':
 			cname = strdup(optarg); 
 			break;
-		case 'l':
+		case 'v':
 			loglevel = (enum rist_log_level) atoi(optarg);
 			break;
 		case 'S':

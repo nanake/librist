@@ -2,8 +2,8 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include <librist.h>
-#include <librist_udpsocket.h>
+#include <librist/librist.h>
+#include <librist/udpsocket.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -28,9 +28,12 @@ static struct rist_logging_settings *logging_settings;
 static struct option long_options[] = {
 { "inputurl",        required_argument, NULL, 'i' },
 { "outputurl",       required_argument, NULL, 'o' },
-{ "ooboutput",       required_argument, NULL, 'b' },
-{ "oobtype",         required_argument, NULL, 't' },
+{ "buffer",          required_argument, NULL, 'b' },
+{ "secret",          required_argument, NULL, 's' },
+{ "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
+{ "ooboutput",       required_argument, NULL, 'd' },
+{ "oobtype",         required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
@@ -38,14 +41,17 @@ static struct option long_options[] = {
 };
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -i | --inputurl  rist://...      * | Comma separated list of input URLs                          |\n"
-"       -o | --outputurl udp://...       * | Comma separated list of output URLs                         |\n"
-"       -b | --ooboutput IfName            | TAP/TUN interface name for oob data output                  |\n"
-"       -t | --oobtype   [tap|tun]         | TAP/TUN interface mode                                      |\n"
-"       -p | --profile   number            | Rist profile (0 = simple, 1 = main, 2 = advanced)           |\n"
-"       -S | --statsinterval value (ms)    | Interval at which stats get printed, 0 to disable           |\n"
-"       -v | --verbose-level value         | To disable logging: -1, log levels match syslog levels      |\n"
-"       -h | --help                        | Show this help                                              |\n"
+"       -i | --inputurl  rist://...           * | Comma separated list of input URLs                       |\n"
+"       -o | --outputurl udp://...            * | Comma separated list of output URLs                      |\n"
+"       -b | --buffer value                     | Default buffer size for packet retransmissions           |\n"
+"       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
+"       -e | --encryption-type TYPE             | Default Encryption type (0, 1 = AES-128, 2 = AES-256)    |\n"
+"       -p | --profile   number                 | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
+"       -d | --ooboutput IfName                 | TAP/TUN interface name for oob data output               |\n"
+"       -t | --oobtype   [tap|tun]              | TAP/TUN interface mode                                   |\n"
+"       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
+"       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
+"       -h | --help                             | Show this help                                           |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
@@ -165,7 +171,7 @@ int main(int argc, char *argv[])
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s\n", version);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:t:p:S:v:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:d:t:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -175,11 +181,12 @@ int main(int argc, char *argv[])
 		break;
 		case 'b':
 			oobtap = strdup(optarg);
-		case 't':
-			tunmode = atoi(optarg);
 		break;
 		case 'p':
 			profile = atoi(optarg);
+		break;
+		case 't':
+			tunmode = atoi(optarg);
 		break;
 		case 'S':
 			statsinterval = atoi(optarg);
