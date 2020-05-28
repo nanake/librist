@@ -30,6 +30,7 @@
 #include <endian.h>
 #elif defined(__APPLE__) || defined(__GLIBC__)
 #include <machine/endian.h>
+#define __LITTLE_ENDIAN __DARWIN_LITTLE_ENDIAN
 #endif /* __MacOS__ */
 
 #include "sha256.h"
