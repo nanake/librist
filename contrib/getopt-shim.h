@@ -98,4 +98,5 @@ extern int getopt_long_only(int nargc, char * const *nargv, const char *options,
 
 #else
 #include <getopt.h>
-#
+#endif
+
