@@ -224,7 +224,7 @@ int main (int argc, char **argv) {
 	client_args.shared_secret = NULL;
 	client_args.flow_id = 0;
 	int statsinterval = 1000;
-	enum rist_log_level loglevel = RIST_LOG_WARN;
+	enum rist_log_level loglevel = RIST_LOG_INFO;
 #ifdef _WIN32
 #define STDERR_FILENO 2
 	signal(SIGINT, intHandler);

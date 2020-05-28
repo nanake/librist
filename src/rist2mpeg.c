@@ -188,7 +188,7 @@ int main(int argc, char *argv[])
 	int enable_data_callback = 1;
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
-	enum rist_log_level loglevel = RIST_LOG_WARN;
+	enum rist_log_level loglevel = RIST_LOG_INFO;
 	uint8_t encryption_type = 0;
 	enum rist_recovery_mode recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
 	uint32_t recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;

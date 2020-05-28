@@ -164,7 +164,7 @@ int main(int argc, char *argv[])
 	int statsinterval = 1000;
 	uint32_t weight[PEER_COUNT];
 	enum rist_profile profile = RIST_PROFILE_MAIN;
-	enum rist_log_level loglevel = RIST_LOG_WARN;
+	enum rist_log_level loglevel = RIST_LOG_INFO;
 	uint16_t virt_src_port = 1971;
 	uint16_t virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
 	uint8_t encryption_type = 0;
