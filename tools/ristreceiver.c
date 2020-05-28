@@ -4,6 +4,7 @@
 
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
+#include "vcs_version.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -17,7 +18,7 @@
 # define strtok_r strtok_s
 #endif
 
-extern char* stats_to_json(struct rist_stats *stats);
+#define RISTRECEIVER_VERSION "1"
 
 #define MAX_INPUT_COUNT 10
 #define MAX_OUTPUT_COUNT 10
@@ -54,13 +55,13 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
 "       --stats 1000              \\\n"
-"       --verbose-level 4         \n";
+"       --verbose-level 6         \n";
 
-const char version[] = "2.10.0.0";
+const char version[] = "3.0.0.0";
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s%s", help_str, cmd);
+	fprintf(stderr, "%s%s version %s.%s\n", help_str, cmd, LIBRIST_VERSION, RISTRECEIVER_VERSION);
 	exit(1);
 }
 
@@ -166,7 +167,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s\n", version);
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s.%s\n", LIBRIST_VERSION, RISTRECEIVER_VERSION);
 
 	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:t:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
