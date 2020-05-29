@@ -29,7 +29,7 @@ struct rist_sender_args {
 struct rist_cb_arg {
 	uint16_t src_port;
 	uint16_t dst_port;
-	struct rist_sender *sender_ctx;
+	struct rist_ctx *sender_ctx;
 	struct rist_sender_args *client_args;
 };
 
@@ -67,7 +67,7 @@ static void usage(char *cmd)
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	struct rist_receiver *receiver_ctx = (struct rist_receiver *)arg;
+	struct rist_ctx *receiver_ctx = (struct rist_ctx *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending auth message: %s\n", message);
@@ -75,20 +75,20 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	oob_block.peer = peer;
 	oob_block.payload = message;
 	oob_block.payload_len = ret;
-	rist_receiver_oob_write(receiver_ctx, &oob_block);
+	rist_oob_write(receiver_ctx, &oob_block);
 	return 0;
 }
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
-	struct rist_receiver *ctx = (struct rist_receiver *)arg;
+	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	return 0;
 }
 
 static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
-	struct rist_receiver *ctx = (struct rist_receiver *)arg;
+	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	if (oob_block->payload_len > 4 && strncmp((const char*) oob_block->payload, "auth,", 5) == 0) {
 		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
@@ -102,8 +102,8 @@ static int cb_stats(void *arg, const char *rist_stats) {
 	return 0;
 }
 
-static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
-	struct rist_sender *ctx;
+static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
+	struct rist_ctx *ctx;
 	printf("CName: %s\n", setup->cname);
 	printf("Outurl: %s\n", setup->outputurl);
 	int rist;
@@ -112,19 +112,19 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
-	rist = rist_sender_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
+	rist = rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		exit(1);
 	}
 
-	if (rist_sender_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
+	if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 		exit(1);
 	}
 
 	if (setup->statsinterval) {
-		rist_sender_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL);
+		rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL);
 	}
 
 	// Applications defaults and/or command line options
@@ -164,7 +164,7 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 	}
 
 	struct rist_peer *peer;
-	if (rist_sender_peer_create(ctx, &peer, peer_config) == -1) {
+	if (rist_peer_create(ctx, &peer, peer_config) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
 		exit(1);
 	}
@@ -173,7 +173,7 @@ static struct rist_sender* setup_rist_sender(struct rist_sender_args *setup) {
 	//rist_sender_set_retry_timeout(ctx, 10000);
 	//rist_sender_keepalive_timeout_set(ctx, 5000);
 
-	if (rist_sender_start(ctx) == -1) {
+	if (rist_start(ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 		exit(1);
 	}
@@ -267,7 +267,7 @@ int main (int argc, char **argv) {
 	client_args.outputurl = outputurl;
 	client_args.statsinterval = statsinterval;
 
-	struct rist_receiver *receiver_ctx;
+	struct rist_ctx *receiver_ctx;
 
 	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
 		fprintf(stderr, "Failed to setup logging!\n");
@@ -279,7 +279,7 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
-	if (rist_receiver_auth_handler_set(receiver_ctx, cb_auth_connect, cb_auth_disconnect, receiver_ctx) == -1) {
+	if (rist_auth_handler_set(receiver_ctx, cb_auth_connect, cb_auth_disconnect, receiver_ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exit(1);
 	}
@@ -307,7 +307,7 @@ int main (int argc, char **argv) {
 	}
 
 	if (statsinterval) {
-		rist_receiver_stats_callback_set(receiver_ctx, statsinterval, cb_stats, NULL);
+		rist_stats_callback_set(receiver_ctx, statsinterval, cb_stats, NULL);
 	}
 
 	// URL overrides (also cleans up the URL)
@@ -319,7 +319,7 @@ int main (int argc, char **argv) {
 	}
 
 	struct rist_peer *peer;
-	if (rist_receiver_peer_create(receiver_ctx, &peer, peer_config) == -1) {
+	if (rist_peer_create(receiver_ctx, &peer, peer_config) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver \n");
 		exit(1);
 	}
@@ -336,7 +336,7 @@ int main (int argc, char **argv) {
 		}
 	}
 	cb_arg.sender_ctx = setup_rist_sender(&client_args);
-	if (rist_receiver_start(receiver_ctx)) {
+	if (rist_start(receiver_ctx)) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 		exit(1);
 	}
@@ -358,8 +358,8 @@ int main (int argc, char **argv) {
 		}
 	}
 
-	rist_receiver_destroy(receiver_ctx);
-	rist_sender_destroy(cb_arg.sender_ctx);
+	rist_destroy(receiver_ctx);
+	rist_destroy(cb_arg.sender_ctx);
 
 	if (client_args.shared_secret)
 		free(client_args.shared_secret);

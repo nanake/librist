@@ -397,6 +397,17 @@ struct rist_sender {
 	pthread_mutex_t queue_lock;
 };
 
+enum rist_ctx_mode {
+	RIST_SENDER_MODE,
+	RIST_RECEIVER_MODE
+};
+
+struct rist_ctx {
+	enum rist_ctx_mode mode;
+	struct rist_sender *sender_ctx;
+	struct rist_receiver *receiver_ctx;
+};
+
 struct nacks {
 	uint32_t array[RIST_MAX_NACKS];
 	size_t counter;
@@ -532,6 +543,17 @@ struct rist_peer {
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];
 };
+
+static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {
+	if (RIST_UNLIKELY(!ctx))
+		return NULL;
+	if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx)
+		return &ctx->sender_ctx->common;
+	else if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx)
+		return &ctx->receiver_ctx->common;
+	else
+		return NULL;
+}
 
 /* defined in flow.c */
 RIST_PRIV void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);

@@ -4,7 +4,7 @@
 
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
-#include "version.h"
+#include "librist/version.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -31,7 +31,7 @@ static struct rist_logging_settings *logging_settings;
 
 struct rist_callback_object {
 	int sd;
-	struct rist_sender *ctx;
+	struct rist_ctx *ctx;
 	uint16_t virt_src_port;
 	uint16_t virt_dst_port;
 	uint16_t address_family;
@@ -124,7 +124,7 @@ static void usage(char *cmd)
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	struct rist_sender *ctx = (struct rist_sender *)arg;
+	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	char message[500];
 	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending auth message: %s\n", message);
@@ -132,20 +132,20 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	oob_block.peer = peer;
 	oob_block.payload = message;
 	oob_block.payload_len = ret;
-	rist_sender_oob_write(ctx, &oob_block);
+	rist_oob_write(ctx, &oob_block);
 	return 0;
 }
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
-	struct rist_sender *ctx = (struct rist_sender *)arg;
+	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	return 0;
 }
 
 static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
-	struct rist_sender *ctx = (struct rist_sender *)arg;
+	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	if (oob_block->payload_len > 4 && strncmp(oob_block->payload, "auth,", 5) == 0) {
 		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
@@ -177,7 +177,7 @@ int main(int argc, char *argv[])
 	char *shared_secret = NULL;
 	int buffer = 0;
 	int encryption_type = 0;
-	struct rist_sender *ctx;
+	struct rist_ctx *ctx;
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
@@ -306,20 +306,20 @@ next:
 		exit(1);
 	}
 
-	rist = rist_sender_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
+	rist = rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		exit(1);
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_sender_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
 			exit(1);
 		}
 	}
 
-	if (rist_sender_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
+	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		exit(1);
 	}
@@ -357,7 +357,7 @@ next:
 			peer_config_link->buffer_bloat_mode, peer_config_link->buffer_bloat_limit, peer_config_link->buffer_bloat_hard_limit);
 
 		struct rist_peer *peer;
-		if (rist_sender_peer_create(ctx, &peer, peer_config_link) == -1) {
+		if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender #%i\n", (int)(i + 1));
 			exit(1);
 		}
@@ -368,7 +368,7 @@ next:
 			break;
 	}
 
-	if (rist_sender_start(ctx) == -1) {
+	if (rist_start(ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 		exit(1);
 	}
@@ -386,7 +386,7 @@ next:
 
 	// Shut down sockets and rist contexts
 	evsocket_destroy(evctx);
-	rist_sender_destroy(ctx);
+	rist_destroy(ctx);
 
 	if (inputurl)
 		free(inputurl);

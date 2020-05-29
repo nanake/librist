@@ -14,166 +14,7 @@ extern "C" {
 #include "headers.h"
 #include "logging.h"
 
-/**
- * @brief Create Sender
- *
- * Create a RIST sender instance
- *
- * @param[out] ctx a context representing the sender instance
- * @param profile RIST profile
- * @param flow_id Flow ID, use 0 to delegate creation of flow_id to lib
- * @param logging_settings Struct containing logging settings
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_sender_create(struct rist_sender **ctx, enum rist_profile profile,
-				uint32_t flow_id, struct rist_logging_settings *logging_settings);
-
-/**
- * @brief Assign dynamic authentication handler
- *
- * Whenever a new peer is connected, @a connect_cb is called.
- * Whenever a new peer is disconnected, @a disconn_cb is called.
- *
- * @param ctx RIST sender context
- * @param connect_cb A pointer to the function that will be called when a new peer
- * connects. Return 0 or -1 to authorize or decline (NULL function pointer is valid)
- * @param disconn_cb A pointer to the function that will be called when a new peer
- * is marked as dead (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
- */
-RIST_API int rist_sender_auth_handler_set(struct rist_sender *ctx,
-		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		int (*disconn_cb)(void *arg, struct rist_peer *peer),
-		void *arg);
-
-/**
- * @brief Add a peer connector to the existing sender.
- *
- * One sender can send data to multiple peers.
- *
- * @param ctx RIST sender context
- * @param[out] peer Store the new peer pointer
- * @param config a pointer to the struct rist_peer_config, which contains
- *        the configuration parameters for the peer endpoint.
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_sender_peer_create(struct rist_sender *ctx,
-		struct rist_peer **peer, const struct rist_peer_config *config);
-
-/**
- * @brief Remove a peer connector to the existing sender.
- *
- * @param ctx RIST sender context
- * @param peer a pointer to the struct rist_peer, which
- *        points to the peer endpoint.
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_sender_peer_destroy(struct rist_sender *ctx,
-		struct rist_peer *peer);
-
-/**
- * @brief Set RIST max jitter
- *
- * Set max jitter
- *
- * @param ctx RIST sender context
- * @param t max jitter in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_jitter_max_set(struct rist_sender *ctx, int t);
-
-/**
- * @brief Enable out-of-band data channel
- *
- * Call after receiver initialization to enable out-of-band data.
- *
- * @param ctx RIST sender context
- * @param oob_callback A pointer to the function that will be called when out-of-band data
- * comes in (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `oob_callback`
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_oob_callback_set(struct rist_sender *ctx, 
-		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
-		void *arg);
-
-/**
- * @brief Kickstart a pre-configured sender
- *
- * After all the peers have been added, this function triggers
- * the sender to start
- *
- * @param ctx RIST sender context
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_sender_start(struct rist_sender *ctx);
-
-/**
- * @brief Write data directly to a remote receiver peer.
- *
- * This API is used to transmit out-of-band data to a remote receiver peer
- *
- * @param ctx RIST sender context
- * @param oob_block a pointer to the struct rist_oob_block
- * @return number of written bytes on success, -1 in case of error.
- */
-RIST_API int rist_sender_oob_write(struct rist_sender *ctx, const struct rist_oob_block *oob_block);
-
-/**
- * @brief Reads out-of-band data
- *
- * Use this API to read out-of-band data from an internal fifo queue instead of the callback
- *
- * @param ctx RIST sender context
- * @param[out] oob_block pointer to the rist_oob_block structure
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_sender_oob_read(struct rist_sender *ctx, const struct rist_oob_block **oob_block);
-
-/**
- * @brief Write data into a librist packet.
- *
- * One sender can send write data into a librist packet.
- *
- * @param ctx RIST sender context
- * @param data_block pointer to the rist_data_block structure
- * the ts_ntp will be populated by the lib if a value of 0 is passed
- * @return number of written bytes on success, -1 in case of error.
- */
-RIST_API int rist_sender_data_write(struct rist_sender *ctx, const struct rist_data_block *data_block);
-
-/**
- * @brief Destroy RIST sender
- *
- * Destroy the RIST instance
- *
- * @param ctx RIST sender context
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_destroy(struct rist_sender *ctx);
-
-/**
- * @brief Retrieve the current flow_id value
- *
- * Retrieve the current flow_id value
- *
- * @param ctx RIST sender context
- * @param flow_id pointer to your flow_id variable
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_flow_id_get(struct rist_sender *ctx, uint32_t *flow_id);
-
-/**
- * @brief Change the flow_id value
- *
- * Change the flow_id value
- *
- * @param ctx RIST sender context
- * @param flow_id new flow_id
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id);
-
+/* Receiver specific functions, use rist_receiver_create to create a receiver rist_ctx */
 /**
  * Create a RIST receiver instance
  *
@@ -182,77 +23,8 @@ RIST_API int rist_sender_flow_id_set(struct rist_sender *ctx, uint32_t flow_id);
  * @param logging_settings Optional struct containing the logging settings.
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_create(struct rist_receiver **ctx, enum rist_profile profile,
+RIST_API int rist_receiver_create(struct rist_ctx **ctx, enum rist_profile profile,
 			struct rist_logging_settings *logging_settings);
-
-/**
- * @brief Assign dynamic authentiation handler
- *
- * Whenever a new peer is connected, @a conn_cb is called.
- * Whenever a new peer is disconnected, @a disconn_cb is called.
- *
- * @param ctx RIST sender context
- * @param connect_cb A pointer to the function that will be called when a new peer
- * connects. Return 0 or -1 to authorize or decline (NULL function pointer is valid)
- * @param disconn_cb A pointer to the function that will be called when a new peer
- * is marked as dead (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
- */
-RIST_API int rist_receiver_auth_handler_set(struct rist_receiver *ctx,
-		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
-		int (*disconn_cb)(void *arg, struct rist_peer *peer),
-		void *arg);
-
-/**
- * @brief Add a peer connector to the existing receiver.
- *
- * One receiver can receive data from multiple peers.
- *
- * @param ctx RIST sender context
- * @param[out] peer Store the new peer pointer
- * @param config a pointer to the struct rist_peer_config, which contains
- *        the configuration parameters for the peer endpoint.
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_peer_create(struct rist_receiver *ctx, 
-		struct rist_peer **peer, const struct rist_peer_config *config);
-
-/**
- * @brief Remove a peer connector to the existing receiver.
- *
- * @param ctx RIST receiver context
- * @param peer a pointer to the struct rist_peer, which
- *        points to the peer endpoint.
- * @return 0 on success, -1 in case of error.
- */
-RIST_API int rist_receiver_peer_destroy(struct rist_receiver *ctx,
-		struct rist_peer *peer);
-
-/**
- * @brief Set RIST max jitter
- *
- * Set max jittter
- *
- * @param ctx RIST receiver context
- * @param t max jitter in ms
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_jitter_max_set(struct rist_receiver *ctx, int t);
-
-/**
- * @brief Enable out-of-band data channel
- *
- * Call after receiver initialization to enable out-of-band data.
- *
- * @param ctx RIST receiver context
- * @param oob_callback A pointer to the function that will be called when out-of-band data
- * comes in (NULL function pointer is valid)
- * @param arg is an the extra argument passed to the `oob_callback`
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_oob_callback_set(struct rist_receiver *ctx, 
-		int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
-		void *arg);
 
 /**
  * @brief Configure nack type
@@ -263,7 +35,19 @@ RIST_API int rist_receiver_oob_callback_set(struct rist_receiver *ctx,
  * @param nack_type 0 for range (default), 1 for bitmask
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_nack_type nacks_type);
+RIST_API int rist_receiver_nack_type_set(struct rist_ctx *ctx, enum rist_nack_type nacks_type);
+
+/**
+ * @brief Reads rist data
+ *
+ * Use this API to read data from an internal fifo queue instead of the callback
+ *
+ * @param ctx RIST receiver context
+ * @param[out] data_block a pointer to the rist_data_block structure
+ * @param timeout How long to wait for queue data (ms), 0 for no wait
+ * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
+ */
+RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_data_block **data_block, int timeout);
 
 /**
  * @brief Enable data callback channel
@@ -276,63 +60,177 @@ RIST_API int rist_receiver_nack_type_set(struct rist_receiver *ctx, enum rist_na
  * @param arg the extra argument passed to the `data_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_data_callback_set(struct rist_receiver *ctx,
+RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
 	int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg);
 
-/**
- * @brief Setup receiver start
- *
- * Start receiver data output thread.
- *
- * @param ctx RIST receiver context
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_start(struct rist_receiver *ctx);
+/* Sender specific functions, use rist_sender_create to create a sender rist_ctx */
 
 /**
- * @brief Write data directly to a remote sender peer.
+ * @brief Create Sender
  *
- * This API is used to transmit out-of-band data to a remote sender peer
+ * Create a RIST sender instance
  *
- * @param ctx RIST receiver context
- * @param oob_block a pointer to the struct rist_oob_block
- * @return number of written bytes on success, -1 on error
+ * @param[out] ctx a context representing the sender instance
+ * @param profile RIST profile
+ * @param flow_id Flow ID, use 0 to delegate creation of flow_id to lib
+ * @param logging_settings Struct containing logging settings
+ * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_receiver_oob_write(struct rist_receiver *ctx, const struct rist_oob_block *oob_block);
+RIST_API int rist_sender_create(struct rist_ctx **ctx, enum rist_profile profile,
+				uint32_t flow_id, struct rist_logging_settings *logging_settings);
+
+/**
+ * @brief Retrieve the current flow_id value
+ *
+ * Retrieve the current flow_id value
+ *
+ * @param ctx RIST sender context
+ * @param flow_id pointer to your flow_id variable
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_flow_id_get(struct rist_ctx *ctx, uint32_t *flow_id);
+
+/**
+ * @brief Change the flow_id value
+ *
+ * Change the flow_id value
+ *
+ * @param ctx RIST sender context
+ * @param flow_id new flow_id
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_sender_flow_id_set(struct rist_ctx *ctx, uint32_t flow_id);
+
+/**
+ * @brief Write data into a librist packet.
+ *
+ * One sender can send write data into a librist packet.
+ *
+ * @param ctx RIST sender context
+ * @param data_block pointer to the rist_data_block structure
+ * the ts_ntp will be populated by the lib if a value of 0 is passed
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_sender_data_write(struct rist_ctx *ctx, const struct rist_data_block *data_block);
+
+/* OOB Specific functions, send and receive IP traffic inband in RIST Main Profile */
+/**
+ * @brief Write data directly to a remote receiver peer.
+ *
+ * This API is used to transmit out-of-band data to a remote receiver peer
+ *
+ * @param ctx RIST context
+ * @param oob_block a pointer to the struct rist_oob_block
+ * @return number of written bytes on success, -1 in case of error.
+ */
+RIST_API int rist_oob_write(struct rist_ctx *ctx, const struct rist_oob_block *oob_block);
 
 /**
  * @brief Reads out-of-band data
  *
  * Use this API to read out-of-band data from an internal fifo queue instead of the callback
  *
- * @param ctx RIST receiver context
- * @param[out] oob_block a pointer to the rist_oob_block structure
- * @return 0 on success, -1 on error
+ * @param ctx RIST context
+ * @param[out] oob_block pointer to the rist_oob_block structure
+ * @return 0 on success, -1 in case of error.
  */
-RIST_API int rist_receiver_oob_read(struct rist_receiver *ctx, const struct rist_oob_block **oob_block);
+RIST_API int rist_oob_read(struct rist_ctx *ctx, const struct rist_oob_block **oob_block);
 
 /**
- * @brief Reads rist data
+ * @brief Enable out-of-band data channel
  *
- * Use this API to read data from an internal fifo queue instead of the callback
+ * Call after receiver initialization to enable out-of-band data.
  *
- * @param ctx RIST receiver context
- * @param[out] data_block a pointer to the rist_data_block structure
- * @param timeout How long to wait for queue data (ms), 0 for no wait
- * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
- */
-RIST_API int rist_receiver_data_read(struct rist_receiver *ctx, const struct rist_data_block **data_block, int timeout);
-
-/**
- * @brief Destroy RIST receiver
- *
- * Destroy RIST receiver instance
- *
- * @param ctx RIST receiver context
+ * @param ctx RIST context
+ * @param oob_callback A pointer to the function that will be called when out-of-band data
+ * comes in (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `oob_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
+RIST_API int rist_oob_callback_set(struct rist_ctx *ctx,
+								   int (*oob_callback)(void *arg, const struct rist_oob_block *oob_block),
+								   void *arg);
+
+/**
+ * @brief Assign dynamic authentication handler
+ *
+ * Whenever a new peer is connected, @a connect_cb is called.
+ * Whenever a new peer is disconnected, @a disconn_cb is called.
+ *
+ * @param ctx RIST context
+ * @param connect_cb A pointer to the function that will be called when a new peer
+ * connects. Return 0 or -1 to authorize or decline (NULL function pointer is valid)
+ * @param disconn_cb A pointer to the function that will be called when a new peer
+ * is marked as dead (NULL function pointer is valid)
+ * @param arg is an the extra argument passed to the `conn_cb` and `disconn_cb`
+ */
+RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
+		int (*connect_cb)(void *arg, const char* conn_ip, uint16_t conn_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer),
+		int (*disconn_cb)(void *arg, struct rist_peer *peer),
+		void *arg);
+
+
+
+/**
+ * @brief Add a peer connector to the existing sender.
+ *
+ * One sender can send data to multiple peers.
+ *
+ * @param ctx RIST context
+ * @param[out] peer Store the new peer pointer
+ * @param config a pointer to the struct rist_peer_config, which contains
+ *        the configuration parameters for the peer endpoint.
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_peer_create(struct rist_ctx *ctx,
+		struct rist_peer **peer, const struct rist_peer_config *config);
+
+/**
+ * @brief Remove a peer connector to the existing sender.
+ *
+ * @param ctx RIST context
+ * @param peer a pointer to the struct rist_peer, which
+ *        points to the peer endpoint.
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
+		struct rist_peer *peer);
+
+/**
+ * @brief Set RIST max jitter
+ *
+ * Set max jitter
+ *
+ * @param ctx RIST context
+ * @param t max jitter in ms
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_jitter_max_set(struct rist_ctx *ctx, int t);
+
+
+
+/**
+ * @brief Kickstart a pre-configured sender
+ *
+ * After all the peers have been added, this function triggers
+ * the sender to start
+ *
+ * @param ctx RIST context
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_start(struct rist_ctx *ctx);
+
+
+/**
+ * @brief Destroy RIST sender
+ *
+ * Destroy the RIST instance
+ *
+ * @param ctx RIST context
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_destroy(struct rist_ctx *ctx);
 
 /**
  * @brief Parses url for peer config data (encryption, compression, etc)
@@ -349,52 +247,21 @@ RIST_API int rist_receiver_destroy(struct rist_receiver *ctx);
 RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
 
 /**
- * @brief Set logging options, logging defaults to stderr when not called.
- *
- * When log_cb is non null all other options are ignored. Both log socket and log file pointer can be provided.
- *
- * @param ctx RIST Receiver context
- * @param log_cb Callback function that will be called for logs. Calling application must free the provided char pointer
- * @param cb_arg Optional log callback arguments
- * @param address ipaddress:port combination to send the logs using udp (NULL to disable)
- *
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_receiver_logging_set(struct rist_receiver *ctx, struct rist_logging_settings *logging_settings);
-
-/**
- * @brief Set logging options, logging defaults to stderr when not called.
- *
- * When log_cb is non null all other options are ignored. Both log socket and log file pointer can be provided.
- *
- * @param ctx RIST Sender context
- * @param log_cb Callback function that will be called for logs. Calling application must free the provided char pointer
- * @param cb_arg Optional log callback arguments
- * @param address ipaddress:port combination to send the logs using udp (NULL to disable)
- *
- * @return 0 on success, -1 on error
- */
-RIST_API int rist_sender_logging_set(struct rist_sender *ctx, struct rist_logging_settings *logging_settings);
-
-/**
  * @brief Set callback for receiving stats structs
  *
- * @param ctx RIST Receiver context
+ * @param ctx RIST context
  * @param statsinterval interval between stats reporting
- * @param stats_cb Callback function that will be called. The stats pointer must be free()'d when you are finished.
+ * @param stats_cb Callback function that will be called. The char pointer must be free()'d when you are finished.
  * @param arg extra arguments for callback function
  */
-RIST_API int rist_receiver_stats_callback_set(struct rist_receiver *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg);
+RIST_API int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg);
 
 /**
- * @brief Set callback for receiving stats structs
+ * @brief Get the version of libRIST
  *
- * @param ctx RIST Sender context
- * @param statsinterval interval between stats reporting
- * @param stats_cb Callback function that will be called. The stats pointer must be free()'d when you are finished.
- * @param arg extra arguments for callback function
+ * @return String representing the version of libRIST
  */
-RIST_API int rist_sender_stats_callback_set(struct rist_sender *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg);
+RIST_API const char *librist_version(void);
 
 #ifdef __cplusplus
 }

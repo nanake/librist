@@ -138,8 +138,7 @@ enum rist_stats_type
 	RIST_STATS_RECEIVER_FLOW
 };
 
-struct rist_receiver;
-struct rist_sender;
+struct rist_ctx;
 struct rist_peer;
 
 struct rist_data_block
