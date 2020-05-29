@@ -116,9 +116,11 @@ struct rist_logging_settings *rist_get_global_logging_settings() {
 
 int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp)
 {
+	if (!logging_settings)
+		return -1;
 	struct rist_logging_settings *settings = *logging_settings;
 	if (!settings) {
-		settings = malloc(sizeof(*settings));
+		settings = calloc(1, sizeof(*settings));
 		*logging_settings = settings;
 	}
 
