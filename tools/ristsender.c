@@ -79,7 +79,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	RIST_MARK_UNUSED(revents);
 	RIST_MARK_UNUSED(fd);
 
-	int recv_bufsize = -1;
+	ssize_t recv_bufsize = -1;
 	struct sockaddr_in addr4 = {0};
 	struct sockaddr_in6 addr6 = {0};
 	//struct sockaddr *addr;
@@ -92,6 +92,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	} else {
 		socklen_t addrlen = sizeof(struct sockaddr_in);
 		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *)&addr4, &addrlen);
 		//addr = (struct sockaddr *) &addr4;
 	}
 
@@ -141,6 +142,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
+	(void)peer;
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	return 0;
@@ -157,6 +159,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 }
 
 static int cb_stats(void *arg, const char *rist_stats) {
+	(void)arg;
 	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", rist_stats);
 	free((void*)rist_stats);
 	return 0;
@@ -194,7 +197,7 @@ int main(int argc, char *argv[])
     signal(SIGTERM, intHandler);
     signal(SIGABRT, intHandler);
 #else
-	struct sigaction act = {0};
+	struct sigaction act = { {0} };
 	act.sa_handler = intHandler;
 	sigaction(SIGINT, &act, NULL);
 #endif
@@ -346,7 +349,7 @@ next:
 		/* Process overrides */
 		struct rist_peer_config *overrides_peer_config = (void *)peer_config_link;
 		if (shared_secret && peer_config_link->secret[0] == 0) {
-			strncpy(overrides_peer_config->secret, shared_secret, RIST_MAX_STRING_SHORT);
+			strncpy(overrides_peer_config->secret, shared_secret, RIST_MAX_STRING_SHORT -1);
 			if (encryption_type)
 				overrides_peer_config->key_size = encryption_type;
 			else if (!overrides_peer_config->key_size)

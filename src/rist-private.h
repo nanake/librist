@@ -588,7 +588,7 @@ RIST_PRIV struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ct
 														  const struct rist_peer_config *config, bool b_rtcp);
 RIST_PRIV void rist_fsm_init_comm(struct rist_peer *peer);
 RIST_PRIV int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len);
-RIST_PRIV int init_common_ctx(struct rist_receiver *ctx_receiver, struct rist_sender *ctx_sender, struct rist_common_ctx *ctx, enum rist_profile profile);
+RIST_PRIV int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile);
 RIST_PRIV int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer);
 RIST_PRIV int rist_auth_handler(struct rist_common_ctx *ctx,
 								int (*conn_cb)(void *arg, const char *connecting_ip, uint16_t connecting_port, const char *local_ip, uint16_t local_port, struct rist_peer *peer),

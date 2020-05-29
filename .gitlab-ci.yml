@@ -10,6 +10,13 @@ stages:
         - docker
         - amd64
 
+.debian-amd64-common:
+    image: registry.videolan.org/dav1d-debian-unstable:20200306210534
+    stage: build
+    tags:
+        - docker
+        - amd64
+
 build-ubuntu:
     extends: .ubuntu-amd64-bionic
     tags:
@@ -18,6 +25,26 @@ build-ubuntu:
         - amd64
     script:
         - meson build --buildtype release --werror
+        - ninja -C build
+
+build-win64:
+    extends: .debian-amd64-common
+    script:
+        - wineserver -p && wine wineboot
+        - meson build --buildtype release
+                      --libdir lib
+                      --cross-file common/ci/x86_64-w64-mingw32.meson
+                      -Ddefault_library=both
+        - ninja -C build
+
+build-macos:
+    stage: build
+    tags:
+        - macos
+    script:
+        - meson build --buildtype release
+                      --werror
+                      -Ddefault_library=both
         - ninja -C build
 
 analyze-ubuntu:

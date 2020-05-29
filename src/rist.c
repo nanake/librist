@@ -29,7 +29,7 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	rist_ctx->mode = RIST_RECEIVER_MODE;
 	rist_ctx->receiver_ctx = ctx;
 	ctx->id = (intptr_t)ctx;
-	if (init_common_ctx(ctx, NULL, &ctx->common, profile))
+	if (init_common_ctx(&ctx->common, profile))
 		goto fail;
 
 	ctx->common.logging_settings = logging_settings;
@@ -194,7 +194,7 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	rist_ctx->sender_ctx = ctx;
 
 	ctx->id = (intptr_t)ctx;
-	if (init_common_ctx(NULL, ctx, &ctx->common, profile))
+	if (init_common_ctx(&ctx->common, profile))
 	{
 		free(ctx);
 		ctx = NULL;
@@ -250,7 +250,11 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 		{
 			snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
 		}
+#ifndef __WIN32
 		flow_id = generate_flowid(timestampNTP_u64(), getpid(), hostname);
+#else
+		flow_id = generate_flowid(timestampNTP_u64(), 1234, hostname);
+#endif
 	}
 
 	ctx->adv_flow_id = flow_id;
@@ -821,3 +825,4 @@ int rist_destroy(struct rist_ctx *ctx) {
 	free(ctx);
 	return 0;
 }
+

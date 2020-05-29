@@ -28,7 +28,9 @@
 #include <ws2tcpip.h>
 #define AF_LOCAL AF_UNSPEC
 #define if_nametoindex(name)  atoi(name)
+#ifndef __MINGW32__
 #define close(s) closesocket(s)
+#endif
 typedef int socklen_t;
 
 /* POSIX */

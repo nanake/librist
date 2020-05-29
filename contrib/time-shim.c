@@ -60,9 +60,7 @@ int gettimeofday(struct timeval *tv, void * not_implemented)
 
 int clock_gettime(clockid_t clock, timespec_t *tp)
 {
-	struct timeval tv;
-	char *str_content;
-	char *str_udp;
+	struct timeval tv = { {0}};
 
 	if (clock != CLOCK_MONOTONIC) {
 		errno = EINVAL;

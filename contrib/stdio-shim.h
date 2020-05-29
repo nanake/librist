@@ -9,7 +9,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 
-#ifdef _MSC_VER
+#ifdef __WIN32
 RIST_PRIV int vasprintf(char** strp, const char* fmt, va_list ap);
 RIST_PRIV int asprintf(char** strp, const char* fmt, ...);
 #endif

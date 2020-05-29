@@ -2570,14 +2570,14 @@ protocol_bypass:
 		return 0;
 	}
 
-	int init_common_ctx(struct rist_receiver *ctx_receiver, struct rist_sender *ctx_sender, struct rist_common_ctx *ctx, enum rist_profile profile)
+	int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
 	{
 #ifdef _WIN32
 		int ret;
 		WSADATA wsaData;
 		ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
 		if (ret < 0) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to initialize WSA\n");
+			rist_log_priv3(RIST_LOG_ERROR, "Failed to initialize WSA\n");
 			return -1;
 		}
 #endif

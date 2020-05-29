@@ -8,12 +8,8 @@
 
 #include "common/attributes.h"
 
-__BEGIN_DECLS
-
 #include <stdint.h>
 
 RIST_PRIV uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase);
-
-__END_DECLS
 
 #endif

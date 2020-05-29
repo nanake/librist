@@ -133,6 +133,7 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 #include "libevsocket.h"
 #include "socket-shim.h"
 #include "pthread-shim.h"
+#include "librist/udpsocket.h"
 
 struct evsocket_event {
 	int fd;

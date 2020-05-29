@@ -32,6 +32,7 @@ builtin_cjson = get_option('builtin_cjson')
 
 if host_machine.system() == 'windows'
 	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
+	add_project_arguments(['-D_WIN32_WINNT=0x0601'], language: 'c')
 	add_project_arguments(['-Drist_EXPORTS'], language: 'c')
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
@@ -48,7 +49,15 @@ else
 		'-Wno-unused-parameter',
 		'-Wshorten-64-to-32',
 		'-Watomic-implicit-seq-cst',
+		'-Wunused-parameter',
+		'-Wmaybe-uninitialized'
 		]), language : 'c')
+endif
+
+if cc.has_argument('-fvisibility=hidden')
+    add_project_arguments('-fvisibility=hidden', language: 'c')
+else
+    warning('Compiler does not support -fvisibility=hidden, all symbols will be public!')
 endif
 
 test_args = []
@@ -97,6 +106,7 @@ if not get_option('builtin_cjson')
 endif
 if builtin_cjson
 	message('Using builtin cJSON library')
+	add_project_arguments('-DCJSON_HIDE_SYMBOLS', language: 'c')
 	cjson_lib = declare_dependency( sources: 'contrib/contrib_cJSON/cjson/cJSON.c',
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif

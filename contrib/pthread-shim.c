@@ -12,6 +12,7 @@
 
 int pthread_create(pthread_t *thread, pthread_attr_t *attr, DWORD (__stdcall *start_routine)(LPVOID), void *arg)
 {
+	(void)attr;
 	if (thread == NULL || start_routine == NULL) {
 		return 1;
 	}
@@ -260,6 +261,7 @@ int pthread_rwlock_unlock(pthread_rwlock_t *rwlock)
 
 int sem_init(sem_t *sem, int pshared, unsigned value)
 {
+	(void)pshared;
 	*sem = CreateSemaphore(
 		NULL,           // default security attributes
 		value,          // initial count

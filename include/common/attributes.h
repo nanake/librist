@@ -52,6 +52,7 @@ struct __attribute__((packed)) sname sbody;
 #ifdef _WIN32
 #ifdef _WIN64
 #ifdef __GNUC__
+#ifndef __MINGW32__
 typedef long long ssize_t;
 enum
 {
@@ -73,6 +74,7 @@ struct pollfd
     unsigned revents;
 };
 struct pollfd;
+#endif
 #else
 typedef __int64 ssize_t;
 #endif

@@ -81,6 +81,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
+	(void)peer;
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
 	return 0;
@@ -97,6 +98,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 }
 
 static int cb_stats(void *arg, const char *rist_stats) {
+	(void)arg;
 	fprintf(stderr, "%s\n\n", rist_stats);
 	free((void*)rist_stats);
 	return 0;
@@ -148,11 +150,11 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	};
 
 	if (setup->shared_secret != NULL) {
-		strncpy(app_peer_config.secret, setup->shared_secret, 128);
+		strncpy(app_peer_config.secret, setup->shared_secret, RIST_MAX_STRING_SHORT -1);
 	}
 
 	if (setup->cname != NULL) {
-		strncpy(app_peer_config.cname, setup->cname, 128);
+		strncpy(app_peer_config.cname, setup->cname, RIST_MAX_STRING_SHORT -1);
 	}
 
 	// URL overrides (also cleans up the URL)
@@ -224,7 +226,7 @@ int main (int argc, char **argv) {
 	signal(SIGTERM, intHandler);
 	signal(SIGABRT, intHandler);
 #else
-	struct sigaction act;
+	struct sigaction act = { {0} };
 	act.sa_handler = intHandler;
 	act.sa_flags = 0;
 	sigaction(SIGINT, &act, NULL);
@@ -303,7 +305,7 @@ int main (int argc, char **argv) {
 	};
 
 	if (cname != NULL) {
-		strncpy(app_peer_config.cname, cname, 128);
+		strncpy(app_peer_config.cname, cname, RIST_MAX_STRING_SHORT -1);
 	}
 
 	if (statsinterval) {
