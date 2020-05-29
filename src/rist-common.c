@@ -2941,7 +2941,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 		free_rist_buffer(&ctx->common, b);
 		b = next;
 	}
-	evsocket_loop_finalize(ctx->common.evctx);
+	evsocket_destroy(ctx->common.evctx);
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing peerlist_lock\n");
@@ -3114,8 +3114,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 		if (!peer)
 			break;
 	}
-	evsocket_loop_finalize(ctx->common.evctx);
-
+	evsocket_destroy(ctx->common.evctx);
 
 	pthread_rwlock_unlock(peerlist_lock);
 	pthread_rwlock_destroy(peerlist_lock);

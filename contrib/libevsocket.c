@@ -11,7 +11,7 @@
 
 #ifdef _WIN32
 
-	/* Winsock FD_SET uses FD_SETSIZE in its expansion */
+/* Winsock FD_SET uses FD_SETSIZE in its expansion */
 #ifdef FD_SETSIZE
 /* Too late for #undef FD_SETSIZE to work: fd_set is already defined. */
 # error Header inclusion order compromised!
@@ -88,14 +88,10 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 			}
 		}
 
-#ifndef HAVE_ALERTABLE_SELECT
-		//# warning FIXME!Fix cancellation and remove this crap.
 		if ((timeout < 0) || (timeout > 50)) {
 			tv.tv_sec = 0;
 			tv.tv_usec = 50000;
-		} else
-#endif
-		if (timeout >= 0) {
+		} else if (timeout >= 0) {
 			div_t d = div(timeout, 1000);
 			tv.tv_sec = d.quot;
 			tv.tv_usec = d.rem * 1000;
@@ -103,7 +99,6 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 
 		val = select(val + 1, rdset, wrset, exset, /*(timeout >= 0) ?*/ &tv /*: NULL*/);
 
-#ifndef HAVE_ALERTABLE_SELECT
 		if (val == 0) {
 			if (timeout > 0) {
 				timeout -= (timeout > 50) ? 50 : timeout;
@@ -113,7 +108,6 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 				goto resume;
 			}
 		}
-#endif
 
 		if (val == -1) {
 			return -1;
@@ -191,7 +185,6 @@ static void ctx_del(struct evsocket_ctx *delme)
 		c = c->next;
 	}
 }
-
 
 struct evsocket_event *evsocket_addevent(struct evsocket_ctx *ctx, int fd, short events,
 	void (*callback)(struct evsocket_ctx *ctx, int fd, short revents, void *arg),
@@ -329,8 +322,6 @@ static void serve_event(struct evsocket_ctx *ctx, int n)
 }
 
 
-
-
 /*** PUBLIC API ***/
 
 struct evsocket_ctx *evsocket_create(void)
@@ -350,7 +341,6 @@ struct evsocket_ctx *evsocket_create(void)
 	ctx_add(ctx);
 	return ctx;
 }
-
 
 void evsocket_loop(struct evsocket_ctx *ctx)
 {
@@ -396,8 +386,6 @@ void evsocket_loop(struct evsocket_ctx *ctx)
 		continue;
 
 	} /* main loop */
-	ctx_del(ctx);
-	ctx = NULL;
 }
 
 void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout)
@@ -449,7 +437,7 @@ void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout)
 	}
 }
 
-void evsocket_loop_finalize(struct evsocket_ctx *ctx)
+void evsocket_destroy(struct evsocket_ctx *ctx)
 {
 	ctx_del(ctx);
 	if (ctx->pfd)
@@ -457,9 +445,11 @@ void evsocket_loop_finalize(struct evsocket_ctx *ctx)
 	if (ctx->_array)
 		free(ctx->_array);
 	free(ctx);
+	ctx = NULL;
 }
 
-void evsocket_destroy(struct evsocket_ctx *ctx)
+void evsocket_loop_stop(struct evsocket_ctx *ctx)
 {
-	ctx->giveup = 1;
+	if (ctx)
+		ctx->giveup = 1;
 }

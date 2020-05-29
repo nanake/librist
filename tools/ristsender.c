@@ -353,9 +353,8 @@ next:
 	}
 
 	// Shut down sockets and rist contexts
-	evsocket_loop_finalize(evctx);
-	rist_sender_destroy(ctx);
 	evsocket_destroy(evctx);
+	rist_sender_destroy(ctx);
 
 	if (inputurl)
 		free(inputurl);
