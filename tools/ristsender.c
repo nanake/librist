@@ -20,7 +20,7 @@
 
 #define RIST_MARK_UNUSED(unused_param) ((void)(unused_param))
 
-#define RISTSENDER_VERSION "1"
+#define RISTSENDER_VERSION "2"
 
 #define MAX_INPUT_COUNT 10
 #define MAX_OUTPUT_COUNT 10
@@ -45,7 +45,7 @@ static struct option long_options[] = {
 { "secret",          required_argument, NULL, 's' },
 { "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
-{ "tunnel",          required_argument, NULL, 't' },
+{ "tun",             required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
@@ -57,9 +57,9 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -o | --outputurl rist://...           * | Comma separated list of output rist URLs                 |\n"
 "       -b | --buffer value                     | Default buffer size for packet retransmissions           |\n"
 "       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
-"       -e | --encryption-type TYPE             | Default Encryption type (0, 1 = AES-128, 2 = AES-256)    |\n"
-"       -p | --profile   number                 | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
-"       -t | --tunnel  IfName                   | TUN interface name for oob data input                    |\n"
+"       -e | --encryption-type TYPE             | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
+"       -p | --profile number                   | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
+"       -t | --tun IfName                       | TUN interface name for oob data input                    |\n"
 "       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
 "       -h | --help                             | Show this help                                           |\n"
@@ -173,7 +173,10 @@ int main(int argc, char *argv[])
 	struct evsocket_event *event[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;
-	char *oobtap = NULL;
+	char *oobtun = NULL;
+	char *shared_secret = NULL;
+	int buffer = 0;
+	int encryption_type = 0;
 	struct rist_sender *ctx;
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
@@ -201,7 +204,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTSENDER_VERSION);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:t:S:v:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -210,7 +213,16 @@ int main(int argc, char *argv[])
 			outputurl = strdup(optarg);
 		break;
 		case 'b':
-			oobtap = strdup(optarg);
+			buffer = atoi(optarg);
+		break;
+		case 's':
+			shared_secret = strdup(optarg);
+		break;
+		case 'e':
+			encryption_type = atoi(optarg);
+		break;
+		case 't':
+			oobtun = strdup(optarg);
 		break;
 		case 'p':
 			profile = atoi(optarg);
@@ -324,6 +336,20 @@ next:
 			exit(1);
 		}
 
+		/* Process overrides */
+		struct rist_peer_config *overrides_peer_config = (void *)peer_config_link;
+		if (shared_secret && peer_config_link->secret[0] == 0) {
+			strncpy(overrides_peer_config->secret, shared_secret, RIST_MAX_STRING_SHORT);
+			if (encryption_type)
+				overrides_peer_config->key_size = encryption_type;
+			else if (!overrides_peer_config->key_size)
+				overrides_peer_config->key_size = 128;
+		}
+		if (buffer) {
+			overrides_peer_config->recovery_length_min = buffer;
+			overrides_peer_config->recovery_length_max = buffer;
+		}
+
 		/* Print config */
 		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
 			peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max, 
@@ -366,8 +392,10 @@ next:
 		free(inputurl);
 	if (outputurl)
 		free(outputurl);
-	if (oobtap)
-		free(oobtap);
+	if (oobtun)
+		free(oobtun);
+	if (shared_secret)
+		free(shared_secret);
 	free(logging_settings);
 
 	return 0;
