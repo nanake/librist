@@ -47,8 +47,8 @@ void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
 		if (b)
 		{
 			f->receiver_queue[counter] = NULL;
-			free_rist_buffer(ctx, b);
 			atomic_fetch_sub_explicit(&f->receiver_queue_size, b->size, memory_order_release);
+			free_rist_buffer(ctx, b);
 		}
 		counter = (counter + 1) % f->receiver_queue_max;
 		if (counter == output_queue_idx) {
