@@ -62,7 +62,7 @@ static inline void rist_log_impl(struct rist_logging_settings *log_settings, enu
 		udpsocket_send(log_settings->log_socket, logmsg, msglen);
 	if (log_settings->log_stream)
 		fputs(logmsg, log_settings->log_stream);
-	
+
 	free(logmsg);
 out:
 	free(msg);
@@ -114,13 +114,13 @@ struct rist_logging_settings *rist_get_global_logging_settings() {
 	return g_logging_settings;
 }
 
-int rist_set_logging(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp)
+int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp)
 {
-	if (!logging_settings)
-		return -1;
 	struct rist_logging_settings *settings = *logging_settings;
-	if (!settings)
+	if (!settings) {
 		settings = malloc(sizeof(*settings));
+		*logging_settings = settings;
+	}
 
 	if (!g_logging_settings)
 		g_logging_settings = settings;

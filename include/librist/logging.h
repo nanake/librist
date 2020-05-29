@@ -39,6 +39,6 @@ struct rist_logging_settings {
 
 /* public interfaces in logging.c */
 RIST_API void rist_log(struct rist_logging_settings *logging_settings, enum rist_log_level level, const char *format, ...);
-RIST_API int rist_set_logging(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp);
+RIST_API int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp);
 
 #endif
