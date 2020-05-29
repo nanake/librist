@@ -53,7 +53,7 @@ static struct option long_options[] = {
 };
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -i | --inputurl  udp://... rist://... * | Comma separated list of input udp URLs                   |\n"
+"       -i | --inputurl  udp://...            * | Comma separated list of input udp URLs                   |\n"
 "       -o | --outputurl rist://...           * | Comma separated list of output rist URLs                 |\n"
 "       -b | --buffer value                     | Default buffer size for packet retransmissions           |\n"
 "       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
