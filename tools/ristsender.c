@@ -366,6 +366,7 @@ next:
 		free(outputurl);
 	if (oobtap)
 		free(oobtap);
+	free(logging_settings);
 
 	return 0;
 }
