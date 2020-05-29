@@ -99,6 +99,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		data_block.virt_src_port = callback_object->virt_src_port;
 		data_block.virt_dst_port = callback_object->virt_dst_port;
 		data_block.ts_ntp = 0; // delegate this to the library in this case
+		data_block.flags = 0;
 		int w = rist_sender_data_write(callback_object->ctx, &data_block);
 		// TODO: report error?
 		(void) w;
@@ -177,6 +178,9 @@ int main(int argc, char *argv[])
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
+
+	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
+		event[i] = NULL;
 
 #ifdef _WIN32
 #define STDERR_FILENO 2

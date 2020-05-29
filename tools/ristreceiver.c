@@ -150,6 +150,12 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 
+	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++)
+	{
+		callback_object.mpeg[i] = 0;
+		callback_object.virt_src_port[i] = 0;
+	}
+
 #ifdef _WIN32
 #define STDERR_FILENO 2
     signal(SIGINT, intHandler);
