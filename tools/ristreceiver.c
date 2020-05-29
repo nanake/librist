@@ -4,7 +4,7 @@
 
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
-#include "vcs_version.h"
+#include "version.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -61,7 +61,8 @@ const char version[] = "3.0.0.0";
 
 static void usage(char *cmd)
 {
-	fprintf(stderr, "%s%s version %s.%s\n", help_str, cmd, LIBRIST_VERSION, RISTRECEIVER_VERSION);
+	fprintf(stderr, "%s%s version %d.%d.%d.%s\n", help_str, cmd, LIBRIST_API_VERSION_MAJOR,
+		LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 	exit(1);
 }
 
@@ -167,7 +168,8 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s.%s\n", LIBRIST_VERSION, RISTRECEIVER_VERSION);
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
+			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 
 	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:t:S:v:h", long_options, &option_index)) != -1) {
 		switch (c) {
