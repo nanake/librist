@@ -87,11 +87,11 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	if (callback_object->address_family == AF_INET6) {
 		socklen_t addrlen = sizeof(struct sockaddr_in6);
-		recv_bufsize = recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
 		//addr = (struct sockaddr *) &addr6;
 	} else {
 		socklen_t addrlen = sizeof(struct sockaddr_in);
-		recv_bufsize = recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
 		//addr = (struct sockaddr *) &addr4;
 	}
 
