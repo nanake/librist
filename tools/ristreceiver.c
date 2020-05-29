@@ -13,6 +13,7 @@
 #include "getopt-shim.h"
 #include <stdbool.h>
 #include <signal.h>
+#include "risturlhelp.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s
@@ -37,6 +38,7 @@ static struct option long_options[] = {
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "help",            no_argument,       NULL, 'h' },
+{ "help-url",        no_argument,       NULL, 'u' },
 { 0, 0, 0, 0 },
 };
 
@@ -51,6 +53,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
 "       -h | --help                             | Show this help                                           |\n"
+"       -u | --help-url                         | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
@@ -178,7 +181,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -206,6 +209,10 @@ int main(int argc, char *argv[])
 		break;
 		case 'v':
 			loglevel = atoi(optarg);
+		break;
+		case 'u':
+			fprintf(stderr, "%s", help_urlstr);
+			exit(1);
 		break;
 		case 'h':
 			/* Fall through */
