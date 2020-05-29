@@ -526,9 +526,9 @@ int rist_parse_address(const char *url, const struct rist_peer_config **peer_con
 		output_peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
 		output_peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
 		output_peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
-		output_peer_config->buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE;
-		output_peer_config->buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT;
-		output_peer_config->buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT;
+		output_peer_config->congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE;
+		output_peer_config->min_retries = RIST_DEFAULT_MIN_RETRIES;
+		output_peer_config->max_retries = RIST_DEFAULT_MAX_RETRIES;
 		ret = parse_url_options(url, output_peer_config);
 		*peer_config = output_peer_config;
 	}

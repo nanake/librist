@@ -22,7 +22,7 @@ const char help_urlstr[] = "\nUsage: append to end of individual rist:// url(s) 
 "    param session-timeout=###  timeout in ms for closing of connection where keep-alive fails\n"
 "    param keepalive-interval=###  interval in ms\n"
 "    param key-rotation=##  number of IP packets before a key rotation is triggered\n"
-"    param congestion-control=#  mitigation mode: (0=disable, 1=normal, 2=aggressive)\n"
+"    param congestion-control=#  mitigation mode: (0=disabled, 1=normal, 2=aggressive)\n"
 "    param min-retries=##  min retries count before congestion control kicks in\n"
 "    param max-retries=##  max retries count\n"
 "    param weight=#  default weight for multi-path load balancing. Use 0 for duplicate paths.\n"

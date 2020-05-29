@@ -124,18 +124,18 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 				int temp = atoi( val );
 				if (temp > 0)
 					output_peer_config->keepalive_interval = temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_MODE ) == 0) {
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CONGESTION_CONTROL ) == 0) {
 				int temp = atoi( val );
 				if (temp >= 0 && temp <= 2)
-					output_peer_config->buffer_bloat_mode = temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_LIMIT ) == 0) {
+					output_peer_config->congestion_control_mode = temp;
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MIN_RETRIES ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
-					output_peer_config->buffer_bloat_limit = temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_BUFFER_BLOAT_HARD_LIMIT ) == 0) {
+					output_peer_config->min_retries = temp;
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MAX_RETRIES ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
-					output_peer_config->buffer_bloat_hard_limit = temp;
+					output_peer_config->max_retries = temp;
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown parameter %s\n", url_params[i].key);
@@ -200,9 +200,9 @@ static void init_peer_settings(struct rist_peer *peer)
 		}
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-				"Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+				"Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 				peer->adv_peer_id, peer->config.recovery_maxbitrate, peer->config.recovery_maxbitrate_return, peer->config.recovery_length_min, peer->config.recovery_length_max, peer->config.recovery_reorder_buffer,
-				peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.buffer_bloat_mode, peer->config.buffer_bloat_limit, peer->config.buffer_bloat_hard_limit);
+				peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.congestion_control_mode, peer->config.min_retries, peer->config.max_retries);
 	}
 	else {
 		assert(peer->sender_ctx != NULL);
@@ -527,15 +527,15 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	uint64_t now = timestampNTP_u64();
 	struct rist_peer *peer = b->peer;
 
-	if (b->nack_count >= peer->config.buffer_bloat_hard_limit) {
+	if (b->nack_count >= peer->config.max_retries) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Datagram %"PRIu32
-				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, buffer_bloat_hard_limit %d, buffer_bloat_mode %d, stats_receiver_total.recovered_average %d\n",
+				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, max_retries %d, congestion_control_mode %d, stats_receiver_total.recovered_average %d\n",
 				b->seq,
 				b->nack_count,
 				(now - b->insertion_time) / RIST_CLOCK,
 				b->nack_count,
-				peer->config.buffer_bloat_hard_limit,
-				peer->config.buffer_bloat_mode,
+				peer->config.max_retries,
+				peer->config.congestion_control_mode,
 				peer->stats_receiver_total.recovered_average);
 		return 8;
 	} else {
@@ -557,7 +557,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			// TODO: make this 10% overhead configurable?
 			// retry more when we are running out of time (proportional)
 			/* start with 1.1 * 1000 and go down from there */
-			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->config.buffer_bloat_hard_limit);
+			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->config.max_retries);
 			//b->next_nack = now + (uint64_t)rtt * (uint64_t)ratio * (uint64_t)RIST_CLOCK;
 			b->next_nack = now + ((uint64_t)rtt * (uint64_t)1100 * (uint64_t)RIST_CLOCK) / 1000;
 			b->nack_count++;
@@ -812,7 +812,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				goto nack_loop_continue;
 			}
 		} else if (peer->buffer_bloat_active) {
-			if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
+			if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
 				if (empty == 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Retry queue is too large, %d, collapsed link (%u), flushing all nacks ...\n", f->missing_counter,
@@ -820,7 +820,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 				remove_from_queue_reason = 5;
 				empty = 1;
-			} else if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+			} else if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
 				if (mb->nack_count > 4) {
 					if (empty == 0) {
 						rist_log_priv(&ctx->common, RIST_LOG_ERROR,
@@ -1745,9 +1745,9 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->config.recovery_reorder_buffer = peer_src->config.recovery_reorder_buffer;
 		peer->config.recovery_rtt_min = peer_src->config.recovery_rtt_min;
 		peer->config.recovery_rtt_max = peer_src->config.recovery_rtt_max;
-		peer->config.buffer_bloat_mode = peer_src->config.buffer_bloat_mode;
-		peer->config.buffer_bloat_limit = peer_src->config.buffer_bloat_limit;
-		peer->config.buffer_bloat_hard_limit = peer_src->config.buffer_bloat_hard_limit;
+		peer->config.congestion_control_mode = peer_src->config.congestion_control_mode;
+		peer->config.min_retries = peer_src->config.min_retries;
+		peer->config.max_retries = peer_src->config.max_retries;
 		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 		peer->session_timeout = peer_src->session_timeout;
 
@@ -2717,8 +2717,8 @@ int rist_auth_handler(struct rist_common_ctx *ctx,
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer)
 {
 	uint32_t recovery_rtt_min;
-	uint32_t buffer_bloat_limit;
-	uint32_t buffer_bloat_hard_limit;
+	uint32_t min_retries;
+	uint32_t max_retries;
 
 	// TODO: Consolidate the two settings objects into one
 
@@ -2739,25 +2739,25 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	peer->config.recovery_rtt_min = recovery_rtt_min;
 	peer->config.recovery_rtt_max = settings->recovery_rtt_max;
 	/* Set buffer-bloating */
-	if (settings->buffer_bloat_limit < 2 || settings->buffer_bloat_limit > 100) {
+	if (settings->min_retries < 2 || settings->min_retries > 100) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-				"The configured value for buffer_bloat_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				settings->buffer_bloat_limit, 6);
-		buffer_bloat_limit = 6;
+				"The configured value for min_retries 2 <= %u <= 100 is invalid, using %u instead\n",
+				settings->min_retries, 6);
+		min_retries = 6;
 	} else {
-		buffer_bloat_limit = settings->buffer_bloat_limit;
+		min_retries = settings->min_retries;
 	}
-	if (settings->buffer_bloat_hard_limit < 2 || settings->buffer_bloat_hard_limit > 100) {
+	if (settings->max_retries < 2 || settings->max_retries > 100) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-				"The configured value for buffer_bloat_hard_limit 2 <= %u <= 100 is invalid, using %u instead\n",
-				settings->buffer_bloat_hard_limit, 20);
-		buffer_bloat_hard_limit = 20;
+				"The configured value for max_retries 2 <= %u <= 100 is invalid, using %u instead\n",
+				settings->max_retries, 20);
+		max_retries = 20;
 	} else {
-		buffer_bloat_hard_limit = settings->buffer_bloat_hard_limit;
+		max_retries = settings->max_retries;
 	}
-	peer->config.buffer_bloat_mode = settings->buffer_bloat_mode;
-	peer->config.buffer_bloat_limit = buffer_bloat_limit;
-	peer->config.buffer_bloat_hard_limit = buffer_bloat_hard_limit;
+	peer->config.congestion_control_mode = settings->congestion_control_mode;
+	peer->config.min_retries = min_retries;
+	peer->config.max_retries = max_retries;
 	peer->config.weight = settings->weight;
 
 	init_peer_settings(peer);

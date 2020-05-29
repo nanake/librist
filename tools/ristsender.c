@@ -358,10 +358,10 @@ next:
 		}
 
 		/* Print config */
-		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 			peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max, 
 			peer_config_link->recovery_reorder_buffer, peer_config_link->recovery_rtt_min, peer_config_link->recovery_rtt_max,
-			peer_config_link->buffer_bloat_mode, peer_config_link->buffer_bloat_limit, peer_config_link->buffer_bloat_hard_limit);
+			peer_config_link->congestion_control_mode, peer_config_link->min_retries, peer_config_link->max_retries);
 
 		struct rist_peer *peer;
 		if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {

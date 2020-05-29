@@ -141,9 +141,9 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN,
 		.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX,
 		.weight = 5,
-		.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE,
-		.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT,
-		.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT,
+		.congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE,
+		.min_retries = RIST_DEFAULT_MIN_RETRIES,
+		.max_retries = RIST_DEFAULT_MAX_RETRIES,
 		.key_size = keysize,
 	};
 
@@ -296,9 +296,9 @@ int main (int argc, char **argv) {
 		.recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN,
 		.recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX,
 		.weight = 5,
-		.buffer_bloat_mode = RIST_DEFAULT_BUFFER_BLOAT_MODE,
-		.buffer_bloat_limit = RIST_DEFAULT_BUFFER_BLOAT_LIMIT,
-		.buffer_bloat_hard_limit = RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT,
+		.congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE,
+		.min_retries = RIST_DEFAULT_MIN_RETRIES,
+		.max_retries = RIST_DEFAULT_MAX_RETRIES,
 		.key_size = 0
 	};
 

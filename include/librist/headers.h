@@ -50,9 +50,9 @@
 #define RIST_DEFAULT_RECOVERY_REORDER_BUFFER (25)
 #define RIST_DEFAULT_RECOVERY_RTT_MIN (50)
 #define RIST_DEFAULT_RECOVERY_RTT_MAX (500)
-#define RIST_DEFAULT_BUFFER_BLOAT_MODE RIST_BUFFER_BLOAT_MODE_NORMAL
-#define RIST_DEFAULT_BUFFER_BLOAT_LIMIT (6)
-#define RIST_DEFAULT_BUFFER_BLOAT_HARD_LIMIT (20)
+#define RIST_DEFAULT_CONGESTION_CONTROL_MODE RIST_CONGESTION_CONTROL_MODE_NORMAL
+#define RIST_DEFAULT_MIN_RETRIES (6)
+#define RIST_DEFAULT_MAX_RETRIES (20)
 #define RIST_DEFAULT_VERBOSE_LEVEL RIST_LOG_INFO
 #define RIST_DEFAULT_PROFILE RIST_PROFILE_MAIN
 #define RIST_DEFAULT_SESSION_TIMEOUT (60000)
@@ -79,9 +79,9 @@
 #define RIST_URL_PARAM_RTT_MIN "rtt-min"
 #define RIST_URL_PARAM_RTT_MAX "rtt-max"
 #define RIST_URL_PARAM_AES_KEY_ROTATION "key-rotation"
-#define RIST_URL_PARAM_BUFFER_BLOAT_MODE "buffer-bloat-mode"
-#define RIST_URL_PARAM_BUFFER_BLOAT_LIMIT "buffer-bloat-limit"
-#define RIST_URL_PARAM_BUFFER_BLOAT_HARD_LIMIT "buffer-bloat-hard-limit"
+#define RIST_URL_PARAM_CONGESTION_CONTROL "congestion-control"
+#define RIST_URL_PARAM_MIN_RETRIES "min-retries"
+#define RIST_URL_PARAM_MAX_RETRIES "max-retries"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT "virt-src-port"
 #define RIST_URL_PARAM_PROFILE "profile"
@@ -119,11 +119,11 @@ enum rist_recovery_mode
 	RIST_RECOVERY_MODE_TIME = 3,
 };
 
-enum rist_buffer_bloat_mode
+enum rist_congestion_control_mode
 {
-	RIST_BUFFER_BLOAT_MODE_OFF = 0,
-	RIST_BUFFER_BLOAT_MODE_NORMAL = 1,
-	RIST_BUFFER_BLOAT_MODE_AGGRESSIVE = 2
+	RIST_CONGESTION_CONTROL_MODE_OFF = 0,
+	RIST_CONGESTION_CONTROL_MODE_NORMAL = 1,
+	RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE = 2
 };
 
 enum rist_data_block_flags
@@ -208,9 +208,9 @@ struct rist_peer_config
 	char cname[RIST_MAX_STRING_SHORT];
 
 	/* Congestion control */
-	enum rist_buffer_bloat_mode buffer_bloat_mode;
-	uint32_t buffer_bloat_limit;
-	uint32_t buffer_bloat_hard_limit;
+	enum rist_congestion_control_mode congestion_control_mode;
+	uint32_t min_retries;
+	uint32_t max_retries;
 
 	/* Connection options */
 	uint32_t session_timeout;

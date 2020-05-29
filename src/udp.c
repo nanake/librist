@@ -1244,7 +1244,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	buffer->transmit_count++;
 	size_t ret = 0;
-	if (buffer->transmit_count >= retry->peer->config.buffer_bloat_hard_limit) {
+	if (buffer->transmit_count >= retry->peer->config.max_retries) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
@@ -1292,7 +1292,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 		return;
 	} else {
 		uint64_t age_ticks =  (now - buffer->time);
-		if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_OFF) {
+		if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_OFF) {
 			// All duplicates allowed, just report it
 			if (ctx->common.debug)
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
@@ -1309,7 +1309,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms, age %" PRIu64 "ms and rtt_min %" PRIu32 "\n",
 						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
-				if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+				if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
 					if (delta < peer->config.recovery_rtt_min)
 					{
 						rist_log_priv(&ctx->common, RIST_LOG_WARN,
@@ -1340,7 +1340,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			size_t index_end = 0;
 			size_t index = 0;
 			// We search forward for aggressive mode and backwards for normal
-			if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE) {
+			if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
 				index = ctx->sender_retry_queue_read_index;
 				index_end = ctx->sender_retry_queue_write_index;
 			} else {
@@ -1364,7 +1364,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				retry = &ctx->sender_retry_queue[index];
 				if (retry->seq == seq && retry->peer == peer) {
 					delta = (now - retry->insert_time) / RIST_CLOCK;
-					if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_NORMAL) {
+					if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
 						if (delta < peer->config.recovery_rtt_min)
 						{
 							rist_log_priv(&ctx->common, RIST_LOG_WARN,
@@ -1387,7 +1387,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					}
 				}
 				// We search forward for aggressive mode and backwards for normal
-				if (peer->config.buffer_bloat_mode == RIST_BUFFER_BLOAT_MODE_AGGRESSIVE)
+				if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
 				{
 					if (++index >= ctx->sender_retry_queue_size)
 						index= 0;

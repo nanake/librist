@@ -284,10 +284,10 @@ int main(int argc, char *argv[])
 		}
 
 		/* Print config */
-		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d buffer_bloat=%d (limit:%d, hardlimit:%d)\n",
+		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 			peer_config->recovery_maxbitrate, peer_config->recovery_length_min, peer_config->recovery_length_max, 
 			peer_config->recovery_reorder_buffer, peer_config->recovery_rtt_min,peer_config->recovery_rtt_max,
-			peer_config->buffer_bloat_mode, peer_config->buffer_bloat_limit, peer_config->buffer_bloat_hard_limit);
+			peer_config->congestion_control_mode, peer_config->min_retries, peer_config->max_retries);
 
 		peer_input_config[i] = peer_config;
 

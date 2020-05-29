@@ -205,7 +205,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		flow_reordered_instant += peer->stats_receiver_instant.reordered;
 
 		// buffer_bloat protection flags
-		if (peer->config.buffer_bloat_mode != RIST_BUFFER_BLOAT_MODE_OFF)
+		if (peer->config.congestion_control_mode != RIST_CONGESTION_CONTROL_MODE_OFF)
 		{
 			if (peer->stats_receiver_instant.recovered_slope_inverted >= 3)
 			{
