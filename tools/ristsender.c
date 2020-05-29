@@ -189,12 +189,12 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &act, NULL);
 #endif
 
-	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
 		fprintf(stderr,"Failed to setup logging!\n");
 		exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTSENDER_VERSION);
 
 	while ((c = getopt_long(argc, argv, "i:o:b:s:e:p:t:S:v:h", long_options, &option_index)) != -1) {

@@ -269,7 +269,7 @@ int main (int argc, char **argv) {
 
 	struct rist_receiver *receiver_ctx;
 
-	if (rist_set_logging(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
 		fprintf(stderr, "Failed to setup logging!\n");
 		exit(1);
 	}
