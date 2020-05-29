@@ -2875,6 +2875,27 @@ void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 	pthread_rwlock_unlock(peerlist_lock);
 }
 
+void rist_empty_oob_queue(struct rist_common_ctx *ctx)
+{
+	uint16_t index = 0;
+	while (1) {
+		if (index == ctx->oob_queue_write_index) {
+			break;
+		}
+		struct rist_buffer *oob_buffer = ctx->oob_queue[index];
+		if (oob_buffer->data) {
+			free(oob_buffer->data);
+			oob_buffer->data = NULL;
+		}
+		if (oob_buffer) {
+			free(oob_buffer);
+			oob_buffer = NULL;
+		}
+		index++;
+	}
+	ctx->oob_queue_bytesize = 0;
+}
+
 void rist_receiver_destroy_local(struct rist_receiver *ctx)
 {
 	struct evsocket_ctx *evctx = ctx->common.evctx;
@@ -2948,7 +2969,8 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	pthread_rwlock_destroy(&ctx->common.peerlist_lock);
 
 	if (ctx->common.oob_data_enabled) {
-		// TODO: Are we missing more OOB cleanup?
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing oob fifo queue\n");
+		rist_empty_oob_queue(&ctx->common);
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing oob_queue_lock\n");
 		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
 	}
@@ -3121,7 +3143,8 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
 
 	if (ctx->common.oob_data_enabled) {
-		// TODO: Are we missing more OOB cleanup?
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing oob fifo queue\n");
+		rist_empty_oob_queue(&ctx->common);
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing oob_queue_lock\n");
 		pthread_rwlock_destroy(&ctx->common.oob_queue_lock);
 	}
