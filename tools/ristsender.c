@@ -286,6 +286,7 @@ int main(int argc, char *argv[])
 			(void *)&callback_object[i]);
 
 next:
+		free((void *)peer_config_udp);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
@@ -335,6 +336,7 @@ next:
 			exit(1);
 		}
 
+		free((void *)peer_config_link);
 		outputtoken = strtok_r(NULL, ",", &saveptr2);
 		if (!outputtoken)
 			break;

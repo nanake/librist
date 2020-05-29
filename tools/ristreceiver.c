@@ -264,6 +264,7 @@ int main(int argc, char *argv[])
 			exit(1);
 		}
 
+		free((void *)peer_config);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
@@ -305,6 +306,7 @@ int main(int argc, char *argv[])
 		callback_object.virt_src_port[i] = peer_config_udp->virt_dst_port;
 
 next:
+		free((void *)peer_config_udp);
 		outputtoken = strtok_r(NULL, ",", &saveptr2);
 	}
 
