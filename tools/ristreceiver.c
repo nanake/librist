@@ -57,8 +57,6 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --stats 1000              \\\n"
 "       --verbose-level 6         \n";
 
-const char version[] = "3.0.0.0";
-
 static void usage(char *cmd)
 {
 	fprintf(stderr, "%s%s version %d.%d.%d.%s\n", help_str, cmd, LIBRIST_API_VERSION_MAJOR,
