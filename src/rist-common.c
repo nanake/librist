@@ -1806,11 +1806,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
 		if (peer->address_family == AF_INET6) {
-			recv_bufsize = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
+			recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
 			family = AF_INET6;
 			addr = (struct sockaddr *) &addr6;
 		} else {
-			recv_bufsize = recvfrom(peer->sd, recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
+			recv_bufsize = recvfrom(peer->sd, (char *)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *)&addr4, &addrlen);
 			addr = (struct sockaddr *) &addr4;
 		}
 

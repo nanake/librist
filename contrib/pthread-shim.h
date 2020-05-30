@@ -11,6 +11,7 @@
 #ifdef _WIN32
 # include <stdbool.h>
 # include <stdint.h>
+#include <winsock2.h> //<-- not used here, but included because otherwise our order is broken.
 #define _WINSOCKAPI_
 # include <windows.h>
 

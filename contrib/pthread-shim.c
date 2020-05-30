@@ -3,8 +3,8 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include "pthread-shim.h"
 #include "time-shim.h"
+#include "pthread-shim.h"
 
 #ifdef _WIN32
 
@@ -114,16 +114,17 @@ int pthread_cond_timedwait_broken(pthread_cond_t *cond, pthread_mutex_t *mutex,
 	const timespec_t *abstime)
 {
 	DWORD ms = INFINITE;
-
+	int64_t duration = 0;
 	if (cond == NULL || mutex == NULL) {
 		return 1;
 	}
 
 	if (abstime != NULL) {
-		ms = ((abstime->tv_sec - time(NULL)) * 1000) + (abstime->tv_nsec / 1000000);
-		if (ms < 0) {
-			ms = 1;
+		duration = ((abstime->tv_sec - time(NULL)) * 1000) + (abstime->tv_nsec / 1000000);
+		if (RIST_UNLIKELY(duration < 0)) {
+			duration = 1;
 		}
+		ms = duration;
 	}
 
 	if (!SleepConditionVariableCS(cond, mutex, ms)) {

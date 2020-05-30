@@ -460,7 +460,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 		//	"\tSimulating lost packet for seq #%"PRIu32"\n", ctx->seq);
 	} else {
-		ret = sendto(p->sd, data, len, 0, &(p->u.address), p->address_len);
+		ret = sendto(p->sd,(const char*)data, len, 0, &(p->u.address), p->address_len);
 	}
 
 	if (ret < 0) {

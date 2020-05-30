@@ -32,6 +32,7 @@ build-win64:
     script:
         - wineserver -p && wine wineboot
         - meson build --buildtype release
+                      --werror
                       --libdir lib
                       --cross-file common/ci/x86_64-w64-mingw32.meson
                       -Ddefault_library=both

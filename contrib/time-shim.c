@@ -12,9 +12,11 @@
 # include <errno.h>
 # include <stdlib.h>
 # include <limits.h>
+#include "common/attributes.h"
 
 int gettimeofday(struct timeval *tv, void * not_implemented)
 {
+	RIST_MARK_UNUSED(not_implemented);
 	static struct timeval epoch;
 	LARGE_INTEGER now, frequency;
 
@@ -60,7 +62,7 @@ int gettimeofday(struct timeval *tv, void * not_implemented)
 
 int clock_gettime(clockid_t clock, timespec_t *tp)
 {
-	struct timeval tv = { {0}};
+	struct timeval tv = { 0 };
 
 	if (clock != CLOCK_MONOTONIC) {
 		errno = EINVAL;

@@ -61,8 +61,8 @@ int udpsocket_open(uint16_t af)
 
 int udpsocket_set_buffer_size(int sd, uint32_t bufsize)
 {
-	if ((setsockopt(sd, SOL_SOCKET, SO_RCVBUF, &bufsize, sizeof(uint32_t)) < 0) ||
-			(setsockopt(sd, SOL_SOCKET, SO_SNDBUF, &bufsize, sizeof(uint32_t)) < 0))
+	if ((setsockopt(sd, SOL_SOCKET, SO_RCVBUF, (char *)&bufsize, sizeof(uint32_t)) < 0) ||
+		(setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(uint32_t)) < 0))
 		return -1;
 	return 0;
 }
@@ -70,8 +70,8 @@ int udpsocket_set_buffer_size(int sd, uint32_t bufsize)
 uint32_t udpsocket_get_buffer_size(int sd)
 {
 	uint32_t bufsize;
-	uint32_t val_size = sizeof(uint32_t);
-	if (getsockopt(sd, SOL_SOCKET, SO_RCVBUF, &bufsize, &val_size) < 0)
+	socklen_t val_size = sizeof(uint32_t);
+	if (getsockopt(sd, SOL_SOCKET, SO_RCVBUF, (char *)&bufsize, &val_size) < 0)
 		return 0;
 	return bufsize;
 }
@@ -82,6 +82,7 @@ int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 	if (scope == 0)
 		return -1;
 #ifdef _WIN32
+	RIST_MARK_UNUSED(family);
 	return setsockopt(sd, SOL_IP, IP_MULTICAST_IF, (char *)&scope, sizeof(scope));
 #else
 	if (family == AF_INET6) {
@@ -155,7 +156,10 @@ fail:
 	freeifaddrs(ifaddr);
 	return -1;
 #else
-	// TODO: Windows
+	RIST_MARK_UNUSED(sd);
+	RIST_MARK_UNUSED(miface);
+	RIST_MARK_UNUSED(sa);
+	RIST_MARK_UNUSED(family);
 	return 0;
 #endif
 }
@@ -186,11 +190,11 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 		ttlcmd = IP_MULTICAST_TTL;
 	}
 
-	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(int)) < 0) {
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR,"Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-	if (setsockopt(sd, proto, ttlcmd, &ttl, sizeof(ttl)) < 0) {
+	if (setsockopt(sd, proto, ttlcmd, (char *)&ttl, sizeof(ttl)) < 0) {
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR,"Cannot set socket MAX HOPS: %s\n", strerror(errno));
 	}
@@ -229,7 +233,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		addrlen = sizeof(struct sockaddr_in);
 		is_multicast = IN_MULTICAST(ntohl(tmp->sin_addr.s_addr));
 	}
-	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int)) < 0) {
+	if (setsockopt(sd, SOL_SOCKET, SO_REUSEADDR, (char *)&yes, sizeof(int)) < 0) {
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
