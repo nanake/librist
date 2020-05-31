@@ -81,13 +81,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 		usleep(5000);
 	}
 
-	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing all peers from flow list\n");
-	for (size_t i = 0; i < f->peer_lst_len; i++) {
-		struct rist_peer *peer = f->peer_lst[i];
-		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
-		peer->flow = NULL;
-		peer->adv_flow_id = 0;
-	}
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Free flow peer list\n");
 	f->peer_lst_len = 0;
 	free(f->peer_lst);
 	f->peer_lst = NULL;
