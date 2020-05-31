@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
 		callback_object[i].ctx = ctx;
 		callback_object[i].address_family = peer_config_udp->address_family;
 
-		evsocket_addevent(evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
+		event[i] = evsocket_addevent(evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
 			(void *)&callback_object[i]);
 
 next:
