@@ -328,7 +328,7 @@ struct rist_stats_receiver_flow
 	uint32_t duplicates;
 	/* retries ??? TODO */
 	uint32_t retries;
-	/* ??? */
+	/* packet inter-arrival time (microseconds) */
 	uint64_t min_inter_packet_spacing;
 	uint64_t cur_inter_packet_spacing;
 	uint64_t max_inter_packet_spacing;
@@ -338,12 +338,4 @@ struct rist_stats_receiver_flow
 	struct rist_stats_receiver_flow_peer peers[1];
 };
 
-struct rist_stats
-{
-	enum rist_stats_type stats_type;
-	union {
-		struct rist_stats_sender_peer rist_stats_sender_peer;
-		struct rist_stats_receiver_flow rist_stats_receiver_flow;
-	} stats;
-};
 #endif
