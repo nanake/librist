@@ -3140,9 +3140,6 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	free(ctx->sender_retry_queue);
 	struct rist_buffer *b = NULL;
 	while(1) {
-		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
-			break;
-		}
 		b = ctx->sender_queue[ctx->sender_queue_delete_index];
 		while (!b) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
@@ -3150,9 +3147,14 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed) == ctx->sender_queue_delete_index)
 				break;
 		}
-		ctx->sender_queue_bytesize -= b->size;
-		free_rist_buffer(&ctx->common, b);
-		ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
+		if (b) {
+			ctx->sender_queue_bytesize -= b->size;
+			free_rist_buffer(&ctx->common, b);
+			ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
+		}
+		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
+			break;
+		}
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 	}
 	free(ctx);
