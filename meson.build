@@ -15,7 +15,7 @@ cc = meson.get_compiler('c')
 #If any interfaces have been added since the last public release, then increment minor.
 #If any interfaces have been removed or changed since the last public release, then set micro to 0.
 librist_api_version_major = 3
-librist_api_version_minor = 0
+librist_api_version_minor = 1
 librist_api_version_patch = 0
 librist_version = '@0@.@1@.@2@'.format(librist_api_version_major, librist_api_version_minor, librist_api_version_patch)
 librist_soversion = librist_api_version_major - librist_api_version_patch
@@ -137,10 +137,10 @@ librist = library('librist',
 	'src/udp.c',
 	'src/stats.c',
 	'src/udpsocket.c',
+	'src/libevsocket.c',
 	'contrib/aes.c',
 	'contrib/sha256.c',
 	'contrib/fastpbkdf2.c',
-	'contrib/libevsocket.c',
 	'contrib/stdio-shim.c',
 	'contrib/time-shim.c',
 	'contrib/pthread-shim.c',

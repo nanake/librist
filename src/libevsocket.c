@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#include "log-private.h"
 
 #ifdef _WIN32
 
@@ -58,23 +59,6 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 				val = fd;
 			}
 
-			/* With POSIX, FD_SET & FD_ISSET are not defined if fd is negative or
-			 * bigger or equal than FD_SETSIZE. That is one of the reasons why VLC
-			 * uses poll() rather than select(). Most POSIX systems implement
-			 * fd_set has a bit field with no sanity checks. This is especially bad
-			 * on systems (such as BSD) that have no process open files limit by
-			 * default, such that it is quite feasible to get fd >= FD_SETSIZE.
-			 * The next instructions will result in a buffer overflow if run on
-			 * a POSIX system, and the later FD_ISSET would perform an undefined
-			 * memory read.
-			 *
-			 * With Winsock, fd_set is a table of integers. This is awfully slow.
-			 * However, FD_SET and FD_ISSET silently and safely discard excess
-			 * entries. Here, overflow cannot happen anyway: fd_set of adequate
-			 * size are allocated.
-			 * Note that Vista has a much nicer WSAPoll(), but Mingw does not
-			 * support it yet.
-			 */
 			if (fds[i].events & POLLIN) {
 				FD_SET((SOCKET)fd, rdset);
 			}
@@ -278,7 +262,8 @@ static void rebuild_poll(struct evsocket_ctx *ctx)
 		 * perhaps provide a context-wide callback for errors.
 		 */
 		if (ctx->n_events > 0) {
-			perror("MEMORY");
+			rist_log_priv3( RIST_LOG_ERROR, "libevsocket, rebuild_poll: events are disabled (%d)\n",
+				ctx->n_events);
 		}
 
 		ctx->n_events = 0;
@@ -309,6 +294,8 @@ static void serve_event(struct evsocket_ctx *ctx, int n)
 	}
 
 	if (n >= ctx->n_events) {
+		rist_log_priv3( RIST_LOG_ERROR, "libevsocket, serve_event: Invalid event %d >= %d\n",
+			n, ctx->n_events);
 		return;
 	}
 
@@ -343,99 +330,80 @@ struct evsocket_ctx *evsocket_create(void)
 	return ctx;
 }
 
-void evsocket_loop(struct evsocket_ctx *ctx)
+void evsocket_loop(struct evsocket_ctx *ctx, int timeout)
 {
-	int pollret, i;
+	/* main loop */
 	for(;;) {
 		if (!ctx || ctx->giveup)
 			break;
-
-		if (ctx->changed) {
-			rebuild_poll(ctx);
-			continue;
-		}
-
-		if (ctx->pfd == NULL) {
-			//sleep_ms(1000);
-			ctx->changed = 1;
-			continue;
-		}
-
-		if (ctx->n_events < 1) {
-			continue;
-		}
-
-		pollret = poll(ctx->pfd, ctx->n_events, 3600 * 1000);
-		if (pollret <= 0) {
-			continue;
-		}
-
-		for (i = ctx->last_served +1; i < ctx->n_events; i++) {
-			if (ctx->pfd[i].revents != 0) {
-				serve_event(ctx, i);
-				goto end_loop;
-			}
-		}
-
-		for (i = 0; i <= ctx->last_served; i++) {
-			if (ctx->pfd[i].revents != 0) {
-				serve_event(ctx, i);
-				goto end_loop;
-			}
-		}
-	end_loop:
-		continue;
-
-	} /* main loop */
+		evsocket_loop_single(ctx, timeout, 10);
+	}
 }
 
-void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout)
+int evsocket_loop_single(struct evsocket_ctx *ctx, int timeout, int max_events)
 {
 	int pollret, i;
+	int event_count = 0;
+	int retval = 0;
 
 	if (!ctx || ctx->giveup) {
-		return;
+		retval = -1;
+		goto loop_error;
 	}
 
 	if (ctx->changed) {
+		//rist_log_priv3( RIST_LOG_DEBUG, "libevsocket, evsocket_loop_single: rebuild poll\n");
 		rebuild_poll(ctx);
-		return;
 	}
 
 	if (ctx->pfd == NULL) {
+		//rist_log_priv3( RIST_LOG_DEBUG, "libevsocket, evsocket_loop_single: ctx->pfd is null, no events?\n");
 		ctx->changed = 1;
-		return;
+		retval = -2;
+		goto loop_error;
 	}
 
 	if (ctx->n_events < 1) {
-		return;
+		rist_log_priv3( RIST_LOG_ERROR, "libevsocket, evsocket_loop_single: no events (%d)\n",
+			ctx->n_events);
+		retval = -3;
+		goto loop_error;
 	}
 
 	pollret = poll(ctx->pfd, ctx->n_events, timeout);
 	if (pollret <= 0) {
 		if (pollret < 0) {
-			fprintf(stderr, "error: pollret returned %d, n_events = %d, error = %d\n", pollret, ctx->n_events, errno);
-		} else {
-			// is additional sleep needed? yes, or the calling up can become unresponsive and the CPU maxed out
-			// TODO: getlasterror and check if additional sleep is needed
+			rist_log_priv3( RIST_LOG_ERROR, "libevsocket, evsocket_loop: poll returned %d, n_events = %d, error = %d\n",
+				pollret, ctx->n_events, errno);
+			retval = -4;
+			goto loop_error;
 		}
-
-		return;
+		// No events, regular timeout
+		return 0;
 	}
 
 	for (i = ctx->last_served +1; i < ctx->n_events; i++) {
 		if (ctx->pfd[i].revents != 0) {
 			serve_event(ctx, i);
-			return;
+			if (max_events > 0 && ++event_count >= max_events)
+				return 0;
 		}
 	}
 
 	for (i = 0; i <= ctx->last_served; i++) {
 		if (ctx->pfd[i].revents != 0) {
 			serve_event(ctx, i);
-			return;
+			if (max_events > 0 && ++event_count >= max_events)
+				return 0;
 		}
 	}
+
+	return 0;
+
+loop_error:
+	if (timeout > 0)
+		usleep(timeout * 1000);
+	return retval;
 }
 
 void evsocket_destroy(struct evsocket_ctx *ctx)
@@ -453,4 +421,12 @@ void evsocket_loop_stop(struct evsocket_ctx *ctx)
 {
 	if (ctx)
 		ctx->giveup = 1;
+}
+
+int evsocket_geteventcount(struct evsocket_ctx *ctx)
+{
+	if (ctx)
+		return ctx->n_events;
+	else
+		return 0;
 }

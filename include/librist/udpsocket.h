@@ -122,16 +122,92 @@ RIST_API int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param
 struct evsocket_event;
 struct evsocket_ctx;
 
+/**
+ * @brief Initialize the evsocket context.
+ *
+ * Use this API to initialize the evsocket context.
+ *
+ * @return the evsocket context, NULL for OOM error
+ */
 RIST_API struct evsocket_ctx *evsocket_create(void);
-RIST_API void evsocket_loop(struct evsocket_ctx *ctx);
-RIST_API void evsocket_loop_single(struct evsocket_ctx *ctx, int timeout);
-RIST_API void evsocket_loop_finalize(struct evsocket_ctx *ctx);
+
+/**
+ * @brief Start the master socket event processing loop
+ *
+ * Use this API to start the main loop for socket event processing
+ *
+ * @param ctx evsocket context
+ * @param timeout How long to wait for socket events (ms), 0 for no wait, -1 for infinite
+ * @return void
+ */
+RIST_API void evsocket_loop(struct evsocket_ctx *ctx, int timeout);
+
+/**
+ * @brief Signal the master socket event processing loop to stop
+ *
+ * Use this API to stop the main loop for socket event processing
+ *
+ * @param ctx evsocket context
+ * @return void
+ */
+RIST_API void evsocket_loop_stop(struct evsocket_ctx *ctx);
+
+/**
+ * @brief Process pending socket events
+ *
+ * Use this API to process pending socket events
+ *
+ * @param ctx evsocket context
+ * @param timeout How long to wait for socket events (ms), 0 for no wait, -1 for infinite
+ * @param max_events Maximum number of events to process
+ * @return void
+ */
+RIST_API int evsocket_loop_single(struct evsocket_ctx *ctx, int timeout, int max_events);
+
+/**
+ * @brief Destroy the evsocket context.
+ *
+ * Use this API to destroy the evsocket context (full cleanup is performed).
+ *
+ * @return void
+ */
 RIST_API void evsocket_destroy(struct evsocket_ctx *ctx);
+
+/**
+ * @brief Add a new socket event handler
+ *
+ * Use this API to add a new socket event handler
+ *
+ * @param ctx evsocket context
+ * @param callback pointer to the callback function to process the event
+ * @param err_callback pointer to the err_callback function to process poll errors
+ * @param arg the extra argument passed to the `callback` or `err_callback` functions
+ * @return void
+ */
 RIST_API struct evsocket_event *evsocket_addevent(struct evsocket_ctx *ctx, int fd, short events,
 			void (*callback)(struct evsocket_ctx *ctx, int fd, short revents, void *arg),
 			void (*err_callback)(struct evsocket_ctx *ctx, int fd, short revents, void *arg),
 			void *arg);
 
+/**
+ * @brief Delete a socket event handler
+ *
+ * Use this API to delete an existing socket event handler
+ *
+ * @param ctx evsocket context
+ * @param e evsocket_event object pointer for the event handler to delete
+ * @return void
+ */
 RIST_API void evsocket_delevent(struct evsocket_ctx *ctx, struct evsocket_event *e);
+
+/**
+ * @brief Retrieve the evsocket event handler count.
+ *
+ * Use this API to retrieve the number of active evsocket event handlers.
+ *
+ * @param ctx evsocket context
+ * @return number of active event handlers
+ */
+RIST_API int evsocket_geteventcount(struct evsocket_ctx *ctx);
 
 #endif /* ifndef UDPSOCKET_H */

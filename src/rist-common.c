@@ -2558,11 +2558,11 @@ protocol_bypass:
 				}
 				pthread_rwlock_unlock(peerlist_lock);
 				// TODO: remove dead peers after stale flow time (both sender list and peer chain)
-				//sender_peer_delete(peer->sender_ctx, peer);
+				// sender_peer_delete(peer->sender_ctx, peer);
 			}
 
-			// socket polls
-			evsocket_loop_single(ctx->common.evctx, 0);
+			// socket polls (returns as fast as possible and processes the next 100 socket events)
+			evsocket_loop_single(ctx->common.evctx, 0, 100);
 
 			// keepalive timer
 			sender_peer_events(ctx, now);
@@ -3056,8 +3056,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		//520	1.92
 		//1000	1.00
 
-		// socket polls
-		evsocket_loop_single(ctx->common.evctx, max_jitter_ms);
+		// socket polls (returns in max_jitter_ms max and processes the next 100 socket events)
+		evsocket_loop_single(ctx->common.evctx, max_jitter_ms, 100);
 
 		// keepalive timer
 		receiver_peer_events(ctx, now);
