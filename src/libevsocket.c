@@ -12,13 +12,6 @@
 
 #ifdef _WIN32
 
-/* Winsock FD_SET uses FD_SETSIZE in its expansion */
-#ifdef FD_SETSIZE
-/* Too late for #undef FD_SETSIZE to work: fd_set is already defined. */
-# error Header inclusion order compromised!
-#endif
-#define FD_SETSIZE 0
-
 #if !defined(UNDER_CE)
 # define _NO_OLDNAMES 1
 # include <io.h>
@@ -43,9 +36,6 @@ static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 		errno = ENOMEM;
 		return -1;
 	}
-
-#undef FD_SETSIZE
-#define FD_SETSIZE (nfds)
 
 	resume:
 		val = -1;
