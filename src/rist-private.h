@@ -198,6 +198,7 @@ struct rist_flow {
 	uint32_t missing_counter_max;
 
 	uint32_t flow_id;
+	int dead;
 	struct rist_flow *next;
 	struct rist_peer **peer_lst;
 	size_t peer_lst_len;
@@ -518,7 +519,7 @@ struct rist_peer {
 	struct rist_peer_receiver_stats stats_receiver_instant;
 	struct rist_peer_receiver_stats stats_receiver_total;
 
-	bool dead;
+	int dead;
 	uint64_t birthtime_peer;
 	uint64_t birthtime_local;
 

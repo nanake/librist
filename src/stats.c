@@ -107,6 +107,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON *stats_obj = cJSON_AddObjectToObject(stats, "receiver-stats");
 	cJSON *flow_obj = cJSON_AddObjectToObject(stats_obj, "flowinstant");
 	cJSON_AddNumberToObject(flow_obj, "flow_id", flow->flow_id);
+	cJSON_AddNumberToObject(flow_obj, "dead",  flow->dead);
 	cJSON *flow_stats = cJSON_AddObjectToObject(flow_obj, "stats");
 	cJSON *peers = cJSON_AddArrayToObject(flow_obj, "peers");
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
@@ -167,7 +168,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 		cJSON *peer_obj = cJSON_CreateObject();
 		cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
-		cJSON_AddBoolToObject(peer_obj, "dead", peer->dead);
+		cJSON_AddNumberToObject(peer_obj, "dead", peer->dead);
 		cJSON *peer_stats = cJSON_AddObjectToObject(peer_obj, "stats");
 		cJSON_AddNumberToObject(peer_stats, "quality", QpeerInstant);
 		cJSON_AddNumberToObject(peer_stats, "received", peer->stats_receiver_instant.recv);

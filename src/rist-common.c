@@ -3020,14 +3020,30 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					continue;
 				}
 				if (now > f->checks_next_time) {
+					uint64_t flow_age = (now - f->last_recv_ts);
 					f->checks_next_time += f->recovery_buffer_ticks;
-
-					if ((now - f->last_recv_ts) > f->session_timeout)
-					{
+					if (flow_age > f->recovery_buffer_ticks) {
+						if (f->dead != 1) {
+							f->dead = 1;
+							rist_log_priv(&ctx->common, RIST_LOG_WARN,
+								"Flow with id %"PRIu32" is dead, age is %"PRIu64"ms\n", 
+									f->flow_id, flow_age / RIST_CLOCK);
+						}
+					}
+					else {
+						if (f->dead != 0) {
+							f->dead = 0;
+							rist_log_priv(&ctx->common, RIST_LOG_INFO,
+								"Flow with id %"PRIu32" was dead and is now alive again\n", f->flow_id);
+						}
+					}
+					if (flow_age > f->session_timeout) {
+						f->dead = 2;
 						struct rist_flow *next = f->next;
+						rist_receiver_flow_statistics(ctx, f);
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
-								"\t************** Session Timeout after %" PRIu64 "s of no data, deleting flow! ***************\n",
-								(now - f->last_recv_ts) / RIST_CLOCK / 1000);
+								"\t************** Session Timeout after %" PRIu64 "s of no data, deleting flow with id %"PRIu32" ***************\n",
+								flow_age / RIST_CLOCK / 1000, f->flow_id);
 						pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 						pthread_rwlock_wrlock(peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
