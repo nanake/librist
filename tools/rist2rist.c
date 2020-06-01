@@ -13,8 +13,6 @@
 #include <unistd.h>
 #endif
 
-extern char* stats_to_json(struct rist_stats *stats);
-
 struct rist_sender_args {
 	char* cname;
 	char* shared_secret;
