@@ -288,15 +288,15 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
 			goto next;
 		}
-		rist_log(logging_settings, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 
 		callback_object[i].sd = udpsocket_open_bind(hostname, inputport, peer_config_udp->miface);
 		if (callback_object[i].sd <= 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "[ERROR] Could not bind to: Host %s, Port %d, miface %s.\n",
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
 				(char *) hostname, inputport, peer_config_udp->miface);
 			goto next;
 		} else {
-			rist_log(logging_settings, RIST_LOG_INFO, "[INFO] Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
+			rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
 			atleast_one_socket_opened = true;
 		}
 		callback_object[i].virt_src_port = peer_config_udp->virt_dst_port;
@@ -384,8 +384,8 @@ next:
 	}
 
 	while (!signalReceived) {
-		// This is my main loop (Infinite wait)
-		evsocket_loop_single(evctx, -1);
+		// This is my main loop (Infinite wait, 100 socket events)
+		evsocket_loop_single(evctx, -1, 100);
 	}
 
 	// Remove socket events

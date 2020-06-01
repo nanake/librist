@@ -328,15 +328,15 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse output url %s\n", outputtoken);
 			goto next;
 		}
-		rist_log(logging_settings, RIST_LOG_INFO, "[INFO] URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
+		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
 
 		// Open the output socket
 		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, peer_config_udp->miface);
 		if (callback_object.mpeg[i] <= 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "[ERROR] Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			goto next;
 		} else {
-			rist_log(logging_settings, RIST_LOG_ERROR, "[INFO] Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
+			rist_log(logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}
 		callback_object.virt_src_port[i] = peer_config_udp->virt_dst_port;
