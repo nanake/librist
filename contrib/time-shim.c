@@ -31,8 +31,8 @@ int gettimeofday(struct timeval *tv, void * not_implemented)
 	if (QueryPerformanceFrequency(&frequency)) {
 		QueryPerformanceCounter(&now);
 		/* fill in the timeval structure */
-		tv->tv_sec = (now.QuadPart / frequency.QuadPart);
-		tv->tv_usec = (now.QuadPart * 1000000 / frequency.QuadPart) - (tv->tv_sec * 1000000);
+		tv->tv_sec = (long)(now.QuadPart / frequency.QuadPart);
+		tv->tv_usec = (long)(now.QuadPart * 1000000 / frequency.QuadPart) - (tv->tv_sec * 1000000);
 		if (epoch.tv_sec == 0) {
 			epoch.tv_sec = tv->tv_sec;
 			epoch.tv_usec = tv->tv_usec;

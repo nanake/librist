@@ -370,7 +370,7 @@ int udpsocket_parse_url(char *url, char *address, int address_maxlen, uint16_t *
 		p_port++;
 	}
 	if (p_port && (strlen(p_port) > 0))
-		*port = atoi(p_port);
+		*port = (uint16_t)atoi(p_port);
 
 	if (strlen(p_addr) > 0) {
 		strncpy(address, p_addr, address_maxlen);

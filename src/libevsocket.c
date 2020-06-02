@@ -8,7 +8,9 @@
 #include <string.h>
 #include <errno.h>
 #include <fcntl.h>
+#ifndef _WIN32
 #include "log-private.h"
+#endif
 
 #ifdef _WIN32
 
@@ -19,6 +21,7 @@
 
 #include <winsock2.h>
 #include <ws2tcpip.h>
+#include "log-private.h"
 
 static int poll(struct pollfd *fds, unsigned nfds, int timeout)
 {

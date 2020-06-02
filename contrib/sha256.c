@@ -11,7 +11,9 @@
                * http://csrc.nist.gov/publications/fips/fips180-2/fips180-2withchangenotice.pdf
               This implementation uses little endian byte order.
 *********************************************************************/
-
+#ifdef _MSC_VER
+#pragma warning(disable: 4244)
+#endif
 /*************************** HEADER FILES ***************************/
 #include <stdlib.h>
 #include <memory.h>

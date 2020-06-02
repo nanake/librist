@@ -111,7 +111,7 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
-					output_peer_config->virt_dst_port = temp;
+					output_peer_config->virt_dst_port = (uint16_t)temp;
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_WEIGHT ) == 0) {
 				int temp = atoi( val );
 				if (temp >= 0)
@@ -695,7 +695,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					uint32_t flags = 0;
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;
-					uint16_t dataout_fifo_write_index = atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire);
+					size_t dataout_fifo_write_index = atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire);
 					struct rist_data_block *block = ctx->dataout_fifo_queue[dataout_fifo_write_index];
 					ctx->dataout_fifo_queue[dataout_fifo_write_index] = new_data_block(
 							block, b,
@@ -890,7 +890,7 @@ nack_loop_continue:
 
 static int rist_set_manual_sockdata(struct rist_peer *peer, const struct rist_peer_config *config)
 {
-	peer->address_family = config->address_family;
+	peer->address_family = (uint16_t)config->address_family;//TODO: should it not just be a uint16_t then? 
 	peer->listening = !config->initiate_conn;
 	const char *hostname = config->address;
 	int ret;
@@ -1160,8 +1160,8 @@ void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_band
 		return;
 	}
 
-	bw->bitrate = (8 * bw->bytes * 1000000) / time;
-	bw->eight_times_bitrate = bw->bitrate + bw->eight_times_bitrate - bw->eight_times_bitrate / 8;
+	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
+	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
 	bw->last_bitrate_calctime = now;
 
 	bw->bytes = 0;
@@ -1187,8 +1187,8 @@ void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation 
 		return;
 	}
 
-	bw->bitrate = (8 * bw->bytes * 1000000) / time;
-	bw->eight_times_bitrate = 8 * bw->bitrate;
+	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
+	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
 	bw->last_bitrate_calctime = now;
 	bw->bytes = 0;
 }
@@ -1555,7 +1555,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		pkt = (uint8_t*)payload->data + processed_bytes;
 		struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)pkt;
 		/* safety checks */
-		uint16_t bytes_left = payload->size - processed_bytes + 1;
+		size_t bytes_left = payload->size - processed_bytes + 1;
 
 		if ( bytes_left < 4 )
 		{
@@ -1628,7 +1628,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					}
 					//if (p_sys->b_ismulticast == false)
 					//{
-					int8_t name_length = pkt[9];
+					uint8_t name_length = pkt[9];
 					if (name_length > bytes_left)
 					{
 						/* check for a sane number of bytes */
@@ -2373,9 +2373,9 @@ protocol_bypass:
 				break;
 			}
 
-			size_t idx = (atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire) + 1)& (ctx->sender_queue_max-1);
+			size_t idx = ((size_t)atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire) + 1)& (ctx->sender_queue_max-1);
 
-			if (idx == atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed)) {
+			if (idx == (size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed)) {
 				//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 				//    "\t[GOOD] We are all up to date, index is %d\n",
 				//    ctx->sender_queue_read_index);
@@ -3144,7 +3144,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 		while (!b) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
-			if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed) == ctx->sender_queue_delete_index)
+			if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed) == ctx->sender_queue_delete_index)
 				break;
 		}
 		if (b) {
@@ -3152,7 +3152,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			free_rist_buffer(&ctx->common, b);
 			ctx->sender_queue[ctx->sender_queue_delete_index] = NULL;
 		}
-		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
+		if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
 			break;
 		}
 		ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);

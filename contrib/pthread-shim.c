@@ -124,7 +124,7 @@ int pthread_cond_timedwait_broken(pthread_cond_t *cond, pthread_mutex_t *mutex,
 		if (RIST_UNLIKELY(duration < 0)) {
 			duration = 1;
 		}
-		ms = duration;
+		ms = (DWORD)duration;
 	}
 
 	if (!SleepConditionVariableCS(cond, mutex, ms)) {

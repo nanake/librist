@@ -31,7 +31,7 @@
 
 struct rist_logging_settings {
 	enum rist_log_level log_level;
-	int (*log_cb)(void *arg, int loglevel, const char *msg);
+	int (*log_cb)(void* arg, enum rist_log_level, const char* msg);
 	void *log_cb_arg;
 	int log_socket;
 	FILE *log_stream;

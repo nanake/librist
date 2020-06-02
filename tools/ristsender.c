@@ -13,6 +13,7 @@
 #include "getopt-shim.h"
 #include <stdbool.h>
 #include <signal.h>
+#include "common/attributes.h"
 #include "risturlhelp.h"
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -209,7 +210,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTSENDER_VERSION);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -301,7 +302,7 @@ int main(int argc, char *argv[])
 		callback_object[i].virt_src_port = peer_config_udp->virt_dst_port;
 		callback_object[i].virt_dst_port = 0;//why does it asset on non zero; TODO ???
 		callback_object[i].ctx = ctx;
-		callback_object[i].address_family = peer_config_udp->address_family;
+		callback_object[i].address_family = (uint16_t)peer_config_udp->address_family;
 
 		event[i] = evsocket_addevent(evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
 			(void *)&callback_object[i]);

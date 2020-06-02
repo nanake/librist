@@ -63,8 +63,8 @@ typedef enum {
  * TODO use a special call to increment/decrement
  * using InterlockedIncrement/InterlockedDecrement
  */
-#define atomic_fetch_add(p_a, inc)    InterlockedExchangeAdd(p_a, inc)
-#define atomic_fetch_sub(p_a, dec)    InterlockedExchangeAdd(p_a, -(dec))
+#define atomic_fetch_add(p_a, inc)    InterlockedExchangeAdd((LPLONG)p_a, inc)
+#define atomic_fetch_sub(p_a, dec)    InterlockedExchangeAdd((LPLONG)p_a, -(int)(dec))
 #define atomic_fetch_add_explicit(p_a, inc, mo)   atomic_fetch_add(p_a, inc)
 #define atomic_fetch_sub_explicit(p_a, inc, mo)   atomic_fetch_sub(p_a, inc)
 

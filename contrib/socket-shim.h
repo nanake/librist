@@ -6,6 +6,11 @@
 #ifndef __SOCKET_SHIM_H
 #define __SOCKET_SHIM_H
 
+#ifndef SOL_IP
+#define SOL_IP 0x0
+#define SOL_IPV6 0x29
+#endif
+
 #ifdef _WIN32
 
 #include <winsock2.h>
@@ -16,8 +21,6 @@
 
 #define AF_LOCAL AF_UNSPEC
 
-#define SOL_IP 0x0
-#define SOL_IPV6 0x29
 #define if_nametoindex(name)  atoi(name)
 
 typedef int socklen_t;

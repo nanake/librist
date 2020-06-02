@@ -138,7 +138,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 		}
 
 		/* our buffer size is zero, it must be just building up */
-		if (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
+		if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
 			break;
 		}
 
@@ -491,7 +491,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		return -1;
 	}
 
-	size_t ret = rist_send_seq_rtcp(p, seq_gre, seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
+	size_t ret = rist_send_seq_rtcp(p, seq_gre, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
 
 	if ((!p->compression && ret < payload_len) || ret <= 0)
 	{
@@ -705,9 +705,9 @@ static inline void rist_rtcp_write_rr(uint8_t *buf, int *offset, const struct ri
 	rr->cumulative_pkt_loss_lshw = 0;
 	rr->highest_seq = 0;
 	rr->jitter = 0;
-	rr->lsr = htobe32(peer->last_sender_report_time >> 16);
+	rr->lsr = htobe32((uint32_t)(peer->last_sender_report_time >> 16));
 	/*  expressed in units of 1/65536  == middle 16 bits?!? */
-	rr->dlsr = htobe32((timestampNTP_u64() - peer->last_sender_report_ts) >> 16);
+	rr->dlsr = htobe32((uint32_t)((timestampNTP_u64() - peer->last_sender_report_ts) >> 16));
 }
 
 static inline void rist_rtcp_write_sr(uint8_t *buf, int *offset, struct rist_peer *peer) {
@@ -737,18 +737,18 @@ static inline void rist_rtcp_write_sr(uint8_t *buf, int *offset, struct rist_pee
 
 static inline void rist_rtcp_write_sdes(uint8_t *buf, int *offset, const char *name, const uint32_t flow_id)
 {
-	uint16_t namelen = strlen(name);
-	uint16_t sdes_size = ((10 + namelen + 1) + 3) & ~3;
-	uint16_t padding = sdes_size - namelen - 10;
+	size_t namelen = strlen(name);
+	size_t sdes_size = ((10 + namelen + 1) + 3) & ~3;
+	size_t padding = sdes_size - namelen - 10;
 	struct rist_rtcp_sdes_pkt *sdes = (struct rist_rtcp_sdes_pkt *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
 	*offset += sdes_size;
 	/* Populate SDES for sender description */
 	sdes->rtcp.flags = RTCP_SDES_FLAGS;
 	sdes->rtcp.ptype = PTYPE_SDES;
-	sdes->rtcp.len = htons((sdes_size - 1) >> 2);
+	sdes->rtcp.len = htons((uint16_t)((sdes_size - 1) >> 2));
 	sdes->rtcp.ssrc = htobe32(flow_id);
 	sdes->cname = 1;
-	sdes->name_len = namelen;
+	sdes->name_len = (uint8_t)namelen;
 	// We copy the extra padding bytes from the source because it is a preallocated buffer
 	// of size 128 with all zeroes
 	memcpy(sdes->udn, name, namelen + padding);
@@ -827,26 +827,26 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 			uint32_t last_seq, tmp_seq;
 			tmp_seq = last_seq = seq_array[0];
 			uint32_t boundary = tmp_seq +16;
-			rec->start = htons(tmp_seq);
+			rec->start = htons((uint16_t)tmp_seq);
 			uint16_t extra = 0;
 			for (size_t i = 1; i < array_len; i++)
 			{
 				tmp_seq = seq_array[i];
 				if (last_seq < tmp_seq && tmp_seq <= boundary) {
-					uint16_t bitnum = tmp_seq - last_seq;
+					uint32_t bitnum = tmp_seq - last_seq;
 					SET_BIT(extra, (bitnum -1));
 				} else {
 					rec->extra = htons(extra);
 					rec++;
 					fci_count++;
 					extra = 0;
-					rec->start = htons(tmp_seq);
+					rec->start = htons((uint16_t)tmp_seq);
 					last_seq = tmp_seq;
 					boundary = tmp_seq + 16;
 				}
 			}
 			rec->extra = htons(extra);
-			rtcp->len = htons(2 + fci_count);
+			rtcp->len = htons((uint16_t)(2 + fci_count));
 		}
 		else // PTYPE_NACK_CUSTOM
 		{
@@ -881,7 +881,7 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 				last_seq = tmp_seq;
 			}
 			rec->extra = htons(extra);
-			rtcp->len = htons(2 + fci_count);
+			rtcp->len = htons((uint16_t)(2 + fci_count));
 		}
 		int nack_bufsize = sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE + RTCP_FB_FCI_GENERIC_NACK_SIZE * fci_count;
 		payload_len += nack_bufsize;
@@ -1024,7 +1024,7 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, size_t len, u
 		pthread_mutex_unlock(&ctx->queue_lock);
 		return -1;
 	}
-	ctx->sender_queue[sender_write_index]->seq_rtp = seq_rtp;
+	ctx->sender_queue[sender_write_index]->seq_rtp = (uint16_t)seq_rtp;
 	ctx->sender_queue_bytesize += len;
 	atomic_store_explicit(&ctx->sender_queue_write_index, (sender_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
 	pthread_mutex_unlock(&ctx->queue_lock);

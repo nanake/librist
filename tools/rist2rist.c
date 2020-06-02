@@ -19,7 +19,7 @@ struct rist_sender_args {
 	char* outputurl;
 	uint16_t dst_port;
 	enum rist_log_level loglevel;
-	uint8_t encryption_type;
+	int encryption_type;
 	uint32_t flow_id;
 	int statsinterval;
 };
@@ -131,7 +131,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	int keysize =  setup->encryption_type * 128;
 	struct rist_peer_config app_peer_config = {
 		.version = RIST_PEER_CONFIG_VERSION,
-		.virt_dst_port = setup->dst_port+1,
+		.virt_dst_port = 1969,
 		.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
 		.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE,
 		.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN,
@@ -144,8 +144,11 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		.congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE,
 		.min_retries = RIST_DEFAULT_MIN_RETRIES,
 		.max_retries = RIST_DEFAULT_MAX_RETRIES,
-		.key_size = keysize,
+		.key_size = 0,
 	};
+
+	app_peer_config.virt_dst_port = setup->dst_port + 1;
+	app_peer_config.key_size = keysize;
 
 	if (setup->shared_secret != NULL) {
 		strncpy(app_peer_config.secret, setup->shared_secret, RIST_MAX_STRING_SHORT -1);
@@ -194,8 +197,6 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	//b->virt_dst_port = cb_arg->dst_port; 
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
 	return rist_sender_data_write(cb_arg->sender_ctx, b);
-
-	return 0;
 }
 
 static void intHandler(int signal) {
@@ -232,7 +233,7 @@ int main (int argc, char **argv) {
 
 	int option_index;
 	char c;
-	while ((c = getopt_long(argc, argv, "i:o:s:e:N:v:S:h", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:s:e:N:v:S:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg); 
@@ -244,7 +245,7 @@ int main (int argc, char **argv) {
 			client_args.shared_secret = strdup(optarg); 
 			break;
 		case 'e':
-			client_args.encryption_type = atoi(optarg);
+			client_args.encryption_type =atoi(optarg);
 			break;
 		case 'N':
 			cname = strdup(optarg); 

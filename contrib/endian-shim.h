@@ -14,7 +14,7 @@
 #define htobe16(x) htons(x)
 
 #define be32toh(x) ntohl(x)
-#define htobe32(x) htons(x)
+#define htobe32(x) htonl(x)
 
 /* Endianess utils */
 #if BYTE_ORDER == LITTLE_ENDIAN

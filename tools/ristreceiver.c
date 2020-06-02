@@ -184,7 +184,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 
-	while ((c = getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);

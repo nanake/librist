@@ -36,6 +36,7 @@ if host_machine.system() == 'windows'
 	add_project_arguments(['-Drist_EXPORTS'], language: 'c')
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
+	add_project_arguments(cc.get_supported_arguments(['-wd4996', '-wd4324']), language: 'c')
 	#Windows meson tends to break on pkgconfig/Cmake finding, so use builtin libraries
 	builtin_cjson = true
 	builtin_lz4 = true

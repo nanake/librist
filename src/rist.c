@@ -3,6 +3,9 @@
 #include "udp-private.h"
 #include "vcs_version.h"
 #include <assert.h>
+#ifdef _WIN32
+#include <processthreadsapi.h>
+#endif
 
 extern uint32_t generate_flowid(uint64_t birthtime, uint32_t pid, const char *phrase);
 
@@ -109,7 +112,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
 	   risks are tolerable */
-	int num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
+	ssize_t num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
 	if (!num && timeout > 0)
 	{
 		pthread_mutex_lock(&(ctx->mutex));
@@ -117,8 +120,8 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 		pthread_mutex_unlock(&(ctx->mutex));
 	}
 
-	uint16_t dataout_read_index = atomic_load_explicit(&ctx->dataout_fifo_queue_read_index, memory_order_relaxed);
-	if (atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
+	size_t dataout_read_index = atomic_load_explicit(&ctx->dataout_fifo_queue_read_index, memory_order_relaxed);
+	if ((size_t)atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
 	{
 		data_block = ctx->dataout_fifo_queue[dataout_read_index];
 		num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
@@ -140,7 +143,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 
 	*data_buffer = data_block;
 
-	return num;
+	return (int)num;
 }
 
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
@@ -250,10 +253,10 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 		{
 			snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
 		}
-#ifndef __WIN32
+#ifndef _WIN32
 		flow_id = generate_flowid(timestampNTP_u64(), getpid(), hostname);
 #else
-		flow_id = generate_flowid(timestampNTP_u64(), 1234, hostname);
+		flow_id = generate_flowid(timestampNTP_u64(), GetCurrentProcessId(), hostname);
 #endif
 	}
 

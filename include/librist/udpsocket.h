@@ -15,11 +15,6 @@
 
 #define UDPSOCKET_MAX_HOPS 32
 
-#ifndef SOL_IP
-#define SOL_IP 0x0
-#define SOL_IPV6 0x29
-#endif
-
 /* Windows */
 #ifdef _WIN32
 #include <winsock2.h>

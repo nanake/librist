@@ -14,6 +14,9 @@
               The CCM mode of operation is specified by NIST SP80-38 C, available at:
                * http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C_updated-July20_2007.pdf
 *********************************************************************/
+#ifdef _MSC_VER
+#pragma warning(disable: 4244)
+#endif
 
 /*************************** HEADER FILES ***************************/
 #include <stdlib.h>

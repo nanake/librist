@@ -295,7 +295,7 @@ RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
 	struct rist_rtcp_hdr rtcp;
 	uint8_t cname;
 	uint8_t name_len;
-	char udn[];
+	char udn[1];
 })
 
 /* shared functions in udp.c */

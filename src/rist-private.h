@@ -324,9 +324,9 @@ struct rist_receiver {
 	/* Receiver timed async data output */
 	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
 	size_t dataout_fifo_queue_bytesize;
-	atomic_uint_fast16_t dataout_fifo_queue_counter;
-	atomic_uint_fast16_t dataout_fifo_queue_read_index;
-	atomic_uint_fast16_t dataout_fifo_queue_write_index;
+	atomic_ulong dataout_fifo_queue_counter;
+	atomic_ulong dataout_fifo_queue_read_index;
+	atomic_ulong dataout_fifo_queue_write_index;
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;
