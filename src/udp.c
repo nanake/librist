@@ -468,6 +468,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	} else {
 		rist_calculate_bitrate_sender(len, &p->bw);
 		p->stats_sender_instant.sent++;
+		p->stats_receiver_instant.sent++;
 	}
 
 	if (modifyingbuffer) {

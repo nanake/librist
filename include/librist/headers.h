@@ -247,6 +247,8 @@ struct rist_stats_receiver_flow
 	char cname[RIST_MAX_STRING_LONG];
 	/* flow id (set by senders) */
 	uint32_t flow_id;
+	/* flow status */
+	int status;
 	/* avg bandwidth calculation */
 	size_t bandwidth;
 	/* bandwidth devoted to retries */
@@ -277,8 +279,8 @@ struct rist_stats
 {
 	enum rist_stats_type stats_type;
 	union {
-		struct rist_stats_sender_peer rist_stats_sender_peer;
-		struct rist_stats_receiver_flow rist_stats_receiver_flow;
+		struct rist_stats_sender_peer sender_peer;
+		struct rist_stats_receiver_flow receiver_flow;
 	} stats;
 	char *stats_json;
 };

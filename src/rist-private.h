@@ -152,6 +152,7 @@ struct rist_peer_sender_stats {
 };
 
 struct rist_peer_receiver_stats {
+	uint32_t sent;
 	uint64_t recv;
 	uint32_t missing;
 	uint32_t retries;

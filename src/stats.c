@@ -94,6 +94,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
+	struct rist_stats_receiver_flow *stats_receiver_flow = &stats_container->stats.receiver_flow;
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -101,6 +102,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	}
 
 	uint64_t flow_recv_instant = 0;
+	uint64_t flow_sent_instant = 0;
 	uint32_t flow_missing_instant = 0;
 	uint32_t flow_recovered_instant = 0;
 	uint32_t flow_retries_instant = 0;
@@ -119,6 +121,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(flow_obj, "dead",  flow->dead);
 	cJSON *json_stats = cJSON_AddObjectToObject(flow_obj, "stats");
 	cJSON *peers = cJSON_AddArrayToObject(flow_obj, "peers");
+	uint32_t flow_bitrate = 0;
+	uint32_t flow_rtt = 0;
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
 	{
 		struct rist_peer *peer = flow->peer_lst[i];
@@ -128,6 +132,9 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 		bitrate = (uint32_t)peer->bw.bitrate;
 		eight_times_bitrate = peer->bw.eight_times_bitrate;
+
+		flow_bitrate += bitrate;
+		flow_rtt =+ peer->eight_times_rtt / 8;
 
 		double QpeerInstant = 100;
 		if (peer->stats_receiver_instant.recv > 0)
@@ -200,9 +207,10 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		cJSON_AddNumberToObject(peer_stats, "bitrate", (double)bitrate);
 		cJSON_AddNumberToObject(peer_stats, "avg_bitrate", (double)eight_times_bitrate / 8);
 		cJSON_AddItemToArray(peers, peer_obj);
-	
+
 		// Calculate flow instant stats
 		flow_recv_instant += peer->stats_receiver_instant.recv;
+		flow_sent_instant += peer->stats_receiver_instant.sent;
 		flow_missing_instant += peer->stats_receiver_instant.missing;
 		flow_recovered_instant += peer->stats_receiver_instant.recovered;
 		flow_retries_instant += peer->stats_receiver_instant.retries;
@@ -294,6 +302,24 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_Delete(stats);
 
 	stats_container->stats_json = stats_string;
+
+	stats_receiver_flow->peer_count = flow->peer_lst_len;
+	// TODO: populate stats_receiver_flow->cname
+	stats_receiver_flow->flow_id = flow->flow_id;
+	stats_receiver_flow->status = flow->dead;
+	stats_receiver_flow->bandwidth = flow->peer_lst_len ? flow_bitrate / flow->peer_lst_len : 0;
+	//TODO: populate retry_bandwidth;
+	stats_receiver_flow->sent = flow->peer_lst_len ? flow_sent_instant / flow->peer_lst_len : 0;
+	stats_receiver_flow->received = flow->peer_lst_len ? flow_recv_instant / flow->peer_lst_len : 0;
+	stats_receiver_flow->missing = flow_missing_instant;
+	stats_receiver_flow->recovered = flow_recovered_instant;
+	stats_receiver_flow->recovered_one_retry = flow_recovered_0nack_instant;
+	stats_receiver_flow->lost = flow->stats_instant.lost;
+	stats_receiver_flow->quality = Q;
+	stats_receiver_flow->min_inter_packet_spacing = flow->stats_instant.min_ips;
+	stats_receiver_flow->cur_inter_packet_spacing = flow->stats_instant.cur_ips;
+	stats_receiver_flow->max_inter_packet_spacing = flow->stats_instant.max_ips;
+	stats_receiver_flow->rtt = flow->peer_lst_len ? flow_rtt / flow->peer_lst_len : 0;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
