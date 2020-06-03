@@ -476,6 +476,20 @@ int rist_auth_handler_set(struct rist_ctx *ctx,
 	return rist_auth_handler(cctx, conn_cb, disconn_cb, arg);
 }
 
+int rist_stats_free(const struct rist_stats *stats_container)
+{
+	if (!stats_container)
+		return -1;
+	if (stats_container->stats.json)
+		free(stats_container->stats.json);
+	if (stats_container->stats.rist_stats_receiver_flow)
+		free(stats_container->stats.rist_stats_receiver_flow);
+	if (stats_container->stats.rist_stats_sender_peer)
+		free(stats_container->stats.rist_stats_sender_peer);
+	free((void *)stats_container);
+	return 0;
+}
+
 int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const struct rist_stats *stats_container), void *arg)
 {
 	if (RIST_UNLIKELY(!ctx))

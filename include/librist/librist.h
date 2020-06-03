@@ -257,6 +257,13 @@ RIST_API int rist_parse_address(const char *url, const struct rist_peer_config *
 RIST_API int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const struct rist_stats *stats_container), void *arg);
 
 /**
+ * @brief Free the rist_stats structure memory allocations
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_API int rist_stats_free(const struct rist_stats *stats_container);
+
+/**
  * @brief Get the version of libRIST
  *
  * @return String representing the version of libRIST

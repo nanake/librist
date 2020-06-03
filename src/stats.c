@@ -25,9 +25,9 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 		return;
 	}
 
-	struct rist_stats stats_container;
-	stats_container.stats_type = RIST_STATS_SENDER_PEER;
-	struct rist_stats_sender_peer peer_stats;
+	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
+	stats_container->stats_type = RIST_STATS_SENDER_PEER;
+	struct rist_stats_sender_peer *peer_stats = calloc(1, sizeof(struct rist_stats_sender_peer));
 
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
@@ -78,13 +78,13 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
-	stats_container.stats.json = stats_string;
+	stats_container->stats.json = stats_string;
 
 	if (cctx->stats_callback != NULL)
-		cctx->stats_callback(cctx->stats_callback_argument, &stats_container);
-	else 
-		free(stats_string);
-	
+		cctx->stats_callback(cctx->stats_callback_argument, stats_container);
+	else
+		rist_stats_free(stats_container);
+
 	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
 }
 
@@ -93,9 +93,9 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	if (!flow)
 		return;
 
-	struct rist_stats stats_container;
-	stats_container.stats_type = RIST_STATS_RECEIVER_FLOW;
-	struct rist_stats_receiver_flow flow_stats;
+	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
+	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
+	struct rist_stats_receiver_flow *flow_stats = calloc(1, sizeof(struct rist_stats_receiver_flow));
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -295,13 +295,13 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
-	stats_container.stats.json = stats_string;
+	stats_container->stats.json = stats_string;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
-		ctx->common.stats_callback(ctx->common.stats_callback_argument, &stats_container);
+		ctx->common.stats_callback(ctx->common.stats_callback_argument, stats_container);
 	else
-		free(stats_string);
+		rist_stats_free(stats_container);
 
 	memset(&flow->stats_instant, 0, sizeof(flow->stats_instant));
 	flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
