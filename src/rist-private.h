@@ -299,7 +299,7 @@ struct rist_common_ctx {
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
 
-	int (*stats_callback)(void *arg, const char *stats);
+	int (*stats_callback)(void *arg, const struct rist_stats *stats_container);
 	void *stats_callback_argument;
 
 	pthread_rwlock_t oob_queue_lock;

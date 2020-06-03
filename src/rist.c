@@ -476,7 +476,7 @@ int rist_auth_handler_set(struct rist_ctx *ctx,
 	return rist_auth_handler(cctx, conn_cb, disconn_cb, arg);
 }
 
-int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg)
+int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const struct rist_stats *stats_container), void *arg)
 {
 	if (RIST_UNLIKELY(!ctx))
 	{

@@ -95,10 +95,10 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
-static int cb_stats(void *arg, const char *rist_stats) {
+static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	fprintf(stderr, "%s\n\n", rist_stats);
-	free((void*)rist_stats);
+	fprintf(stderr, "%s\n\n", stats_container->stats.json);
+	free((void*)stats_container->stats.json);
 	return 0;
 }
 

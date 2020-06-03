@@ -25,6 +25,10 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 		return;
 	}
 
+	struct rist_stats stats_container;
+	stats_container.stats_type = RIST_STATS_SENDER_PEER;
+	struct rist_stats_sender_peer peer_stats;
+
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
 	size_t retry_buf_size = rist_get_sender_retry_queue_size(peer->sender_ctx);
@@ -58,23 +62,26 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON *peer_obj = cJSON_AddObjectToObject(rist_sender_stats, "peer");
 	cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
 	cJSON_AddStringToObject(peer_obj, "cname", peer->receiver_name);
-	cJSON *peer_stats = cJSON_AddObjectToObject(peer_obj, "stats");
-	cJSON_AddNumberToObject(peer_stats, "quality", Q);
-	cJSON_AddNumberToObject(peer_stats, "sent", (double)peer->stats_sender_instant.sent);
-	cJSON_AddNumberToObject(peer_stats, "received", (double)peer->stats_sender_instant.received);
-	cJSON_AddNumberToObject(peer_stats, "retransmitted", (double)peer->stats_sender_instant.retrans);
-	cJSON_AddNumberToObject(peer_stats, "bandwidth", (double)cli_bw->bitrate);
-	cJSON_AddNumberToObject(peer_stats, "retry_bandwidth", (double)retry_bw->bitrate);
-	cJSON_AddNumberToObject(peer_stats, "bloat_skipped", (double)peer->stats_sender_instant.bloat_skip);
-	cJSON_AddNumberToObject(peer_stats, "retransmit_skipped", (double)peer->stats_sender_instant.retrans_skip);
-	cJSON_AddNumberToObject(peer_stats, "rtt", (double)peer->last_mrtt);
-	cJSON_AddNumberToObject(peer_stats, "avg_rtt", (double)avg_rtt);
-	cJSON_AddNumberToObject(peer_stats, "retry_buffer_size", (double)retry_buf_size);
-	cJSON_AddNumberToObject(peer_stats, "cooldown_time", (double)time_left);
+	cJSON *json_stats = cJSON_AddObjectToObject(peer_obj, "stats");
+	cJSON_AddNumberToObject(json_stats, "quality", Q);
+	cJSON_AddNumberToObject(json_stats, "sent", (double)peer->stats_sender_instant.sent);
+	cJSON_AddNumberToObject(json_stats, "received", (double)peer->stats_sender_instant.received);
+	cJSON_AddNumberToObject(json_stats, "retransmitted", (double)peer->stats_sender_instant.retrans);
+	cJSON_AddNumberToObject(json_stats, "bandwidth", (double)cli_bw->bitrate);
+	cJSON_AddNumberToObject(json_stats, "retry_bandwidth", (double)retry_bw->bitrate);
+	cJSON_AddNumberToObject(json_stats, "bloat_skipped", (double)peer->stats_sender_instant.bloat_skip);
+	cJSON_AddNumberToObject(json_stats, "retransmit_skipped", (double)peer->stats_sender_instant.retrans_skip);
+	cJSON_AddNumberToObject(json_stats, "rtt", (double)peer->last_mrtt);
+	cJSON_AddNumberToObject(json_stats, "avg_rtt", (double)avg_rtt);
+	cJSON_AddNumberToObject(json_stats, "retry_buffer_size", (double)retry_buf_size);
+	cJSON_AddNumberToObject(json_stats, "cooldown_time", (double)time_left);
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
+
+	stats_container.stats.json = stats_string;
+
 	if (cctx->stats_callback != NULL)
-		cctx->stats_callback(cctx->stats_callback_argument, stats_string);
+		cctx->stats_callback(cctx->stats_callback_argument, &stats_container);
 	else 
 		free(stats_string);
 	
@@ -85,6 +92,10 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 {
 	if (!flow)
 		return;
+
+	struct rist_stats stats_container;
+	stats_container.stats_type = RIST_STATS_RECEIVER_FLOW;
+	struct rist_stats_receiver_flow flow_stats;
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -108,7 +119,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON *flow_obj = cJSON_AddObjectToObject(stats_obj, "flowinstant");
 	cJSON_AddNumberToObject(flow_obj, "flow_id", flow->flow_id);
 	cJSON_AddNumberToObject(flow_obj, "dead",  flow->dead);
-	cJSON *flow_stats = cJSON_AddObjectToObject(flow_obj, "stats");
+	cJSON *json_stats = cJSON_AddObjectToObject(flow_obj, "stats");
 	cJSON *peers = cJSON_AddArrayToObject(flow_obj, "peers");
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
 	{
@@ -262,31 +273,33 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		rist_flush_missing_flow_queue(flow);
 	}
 
-	cJSON_AddNumberToObject(flow_stats, "quality", Q);
-	cJSON_AddNumberToObject(flow_stats, "received", (double)flow_recv_instant);
-	cJSON_AddNumberToObject(flow_stats, "missing", (double)flow_missing_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_total", (double)flow_recovered_instant);
-	cJSON_AddNumberToObject(flow_stats, "reordered", (double)flow_reordered_instant);
-	cJSON_AddNumberToObject(flow_stats, "retries", (double)flow_retries_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_one_nack", (double)flow_recovered_0nack_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_two_nacks", (double)flow_recovered_1nack_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_three_nacks", (double)flow_recovered_2nack_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_four_nacks", (double)flow_recovered_3nack_instant);
-	cJSON_AddNumberToObject(flow_stats, "recovered_more_nacks", (double)flow_recovered_morenack_instant);
-	cJSON_AddNumberToObject(flow_stats, "lost", (double)flow->stats_instant.lost);
-	cJSON_AddNumberToObject(flow_stats, "duplicates", (double)flow_dups_instant);
-	cJSON_AddNumberToObject(flow_stats, "missing_queue", (double)flow->missing_counter);
-	cJSON_AddNumberToObject(flow_stats, "missing_queue_max", (double)flow->missing_counter_max);
-	cJSON_AddNumberToObject(flow_stats, "min_inter_packet_spacing", (double)flow->stats_instant.min_ips);
-	cJSON_AddNumberToObject(flow_stats, "cur_inter_packet_spacing", (double)flow->stats_instant.cur_ips);
-	cJSON_AddNumberToObject(flow_stats, "max_inter_packet_spacing", (double)flow->stats_instant.max_ips);
+	cJSON_AddNumberToObject(json_stats, "quality", Q);
+	cJSON_AddNumberToObject(json_stats, "received", (double)flow_recv_instant);
+	cJSON_AddNumberToObject(json_stats, "missing", (double)flow_missing_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_total", (double)flow_recovered_instant);
+	cJSON_AddNumberToObject(json_stats, "reordered", (double)flow_reordered_instant);
+	cJSON_AddNumberToObject(json_stats, "retries", (double)flow_retries_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_one_nack", (double)flow_recovered_0nack_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_two_nacks", (double)flow_recovered_1nack_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_three_nacks", (double)flow_recovered_2nack_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_four_nacks", (double)flow_recovered_3nack_instant);
+	cJSON_AddNumberToObject(json_stats, "recovered_more_nacks", (double)flow_recovered_morenack_instant);
+	cJSON_AddNumberToObject(json_stats, "lost", (double)flow->stats_instant.lost);
+	cJSON_AddNumberToObject(json_stats, "duplicates", (double)flow_dups_instant);
+	cJSON_AddNumberToObject(json_stats, "missing_queue", (double)flow->missing_counter);
+	cJSON_AddNumberToObject(json_stats, "missing_queue_max", (double)flow->missing_counter_max);
+	cJSON_AddNumberToObject(json_stats, "min_inter_packet_spacing", (double)flow->stats_instant.min_ips);
+	cJSON_AddNumberToObject(json_stats, "cur_inter_packet_spacing", (double)flow->stats_instant.cur_ips);
+	cJSON_AddNumberToObject(json_stats, "max_inter_packet_spacing", (double)flow->stats_instant.max_ips);
 	
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
+	stats_container.stats.json = stats_string;
+
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
-		ctx->common.stats_callback(ctx->common.stats_callback_argument, stats_string);
+		ctx->common.stats_callback(ctx->common.stats_callback_argument, &stats_container);
 	else
 		free(stats_string);
 

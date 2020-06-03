@@ -227,115 +227,60 @@ struct rist_stats_sender_peer
 	size_t bandwidth;
 	/* bandwidth devoted to retries */
 	size_t retry_bandwidth;
-	/* num sent packets  (TODO: excluding retries?!?) */
+	/* num sent packets */
 	uint64_t sent;
-	/* num received packets TODO ???*/
+	/* num received packets */
 	uint64_t received;
 	/* retransmitted packets */
 	uint64_t retransmitted;
-	/* packets skipped due to bufferbloat protection */
-	uint32_t bloat_skipped;
-	/* retransmits skipped */
-	uint32_t retransmit_skipped;
 	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + retransmit_skipped + retransmitted */
 	double quality;
 	/* current RTT */
 	uint32_t rtt;
-	/* avg rtt last 8 calculations */
-	uint32_t avg_rtt;
-	/* TODO ??? */
-	size_t retry_buffer_size;
-	/* TODO ??? */
-	uint32_t cooldown_time;
-};
-
-struct rist_stats_receiver_flow_peer
-{
-	/* cname */
-	char cname[RIST_MAX_STRING_SHORT];
-
-	uint32_t flow_id;
-	/* dead peer 0/1 */
-	uint32_t dead;
-
-	/* peer num within flow peer list */
-	uint32_t peer_num;
-	uint32_t flow_peer_list_len;
-
-	/* peer id */
-	uint32_t peer_id;
-	/* received packets */
-	uint32_t received;
-	/* missing, including reordered */
-	uint32_t missing;
-	/* Q = (received * 100.0) / received + missing */
-	double quality;
-	/* total recovered packets */
-	uint32_t recovered_total;
-	/* recovered without nacks sent (reordered) */
-	uint32_t recovered_no_nack;
-	/* recovered after N nacks */
-	uint32_t recovered_one_nack;
-	uint32_t recovered_two_nacks;
-	uint32_t recovered_three_nacks;
-	uint32_t recovered_more_nacks;
-	/* ??? TODO */
-	uint32_t recovered_average;
-	uint32_t recovered_slope;
-	uint32_t recovered_slope_inverse;
-	/* reordered packets */
-	uint32_t reordered;
-	/* duplicate packets received */
-	uint32_t duplicates;
-	/* retries ??? TODO */
-	uint32_t retries;
-	uint64_t recovery_buffer_length;
-	/* missing queue */
-	uint32_t missing_queue;
-	uint32_t missing_queue_max;
-	/* current rtt */
-	uint32_t rtt;
-	/* avg rtt over last 8 stat intervals */
-	uint32_t avg_rtt;
-	/* bitrate */
-	uint32_t bitrate;
-	/* average bitrate */
-	uint32_t avg_bitrate;
 };
 
 struct rist_stats_receiver_flow
 {
+	/* peer count */
+	uint32_t peer_count;
+	/* combined peer cnames */
+	char cname[RIST_MAX_STRING_LONG];
+	/* flow id (set by senders) */
 	uint32_t flow_id;
+	/* avg bandwidth calculation */
+	size_t bandwidth;
+	/* bandwidth devoted to retries */
+	size_t retry_bandwidth;
+	/* num sent packets */
+	uint64_t sent;
+	/* num received packets */
 	uint64_t received;
 	/* missing, including reordered */
 	uint32_t missing;
-	/* Q = (received * 100.0) / received + missing */
-	double quality;
-	/* total recovered packets */
-	uint32_t recovered_total;
-	/* recovered without nacks sent (reordered) */
-	uint32_t recovered_no_nack;
-	/* recovered after N nacks */
-	uint32_t recovered_one_nack;
-	uint32_t recovered_two_nacks;
-	uint32_t recovered_three_nacks;
-	uint32_t recovered_more_nacks;
+	/* total recovered */
+	uint32_t recovered;
+	/* recovered on the first retry */
+	uint32_t recovered_one_retry;
 	/* lost packets */
 	uint32_t lost;
-	/* reordered packets */
-	uint32_t reordered;
-	/* duplicate packets received */
-	uint32_t duplicates;
-	/* retries ??? TODO */
-	uint32_t retries;
+	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + retransmit_skipped + retransmitted */
+	double quality;
 	/* packet inter-arrival time (microseconds) */
 	uint64_t min_inter_packet_spacing;
 	uint64_t cur_inter_packet_spacing;
 	uint64_t max_inter_packet_spacing;
+	/* avg rtt all non dead peers */
+	uint32_t rtt;
+};
 
-	uint32_t peer_list_len;
-
-	struct rist_stats_receiver_flow_peer peers[1];
+struct rist_stats
+{
+	enum rist_stats_type stats_type;
+	union {
+		struct rist_stats_sender_peer *rist_stats_sender_peer;
+		struct rist_stats_receiver_flow *rist_stats_receiver_flow;
+		char *json;
+	} stats;
 };
 
 #endif

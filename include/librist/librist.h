@@ -251,10 +251,10 @@ RIST_API int rist_parse_address(const char *url, const struct rist_peer_config *
  *
  * @param ctx RIST context
  * @param statsinterval interval between stats reporting
- * @param stats_cb Callback function that will be called. The char pointer must be free()'d when you are finished.
+ * @param stats_cb Callback function that will be called. The json char pointer must be free()'d when you are finished.
  * @param arg extra arguments for callback function
  */
-RIST_API int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const char *stats), void *arg);
+RIST_API int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const struct rist_stats *stats_container), void *arg);
 
 /**
  * @brief Get the version of libRIST
