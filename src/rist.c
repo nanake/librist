@@ -480,12 +480,8 @@ int rist_stats_free(const struct rist_stats *stats_container)
 {
 	if (!stats_container)
 		return -1;
-	if (stats_container->stats.json)
-		free(stats_container->stats.json);
-	if (stats_container->stats.rist_stats_receiver_flow)
-		free(stats_container->stats.rist_stats_receiver_flow);
-	if (stats_container->stats.rist_stats_sender_peer)
-		free(stats_container->stats.rist_stats_sender_peer);
+	if (stats_container->stats_json)
+		free(stats_container->stats_json);
 	free((void *)stats_container);
 	return 0;
 }

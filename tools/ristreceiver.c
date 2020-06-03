@@ -137,7 +137,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n",  stats_container->stats.json);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n",  stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }

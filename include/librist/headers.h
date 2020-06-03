@@ -277,10 +277,10 @@ struct rist_stats
 {
 	enum rist_stats_type stats_type;
 	union {
-		struct rist_stats_sender_peer *rist_stats_sender_peer;
-		struct rist_stats_receiver_flow *rist_stats_receiver_flow;
-		char *json;
+		struct rist_stats_sender_peer rist_stats_sender_peer;
+		struct rist_stats_receiver_flow rist_stats_receiver_flow;
 	} stats;
+	char *stats_json;
 };
 
 #endif

@@ -27,7 +27,6 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_SENDER_PEER;
-	struct rist_stats_sender_peer *peer_stats = calloc(1, sizeof(struct rist_stats_sender_peer));
 
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
@@ -78,7 +77,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
-	stats_container->stats.json = stats_string;
+	stats_container->stats_json = stats_string;
 
 	if (cctx->stats_callback != NULL)
 		cctx->stats_callback(cctx->stats_callback_argument, stats_container);
@@ -95,7 +94,6 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
-	struct rist_stats_receiver_flow *flow_stats = calloc(1, sizeof(struct rist_stats_receiver_flow));
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -295,7 +293,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
-	stats_container->stats.json = stats_string;
+	stats_container->stats_json = stats_string;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
