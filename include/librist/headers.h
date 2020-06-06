@@ -259,6 +259,8 @@ struct rist_stats_receiver_flow
 	uint64_t received;
 	/* missing, including reordered */
 	uint32_t missing;
+	/* reordered */
+	uint32_t reordered;
 	/* total recovered */
 	uint32_t recovered;
 	/* recovered on the first retry */

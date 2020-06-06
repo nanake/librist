@@ -312,6 +312,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	stats_receiver_flow->sent = flow->peer_lst_len ? flow_sent_instant / flow->peer_lst_len : 0;
 	stats_receiver_flow->received = flow->peer_lst_len ? flow_recv_instant / flow->peer_lst_len : 0;
 	stats_receiver_flow->missing = flow_missing_instant;
+	stats_receiver_flow->reordered = flow_reordered_instant;
 	stats_receiver_flow->recovered = flow_recovered_instant;
 	stats_receiver_flow->recovered_one_retry = flow_recovered_0nack_instant;
 	stats_receiver_flow->lost = flow->stats_instant.lost;
