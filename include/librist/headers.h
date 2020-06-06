@@ -126,10 +126,15 @@ enum rist_congestion_control_mode
 	RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE = 2
 };
 
-enum rist_data_block_flags
+enum rist_data_block_sender_flags
 {
 	RIST_DATA_FLAGS_USE_SEQ = 1,
-	RIST_DATA_FLAGS_NEED_FREE = 2,
+	RIST_DATA_FLAGS_NEED_FREE = 2
+};
+
+enum rist_data_block_receiver_flags
+{
+	RIST_DATA_FLAGS_DISCONTINUITY = 1
 };
 
 enum rist_stats_type

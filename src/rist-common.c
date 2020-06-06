@@ -688,11 +688,12 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							"Discontinuity, expected %" PRIu32 " got %" PRIu32 "\n",
 							f->last_seq_output + 1, b->seq);
 					f->stats_instant.lost++;
+					holes = 1;
 				}
 				if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
-					// TODO: support passing of discontinuities (missing seq)
-					// flags |= BLOCK_FLAG_DISCONTINUITY where BLOCK_FLAG_DISCONTINUITY = 1
 					uint32_t flags = 0;
+					if (holes)
+						flags = RIST_DATA_FLAGS_DISCONTINUITY;
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;
 					size_t dataout_fifo_write_index = atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire);
