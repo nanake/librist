@@ -303,7 +303,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	stats_container->stats_json = stats_string;
 
-	stats_receiver_flow->peer_count = flow->peer_lst_len;
+	stats_receiver_flow->peer_count = (uint32_t)flow->peer_lst_len;
 	// TODO: populate stats_receiver_flow->cname
 	stats_receiver_flow->flow_id = flow->flow_id;
 	stats_receiver_flow->status = flow->dead;
