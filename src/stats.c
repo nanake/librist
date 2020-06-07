@@ -27,6 +27,8 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_SENDER_PEER;
+	stats_container->version = RIST_STATS_VERSION;
+	struct rist_stats_sender_peer *stats_sender_peer = &stats_container->stats.sender_peer;
 
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
@@ -78,6 +80,17 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON_Delete(stats);
 
 	stats_container->stats_json = stats_string;
+	stats_container->json_size = sizeof(stats_string);
+
+	strncpy(stats_sender_peer->cname, peer->receiver_name, RIST_MAX_STRING_SHORT);
+	stats_sender_peer->peer_id = peer->adv_peer_id;
+	stats_sender_peer->bandwidth = cli_bw->bitrate;
+	// TODO: stats_sender_peer->retry_bandwidth;
+	stats_sender_peer->sent =peer->stats_sender_instant.sent;
+	stats_sender_peer->received = peer->stats_sender_instant.received;
+	stats_sender_peer->retransmitted = peer->stats_sender_instant.retrans;
+	stats_sender_peer->quality = Q;
+	stats_sender_peer->rtt = avg_rtt;
 
 	if (cctx->stats_callback != NULL)
 		cctx->stats_callback(cctx->stats_callback_argument, stats_container);
@@ -94,6 +107,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
+	stats_container->version = RIST_STATS_VERSION;
 	struct rist_stats_receiver_flow *stats_receiver_flow = &stats_container->stats.receiver_flow;
 
 	if (flow->stats_instant.avg_count)
@@ -302,6 +316,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_Delete(stats);
 
 	stats_container->stats_json = stats_string;
+	stats_container->json_size = sizeof(stats_string);
 
 	stats_receiver_flow->peer_count = (uint32_t)flow->peer_lst_len;
 	// TODO: populate stats_receiver_flow->cname

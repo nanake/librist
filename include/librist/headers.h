@@ -29,6 +29,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include "common/attributes.h"
 
 /* Used for cname, miface and shared secret */
 #define RIST_MAX_STRING_SHORT 128
@@ -38,6 +39,7 @@
 /* Track PROTOCOL and API changes */
 #define RIST_PEER_UDPSOCKET_VERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
+#define RIST_STATS_VERSION (0)
 
 /* Default peer config values */
 #define RIST_DEFAULT_VIRT_SRC_PORT (1971)
@@ -282,14 +284,15 @@ struct rist_stats_receiver_flow
 	uint32_t rtt;
 };
 
-struct rist_stats
-{
+RIST_PACKED_STRUCT(rist_stats,{
+	uint32_t json_size;
+	char *stats_json;
+	uint16_t version;
 	enum rist_stats_type stats_type;
 	union {
 		struct rist_stats_sender_peer sender_peer;
 		struct rist_stats_receiver_flow receiver_flow;
 	} stats;
-	char *stats_json;
-};
+})
 
 #endif
