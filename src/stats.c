@@ -28,7 +28,6 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_SENDER_PEER;
 	stats_container->version = RIST_STATS_VERSION;
-	struct rist_stats_sender_peer *stats_sender_peer = &stats_container->stats.sender_peer;
 
 	peer->stats_sender_total.received += peer->stats_sender_instant.received;
 
@@ -82,15 +81,15 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	stats_container->stats_json = stats_string;
 	stats_container->json_size = sizeof(stats_string);
 
-	strncpy(stats_sender_peer->cname, peer->receiver_name, RIST_MAX_STRING_SHORT);
-	stats_sender_peer->peer_id = peer->adv_peer_id;
-	stats_sender_peer->bandwidth = cli_bw->bitrate;
+	strncpy(stats_container->stats.sender_peer.cname, peer->receiver_name, RIST_MAX_STRING_SHORT);
+	stats_container->stats.sender_peer.peer_id = peer->adv_peer_id;
+	stats_container->stats.sender_peer.bandwidth = cli_bw->bitrate;
 	// TODO: stats_sender_peer->retry_bandwidth;
-	stats_sender_peer->sent =peer->stats_sender_instant.sent;
-	stats_sender_peer->received = peer->stats_sender_instant.received;
-	stats_sender_peer->retransmitted = peer->stats_sender_instant.retrans;
-	stats_sender_peer->quality = Q;
-	stats_sender_peer->rtt = avg_rtt;
+	stats_container->stats.sender_peer.sent =peer->stats_sender_instant.sent;
+	stats_container->stats.sender_peer.received = peer->stats_sender_instant.received;
+	stats_container->stats.sender_peer.retransmitted = peer->stats_sender_instant.retrans;
+	stats_container->stats.sender_peer.quality = Q;
+	stats_container->stats.sender_peer.rtt = avg_rtt;
 
 	if (cctx->stats_callback != NULL)
 		cctx->stats_callback(cctx->stats_callback_argument, stats_container);
@@ -108,7 +107,6 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
 	stats_container->version = RIST_STATS_VERSION;
-	struct rist_stats_receiver_flow *stats_receiver_flow = &stats_container->stats.receiver_flow;
 
 	if (flow->stats_instant.avg_count)
 	{
@@ -318,24 +316,24 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	stats_container->stats_json = stats_string;
 	stats_container->json_size = sizeof(stats_string);
 
-	stats_receiver_flow->peer_count = (uint32_t)flow->peer_lst_len;
+	stats_container->stats.receiver_flow.peer_count = (uint32_t)flow->peer_lst_len;
 	// TODO: populate stats_receiver_flow->cname
-	stats_receiver_flow->flow_id = flow->flow_id;
-	stats_receiver_flow->status = flow->dead;
-	stats_receiver_flow->bandwidth = flow->peer_lst_len ? flow_bitrate / flow->peer_lst_len : 0;
+	stats_container->stats.receiver_flow.flow_id = flow->flow_id;
+	stats_container->stats.receiver_flow.status = flow->dead;
+	stats_container->stats.receiver_flow.bandwidth = flow->peer_lst_len ? flow_bitrate / flow->peer_lst_len : 0;
 	//TODO: populate retry_bandwidth;
-	stats_receiver_flow->sent = flow->peer_lst_len ? flow_sent_instant / flow->peer_lst_len : 0;
-	stats_receiver_flow->received = flow->peer_lst_len ? flow_recv_instant / flow->peer_lst_len : 0;
-	stats_receiver_flow->missing = flow_missing_instant;
-	stats_receiver_flow->reordered = flow_reordered_instant;
-	stats_receiver_flow->recovered = flow_recovered_instant;
-	stats_receiver_flow->recovered_one_retry = flow_recovered_0nack_instant;
-	stats_receiver_flow->lost = flow->stats_instant.lost;
-	stats_receiver_flow->quality = Q;
-	stats_receiver_flow->min_inter_packet_spacing = flow->stats_instant.min_ips;
-	stats_receiver_flow->cur_inter_packet_spacing = flow->stats_instant.cur_ips;
-	stats_receiver_flow->max_inter_packet_spacing = flow->stats_instant.max_ips;
-	stats_receiver_flow->rtt = flow->peer_lst_len ? flow_rtt / flow->peer_lst_len : 0;
+	stats_container->stats.receiver_flow.sent = flow->peer_lst_len ? flow_sent_instant / flow->peer_lst_len : 0;
+	stats_container->stats.receiver_flow.received = flow->peer_lst_len ? flow_recv_instant / flow->peer_lst_len : 0;
+	stats_container->stats.receiver_flow.missing = flow_missing_instant;
+	stats_container->stats.receiver_flow.reordered = flow_reordered_instant;
+	stats_container->stats.receiver_flow.recovered = flow_recovered_instant;
+	stats_container->stats.receiver_flow.recovered_one_retry = flow_recovered_0nack_instant;
+	stats_container->stats.receiver_flow.lost = flow->stats_instant.lost;
+	stats_container->stats.receiver_flow.quality = Q;
+	stats_container->stats.receiver_flow.min_inter_packet_spacing = flow->stats_instant.min_ips;
+	stats_container->stats.receiver_flow.cur_inter_packet_spacing = flow->stats_instant.cur_ips;
+	stats_container->stats.receiver_flow.max_inter_packet_spacing = flow->stats_instant.max_ips;
+	stats_container->stats.receiver_flow.rtt = flow->peer_lst_len ? flow_rtt / flow->peer_lst_len : 0;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
