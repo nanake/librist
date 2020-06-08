@@ -29,7 +29,6 @@
 
 #include <stdint.h>
 #include <stdlib.h>
-#include "common/attributes.h"
 
 /* Used for cname, miface and shared secret */
 #define RIST_MAX_STRING_SHORT 128
@@ -284,7 +283,8 @@ struct rist_stats_receiver_flow
 	uint32_t rtt;
 };
 
-RIST_PACKED_STRUCT(rist_stats,{
+struct rist_stats
+{
 	uint32_t json_size;
 	char *stats_json;
 	uint16_t version;
@@ -293,6 +293,6 @@ RIST_PACKED_STRUCT(rist_stats,{
 		struct rist_stats_sender_peer sender_peer;
 		struct rist_stats_receiver_flow receiver_flow;
 	} stats;
-})
+};
 
 #endif
