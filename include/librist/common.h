@@ -27,28 +27,18 @@
 #ifndef RIST_COMMON_H
 #define RIST_COMMON_H
 
-/* Reference: http://gcc.gnu.org/wiki/Visibility */
-#if defined(_WIN32) || defined(__CYGWIN__)
-#if defined(rist_EXPORTS)
-#if defined(__GNUC__)
-#define RIST_API __attribute__((dllexport))
-#else /* defined(__GNUC__) */
-/* Note: actually gcc seems to also supports this syntax. */
-#define RIST_API __declspec(dllexport)
-#endif /* defined(__GNUC__) */
-#else  /* defined(rist_EXPORTS) */
-#if defined(__GNUC__)
-#define RIST_API __attribute__((dllimport))
+#if defined _WIN32
+    #if defined LIBRIST_BUILDING_DLL
+    #define RIST_API __declspec(dllexport)
+    #else
+    #define RIST_API
+    #endif
 #else
-/* Note: actually gcc seems to also supports this syntax. */
-#define RIST_API __declspec(dllimport)
+    #if __GNUC__ >= 4
+    #define RIST_API __attribute__ ((visibility ("default")))
+    #else
+    #define RIST_API
+    #endif
 #endif
-#endif /* defined(rist_EXPORTS) */
-#else  /* defined(_WIN32) || defined(__CYGWIN__) */
-#if __GNUC__ >= 4
-#define RIST_API __attribute__((visibility("default")))
-#else /* __GNUC__ >= 4 */
-#define RIST_API
-#endif /* __GNUC__ >= 4 */
-#endif /* defined(_WIN32) || defined(__CYGWIN__) */
+
 #endif
