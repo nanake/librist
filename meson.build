@@ -98,7 +98,7 @@ else
 endif
 
 #On ubuntu cjson does not come with pkgconfig files, hence the extended checking.
-if not get_option('builtin_cjson')
+if not builtin_cjson
 	cjson_lib = dependency('cJSON', required: false)
 	if not cjson_lib.found()
 		cjson_lib = cc.find_library('cjson', required: false)
