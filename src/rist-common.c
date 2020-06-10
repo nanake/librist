@@ -128,6 +128,10 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 				int temp = atoi( val );
 				if (temp >= 0 && temp <= 2)
 					output_peer_config->congestion_control_mode = temp;
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_TIMING_MODE ) == 0) {
+				int temp = atoi( val );
+				if (temp >= 0 && temp <= 2)
+					output_peer_config->timing_mode = temp;
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_MIN_RETRIES ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
@@ -1772,6 +1776,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->config.congestion_control_mode = peer_src->config.congestion_control_mode;
 		peer->config.min_retries = peer_src->config.min_retries;
 		peer->config.max_retries = peer_src->config.max_retries;
+		peer->config.timing_mode = peer_src->config.timing_mode;
 		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 		peer->session_timeout = peer_src->session_timeout;
 
@@ -2137,7 +2142,10 @@ protocol_bypass:
 						break;
 					case RIST_PAYLOAD_TYPE_DATA_RAW:
 						rtp_time = be32toh(proto_hdr->rtp.ts);
-						source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
+						if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
+							source_time = timestampNTP_u64();
+						else
+							source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
 						if (!advanced)
 						{
 							// Get the sequence from the rtp header for queue management
@@ -2783,6 +2791,7 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	peer->config.min_retries = min_retries;
 	peer->config.max_retries = max_retries;
 	peer->config.weight = settings->weight;
+	peer->config.timing_mode = settings->timing_mode;
 
 	init_peer_settings(peer);
 }

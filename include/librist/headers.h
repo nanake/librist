@@ -58,6 +58,7 @@
 #define RIST_DEFAULT_PROFILE RIST_PROFILE_MAIN
 #define RIST_DEFAULT_SESSION_TIMEOUT (60000)
 #define RIST_DEFAULT_KEEPALIVE_INTERVAL (1000)
+#define RIST_DEFAULT_TIMING_MODE RIST_TIMING_MODE_SOURCE
 
 /* Rist URL parameter names for peer config */
 #define RIST_URL_PARAM_BUFFER_SIZE "buffer"
@@ -83,6 +84,7 @@
 #define RIST_URL_PARAM_CONGESTION_CONTROL "congestion-control"
 #define RIST_URL_PARAM_MIN_RETRIES "min-retries"
 #define RIST_URL_PARAM_MAX_RETRIES "max-retries"
+#define RIST_URL_PARAM_TIMING_MODE "timing-mode"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT "virt-src-port"
 #define RIST_URL_PARAM_PROFILE "profile"
@@ -125,6 +127,13 @@ enum rist_congestion_control_mode
 	RIST_CONGESTION_CONTROL_MODE_OFF = 0,
 	RIST_CONGESTION_CONTROL_MODE_NORMAL = 1,
 	RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE = 2
+};
+
+enum rist_timing_mode
+{
+	RIST_TIMING_MODE_SOURCE = 0,
+	RIST_TIMING_MODE_ARRIVAL = 1,
+	RIST_TIMING_MODE_RTC = 2
 };
 
 enum rist_data_block_sender_flags
@@ -221,6 +230,7 @@ struct rist_peer_config
 	/* Connection options */
 	uint32_t session_timeout;
 	uint32_t keepalive_interval;
+	uint32_t timing_mode;
 };
 
 struct rist_stats_sender_peer

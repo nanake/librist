@@ -491,6 +491,9 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 		return -1;
 	}
 
+	if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL) && !p->receiver_mode)
+		source_time = timestampNTP_u64();
+
 	size_t ret = rist_send_seq_rtcp(p, seq_gre, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
 
 	if ((!p->compression && ret < payload_len) || ret <= 0)

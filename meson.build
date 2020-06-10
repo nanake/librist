@@ -16,7 +16,7 @@ cc = meson.get_compiler('c')
 #If any interfaces have been removed or changed since the last public release, then set micro to 0.
 librist_api_version_major = 3
 librist_api_version_minor = 1
-librist_api_version_patch = 0
+librist_api_version_patch = 1
 librist_version = '@0@.@1@.@2@'.format(librist_api_version_major, librist_api_version_minor, librist_api_version_patch)
 librist_soversion = librist_api_version_major - librist_api_version_patch
 
