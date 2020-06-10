@@ -85,7 +85,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	stats_container->stats.sender_peer.peer_id = peer->adv_peer_id;
 	stats_container->stats.sender_peer.bandwidth = cli_bw->bitrate;
 	// TODO: stats_sender_peer->retry_bandwidth;
-	stats_container->stats.sender_peer.sent =peer->stats_sender_instant.sent;
+	stats_container->stats.sender_peer.sent = peer->stats_sender_instant.sent;
 	stats_container->stats.sender_peer.received = peer->stats_sender_instant.received;
 	stats_container->stats.sender_peer.retransmitted = peer->stats_sender_instant.retrans;
 	stats_container->stats.sender_peer.quality = Q;
