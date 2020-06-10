@@ -35,7 +35,6 @@ struct rist_callback_object {
 	int sd;
 	struct rist_ctx *ctx;
 	uint16_t virt_src_port;
-	uint16_t virt_dst_port;
 	uint16_t address_family;
 	uint8_t recv[RIST_MAX_PACKET_SIZE];
 };
@@ -101,8 +100,12 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		data_block.payload = recv_buf;
 		data_block.payload_len = recv_bufsize;
 		data_block.virt_src_port = callback_object->virt_src_port;
-		data_block.virt_dst_port = callback_object->virt_dst_port;
-		data_block.ts_ntp = 0; // delegate this to the library in this case
+		// We should delegate population of the correct port to the lib as it needs
+		// to match the peer through which the data is being sent
+		data_block.virt_dst_port = 0;
+		// Delegate this to the library since we do not have a real timestamp for it
+		// If we wanted to be more accurate, we could use the kernel nic capture timestamp (linux)
+		data_block.ts_ntp = 0;
 		data_block.flags = 0;
 		int w = rist_sender_data_write(callback_object->ctx, &data_block);
 		// TODO: report error?
@@ -300,7 +303,6 @@ int main(int argc, char *argv[])
 			atleast_one_socket_opened = true;
 		}
 		callback_object[i].virt_src_port = peer_config_udp->virt_dst_port;
-		callback_object[i].virt_dst_port = 0;//why does it asset on non zero; TODO ???
 		callback_object[i].ctx = ctx;
 		callback_object[i].address_family = (uint16_t)peer_config_udp->address_family;
 

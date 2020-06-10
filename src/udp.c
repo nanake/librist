@@ -481,8 +481,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 /* This function is used by receiver for all and by sender only for rist-data and oob-data */
 int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_gre, uint32_t seq_rtp)
 {
-	// This can only and will most likely be zero for data packets. RTCP should always have value.
-	assert(payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port == 0 : 1);
+	// This can only and will most likely be zero for data packets. RTCP should always have a value.
 	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
 	if (dst_port == 0)
 		dst_port = p->config.virt_dst_port;
