@@ -32,7 +32,7 @@ builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
 
 if host_machine.system() == 'windows'
-	deps += [ meson.get_compiler('c').find_library('ws2_32') ]
+	deps += [ cc.find_library('ws2_32'), cc.find_library('iphlpapi') ]
 	add_project_arguments(['-D_WIN32_WINNT=0x0601'], language: 'c')
 	if get_option('default_library') != 'static'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')

@@ -5,6 +5,10 @@
 #include "librist/udpsocket.h"
 #if defined(__unix) || defined(__APPLE__)
 #include <ifaddrs.h>
+#else
+#include <iphlpapi.h>
+#include <iptypes.h>
+#include <netioapi.h>
 #endif
 #include "log-private.h"
 
@@ -176,73 +180,120 @@ int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 #endif
 }
 
+bool is_ip_address(const char *ipaddress, int family) {
+	struct sockaddr_in sa;
+	int result = inet_pton(family, ipaddress, &(sa.sin_addr));
+	return result == 1;
+}
+
 int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, uint16_t family) {
-#if defined(__unix) || defined(__APPLE__)
 	if (family != AF_INET)
 		return -1;
+	struct sockaddr_in *mcast_v4 = (struct sockaddr_in *)sa;
 	char address[INET6_ADDRSTRLEN];
 	char mcastaddress[INET6_ADDRSTRLEN];
-	struct ifaddrs *ifaddr, *ifa, *found = NULL;
-	struct sockaddr_in *mcast_v4 = (struct sockaddr_in *)sa;
 	inet_ntop(AF_INET, &(mcast_v4->sin_addr), mcastaddress, INET_ADDRSTRLEN);
-
-	if (getifaddrs(&ifaddr) == -1) {
-		rist_log_priv3( RIST_LOG_ERROR, "Error on getifaddrs\n");
-		return -1;
+	uint32_t src_addr = htonl(INADDR_ANY);
+	bool got_address = false;
+	if (is_ip_address(miface, AF_INET)) {
+		src_addr = inet_addr(miface);
+		got_address = true;
 	}
-
-	// We need to get a local address to join the group from.
-	for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
-		if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
-			continue;
-		if (miface != NULL && miface[0] != '\0' && strcmp(miface, ifa->ifa_name) != 0) {
-			continue;
+#if defined(__unix) || defined(__APPLE__)
+	struct ifaddrs *ifaddr;
+	if (!got_address) {
+		struct ifaddrs *ifa, *found = NULL;
+		if (getifaddrs(&ifaddr) == -1) {
+			rist_log_priv3( RIST_LOG_ERROR, "Error on getifaddrs\n");
+			return -1;
 		}
-		if (ifa->ifa_addr->sa_family == AF_INET) {
-			if (miface != NULL && miface[0] != '\0') {
-				// If we have an miface we use it's address.
-				found = ifa;
-				break;
+		// We need to get a local address to join the group from.
+		for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next) {
+			if (ifa->ifa_addr == NULL || ifa->ifa_addr->sa_family != AF_INET)
+				continue;
+			if (miface != NULL && miface[0] != '\0' && strcmp(miface, ifa->ifa_name) != 0) {
+				continue;
 			}
-			else {
-				// We use the first non loopback address we find.
-				struct sockaddr_in *v4 = (struct sockaddr_in *)ifa->ifa_addr;
-				uint32_t msb = ((ntohl(v4->sin_addr.s_addr) & 0xFF000000) >> 24);
-				if (msb != 127)	{
+			if (ifa->ifa_addr->sa_family == AF_INET) {
+				if (miface != NULL && miface[0] != '\0') {
+					// If we have an miface we use it's address.
 					found = ifa;
 					break;
 				}
+				else {
+					// We use the first non loopback address we find.
+					struct sockaddr_in *v4 = (struct sockaddr_in *)ifa->ifa_addr;
+					uint32_t msb = ((ntohl(v4->sin_addr.s_addr) & 0xFF000000) >> 24);
+					if (msb != 127)	{
+						found = ifa;
+						break;
+					}
+				}
+			}
+		}
+		if (!found) {
+			rist_log_priv3( RIST_LOG_ERROR, "Could not find an IP for interface %s\n", miface);
+			goto fail;
+		}
+		struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
+		src_addr = v4->sin_addr.s_addr;
+		freeifaddrs(ifaddr);
+	}
+#else
+	/* this "should work" but it seems to break within if (found) at least when compiled using mingw */
+	IP_ADAPTER_ADDRESSES *AdapterAddresses;
+	AdapterAddresses = NULL;
+	if (!got_address) {
+		if (miface != NULL && miface[0] != '\0') {
+			IP_ADAPTER_ADDRESSES *curAddress, *found;
+			ULONG outBufLen = 15000;
+			AdapterAddresses = malloc(outBufLen);
+			if (!AdapterAddresses) {
+				rist_log_priv3( RIST_LOG_ERROR, "Could not allocate IP_ADAPTER_ADDRESSES\n");
+				goto fail;
+			}
+			DWORD ret = 0;
+			ULONG flags = GAA_FLAG_SKIP_ANYCAST | GAA_FLAG_SKIP_MULTICAST | GAA_FLAG_SKIP_DNS_SERVER | GAA_FLAG_SKIP_FRIENDLY_NAME;
+			ret = GetAdaptersAddresses(AF_INET, flags, NULL, AdapterAddresses, &outBufLen);
+			if (ret != NO_ERROR) {
+				goto fail;
+			}
+			curAddress = AdapterAddresses;
+			long unsigned int index = if_nametoindex(miface);
+			while (curAddress) {
+				if (index == curAddress->IfIndex) {
+					found = curAddress;
+					break;
+				}
+				curAddress = curAddress->Next;
+			}
+			
+			if (found) {
+				struct sockaddr_in *v4 = (struct sockaddr_in *)curAddress->FirstUnicastAddress->Address.lpSockaddr;
+				src_addr = v4->sin_addr.s_addr;
 			}
 		}
 	}
-
-	if (!found) {
-		rist_log_priv3( RIST_LOG_ERROR, "Could not find an IP for interface %s\n", miface);
-		goto fail;
-	}
-	struct sockaddr_in *v4 = (struct sockaddr_in *)found->ifa_addr;
-	inet_ntop(AF_INET, &(v4->sin_addr), address, INET_ADDRSTRLEN);
-	rist_log_priv3( RIST_LOG_INFO, "Joining multicast address: %s from IP %s on interface %s\n", mcastaddress, address, found->ifa_name);
+#endif
+	inet_ntop(AF_INET, &(src_addr), address, INET_ADDRSTRLEN);
+	rist_log_priv3( RIST_LOG_INFO, "Joining multicast address: %s from IP %s\n", mcastaddress, address);
 	struct ip_mreq group;
 	group.imr_multiaddr.s_addr = mcast_v4->sin_addr.s_addr;
-	group.imr_interface.s_addr = v4->sin_addr.s_addr;
+	group.imr_interface.s_addr = src_addr;
 	if (setsockopt(sd, IPPROTO_IP, IP_ADD_MEMBERSHIP, (char *)&group, sizeof(group)) < 0) {
 		rist_log_priv3( RIST_LOG_ERROR, "Failed to join multicast group\n");
 		goto fail;
 	}
-	freeifaddrs(ifaddr);
 	return 0;
-
 fail:
-	freeifaddrs(ifaddr);
-	return -1;
+#if defined(__unix) || defined(__APPLE__)
+	if (ifaddr)
+		freeifaddrs(ifaddr);
 #else
-	RIST_MARK_UNUSED(sd);
-	RIST_MARK_UNUSED(miface);
-	RIST_MARK_UNUSED(sa);
-	RIST_MARK_UNUSED(family);
-	return 0;
+	if (AdapterAddresses)
+		free(AdapterAddresses);
 #endif
+	return -1;
 }
 
 int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
@@ -318,11 +369,22 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-
-	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
-		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
-		close(sd);
-		return -1;
+	if (is_multicast && raw.sin6_family == AF_INET) {
+		struct sockaddr_in addr = {0};
+		addr.sin_family = AF_INET;
+		addr.sin_addr.s_addr = htonl(INADDR_ANY);
+		addr.sin_port = htons(port);
+		if (bind(sd, (struct sockaddr *)&addr, addrlen) < 0) {
+			rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
+			close(sd);
+			return -1;
+		}
+	} else {
+		if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
+			rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
+			close(sd);
+			return -1;
+		}
 	}
 
 	if (is_multicast) {
