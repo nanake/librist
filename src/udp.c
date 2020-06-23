@@ -125,8 +125,13 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 	while (delete_count++ < 10) {
 		struct rist_buffer *b = ctx->sender_queue[ctx->sender_queue_delete_index];
 
+		/* our buffer size is zero, it must be just building up */
+		if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
+			break;
+		}
+		
 		size_t safety_counter = 0;
-		while (!b) {
+		while (!b && ((ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1)) != atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire)) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
 			// This should never happen!
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR,
@@ -135,11 +140,6 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 			b = ctx->sender_queue[ctx->sender_queue_delete_index];
 			if (safety_counter++ > 1000)
 				return;
-		}
-
-		/* our buffer size is zero, it must be just building up */
-		if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
-			break;
 		}
 
 		/* perform the deletion based on the buffer size plus twice the configured/measured avg_rtt */
