@@ -3,7 +3,7 @@
 # Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
 
 project('libRIST', 'c',
-	version: '3.0',
+	version: '0.2',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'])
 
 cc = meson.get_compiler('c')
@@ -15,8 +15,8 @@ cc = meson.get_compiler('c')
 #If any interfaces have been added since the last public release, then increment minor.
 #If any interfaces have been removed or changed since the last public release, then set micro to 0.
 librist_api_version_major = 3
-librist_api_version_minor = 1
-librist_api_version_patch = 1
+librist_api_version_minor = 0
+librist_api_version_patch = 0
 librist_version = '@0@.@1@.@2@'.format(librist_api_version_major, librist_api_version_minor, librist_api_version_patch)
 librist_soversion = librist_api_version_major - librist_api_version_patch
 
