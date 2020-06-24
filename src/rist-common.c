@@ -2950,14 +2950,14 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	struct rist_peer *peer, *next;
 	peer = ctx->common.PEERS;
 	for (;;) {
+		if (!peer)
+			break;
 		next = peer->next;
 		// Peers could be in shutdown already (deleted stale flows)
 		if (!peer->shutdown)
 			rist_shutdown_peer(peer);
 		free(peer);
 		peer = next;
-		if (!peer)
-			break;
 	}
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
 
