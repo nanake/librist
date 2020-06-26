@@ -313,7 +313,10 @@ int main(int argc, char *argv[])
 		if (!outputtoken)
 			break;
 
-		// First parse extra parameters (?miface=lo) and separate the address
+		// First parse extra parameters (?miface=lo&stream-id=1971) and separate the address
+		// We are using the rist_parse_address function to create a config object that does not really
+		// belong to the udp output. We do this only to avoid writing another parser for the two url
+		// parameters available to the udp input/output url
 		const struct rist_peer_config *peer_config_udp = NULL;
 		if (rist_parse_address(outputtoken, &peer_config_udp)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
@@ -339,6 +342,8 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}
+		// We use virt_dst_port from the config just because it is an alias to the stream-id, ideally
+		// the setting should be called virt_src_port but that one is not a peer level item
 		callback_object.virt_src_port[i] = peer_config_udp->virt_dst_port;
 
 next:

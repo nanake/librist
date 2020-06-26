@@ -71,6 +71,7 @@
 #define RIST_URL_PARAM_COMPRESSION "compression"
 #define RIST_URL_PARAM_CNAME "cname"
 #define RIST_URL_PARAM_VIRT_DST_PORT "virt-dst-port"
+#define RIST_URL_PARAM_STREAM_ID "stream-id"
 #define RIST_URL_PARAM_WEIGHT "weight"
 #define RIST_URL_PARAM_MIFACE "miface"
 #define RIST_URL_PARAM_SESSION_TIMEOUT "session-timeout"

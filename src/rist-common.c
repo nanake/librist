@@ -108,7 +108,8 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_peer_config->compression = temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0) {
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0 ||
+				strcmp( url_params[i].key, RIST_URL_PARAM_STREAM_ID ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
 					output_peer_config->virt_dst_port = (uint16_t)temp;
