@@ -18,7 +18,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <assert.h>
-#ifdef __linux
+#ifdef LINUX_CRYPTO
 #include <linux-crypto.h>
 #endif
 
@@ -217,7 +217,7 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 		}
 		fprintf(stderr, "\n");
 */
-#ifndef __linux
+#ifndef LINUX_CRYPTO
 		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
 #else
 		if (peer->cryptoctx)
@@ -401,7 +401,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			}
 			fprintf(stderr, "\n");
 	*/
-#ifndef __linux
+#ifndef LINUX_CRYPTO
 			aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
 				(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #else

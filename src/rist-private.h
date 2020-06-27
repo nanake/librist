@@ -25,7 +25,7 @@
 #include "librist.h"
 #include "udpsocket.h"
 #include "aes.h"
-#ifdef __linux
+#ifdef LINUX_CRYPTO
 #include "linux-crypto.h"
 #endif
 #include <errno.h>

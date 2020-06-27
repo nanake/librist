@@ -70,7 +70,6 @@ if host_machine.system() == 'linux'
 	deps += [ dependency('threads') ]
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
-	platform_files += 'contrib/linux-crypto.c'
 endif
 
 # Header checks
@@ -89,6 +88,11 @@ if not cc.check_header('stdatomic.h')
     else
         error('Atomics not supported')
     endif
+endif
+
+if cc.check_header('linux/if_alg.h')
+	add_project_arguments(['-DLINUX_CRYPTO'], language: 'c')
+	platform_files += 'contrib/linux-crypto.c'
 endif
 
 if host_machine.system() == 'windows'
