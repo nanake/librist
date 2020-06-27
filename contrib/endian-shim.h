@@ -45,12 +45,17 @@
 
 #else
 # include <endian.h>
-# if (__GLIBC__ < 2 || (__GLIBC__ == 2 && __GLIBC_MINOR__ < 9))
+# if !defined(htobe64)
 #  if __BYTE_ORDER == __LITTLE_ENDIAN
 #   define htobe64(x) __bswap_64(x)
-#   define be64toh(x) __bswap_64(x)
 #  else
 #   define htobe64(x) (x)
+#  endif
+# endif
+# if !defined(be64toh)
+#  if __BYTE_ORDER == __LITTLE_ENDIAN
+#   define be64toh(x) __bswap_64(x)
+#  else
 #   define be64toh(x) (x)
 #  endif
 # endif
