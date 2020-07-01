@@ -227,7 +227,7 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 
 	ctx->sender_queue_delete_index = 0;
 	ctx->sender_queue_max = RIST_SERVER_QUEUE_BUFFERS;
-	atomic_init(&ctx->sender_queue_write_index, 0);
+	atomic_init(&ctx->sender_queue_write_index, 1);
 	atomic_init(&ctx->sender_queue_read_index, 0);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Sender Library %s\n", LIBRIST_VERSION);
