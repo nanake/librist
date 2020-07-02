@@ -633,6 +633,7 @@ static int rist_sender_peer_create(struct rist_sender *ctx,
 			return -1;
 		}
 		peer_rtcp->peer_data = newpeer;
+		newpeer->peer_rtcp = peer_rtcp;
 		peer_append(peer_rtcp);
 		/* jumpstart communication */
 		rist_fsm_init_comm(peer_rtcp);

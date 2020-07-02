@@ -26,6 +26,7 @@
 
 static int signalReceived = 0;
 static struct rist_logging_settings *logging_settings;
+enum rist_profile profile = RIST_PROFILE_MAIN;
 
 static struct option long_options[] = {
 { "inputurl",        required_argument, NULL, 'i' },
@@ -80,7 +81,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	int i = 0;
 	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		// look for the correct mapping of source port to output
-		if (callback_object->virt_src_port[i] == 0 || (callback_object->virt_src_port[i] == b->virt_src_port)) {
+		if (profile == RIST_PROFILE_SIMPLE ||  callback_object->virt_src_port[i] == 0 || (callback_object->virt_src_port[i] == b->virt_src_port)) {
 			if (callback_object->mpeg[i] > 0) {
 				udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
 				found = 1;
@@ -155,7 +156,6 @@ int main(int argc, char *argv[])
 	int buffer = 0;
 	int encryption_type = 0;
 	struct rist_callback_object callback_object;
-	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 
