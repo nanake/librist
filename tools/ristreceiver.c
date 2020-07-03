@@ -63,7 +63,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	fprintf(stderr, "%s%s version %d.%d.%d.%s\n", help_str, cmd, LIBRIST_API_VERSION_MAJOR,
+	rist_log(logging_settings, RIST_LOG_INFO, "%s%s version %d.%d.%d.%s\n", help_str, cmd, LIBRIST_API_VERSION_MAJOR,
 		LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 	exit(1);
 }
@@ -212,9 +212,13 @@ int main(int argc, char *argv[])
 		break;
 		case 'v':
 			loglevel = atoi(optarg);
+			if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+				fprintf(stderr,"Failed to setup logging!\n");
+				exit(1);
+			}
 		break;
 		case 'u':
-			fprintf(stderr, "%s", help_urlstr);
+			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
 		case 'h':

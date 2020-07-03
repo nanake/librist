@@ -238,6 +238,7 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	if (logging_settings && logging_settings->log_level == RIST_LOG_SIMULATE)
 	{
 		ctx->simulate_loss = true;
+		rist_log_priv(&ctx->common, RIST_LOG_WARN, "RIST Sender has been configured with self-imposed packet loss (1 in 1000)\n");
 	}
 
 	if (logging_settings && logging_settings->log_level >= RIST_LOG_DEBUG)
