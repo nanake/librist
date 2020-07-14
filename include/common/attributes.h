@@ -53,6 +53,7 @@ struct __attribute__((packed)) sname sbody;
 #ifdef _WIN64
 #ifdef __GNUC__
 #ifndef __MINGW32__
+#define MSG_DONTWAIT (0)
 typedef long long ssize_t;
 enum
 {

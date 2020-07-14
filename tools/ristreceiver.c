@@ -345,6 +345,7 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			goto next;
 		} else {
+			udpsocket_set_nonblocking(callback_object.mpeg[i]);
 			rist_log(logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}

@@ -311,6 +311,7 @@ int main(int argc, char *argv[])
 				(char *) hostname, inputport, peer_config_udp->miface);
 			goto next;
 		} else {
+			udpsocket_set_nonblocking(callback_object[i].sd);
 			rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
 			atleast_one_socket_opened = true;
 		}

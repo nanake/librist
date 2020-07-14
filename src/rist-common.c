@@ -2209,7 +2209,7 @@ protocol_bypass:
 			if (cctx->auth.conn_cb) {
 				char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 				char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-				uint16_t port;
+				uint16_t port = 0;
 				uint16_t dummyport;
 				char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
 				char *parent_ip_string =

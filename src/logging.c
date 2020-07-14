@@ -150,6 +150,7 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to open logsocket\n");
 			return -1;
 		}
+		udpsocket_set_nonblocking(settings->log_socket);
 		return 0;
 	} else if (settings->log_socket) {
 		rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");

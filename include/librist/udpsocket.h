@@ -124,6 +124,7 @@ RIST_API int udpsocket_open_connect(const char *host, uint16_t port, const char 
 
 RIST_API int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *addr);
 
+RIST_API int udpsocket_set_nonblocking(int sd);
 RIST_API int udpsocket_send(int sd, const void *buf, size_t size);
 RIST_API int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port);
 RIST_API int udpsocket_recv(int sd, void *buf, size_t size);
