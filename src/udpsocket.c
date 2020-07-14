@@ -256,7 +256,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 
 int udpsocket_send(int sd, const void *buf, size_t size)
 {
-	return (int)send(sd, buf, size, 0);
+	return (int)send(sd, buf, size, MSG_DONTWAIT);
 }
 
 int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port)

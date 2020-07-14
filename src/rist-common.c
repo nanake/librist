@@ -1836,29 +1836,17 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
 		if (peer->address_family == AF_INET6) {
-			recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
+			recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
 			family = AF_INET6;
 			addr = (struct sockaddr *) &addr6;
 		} else {
-			recv_bufsize = recvfrom(peer->sd, (char *)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *)&addr4, &addrlen);
+			recv_bufsize = recvfrom(peer->sd, (char *)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)&addr4, &addrlen);
 			addr = (struct sockaddr *) &addr4;
 		}
 
 		if (recv_bufsize <= 0) {
-			// TODO: should we close these sockets? who reopens them?
-#if defined (__unix__) || defined(__APPLE__)
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Peer recvfrom returned zero bytes (%d), closing socket (%d)\n", recv_bufsize, peer->sd);
-			//udpsocket_close(peer->sd);
-#else
-			int neterror = WSAGetLastError();
-			// We get WSAECONNRESET on receive from the OS when we we have sent data and there is no receiver listening.
-			// i.e. the receiver OS sent back an ICMP packet to let the sender know the receiver is unavailable
-			// TODO: we can leverage this error to report on the GUI that we are not reaching the other side
-			if (neterror != WSAECONNRESET) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Peer recvfrom returned zero bytes (%d), closing socket (%d), error %d\n",
-						recv_bufsize, peer->sd, neterror);
-			}
-#endif
+			// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, fd);
 			return;
 		}
 

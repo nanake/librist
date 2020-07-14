@@ -83,7 +83,9 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 		// look for the correct mapping of source port to output
 		if (profile == RIST_PROFILE_SIMPLE ||  callback_object->virt_src_port[i] == 0 || (callback_object->virt_src_port[i] == b->virt_src_port)) {
 			if (callback_object->mpeg[i] > 0) {
-				udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
+				int ret = udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
+				if (ret <= 0 && errno != ECONNREFUSED)
+					rist_log(logging_settings, RIST_LOG_ERROR, "Error %d sending udp packet to socket %d\n", errno, callback_object->mpeg[i]);
 				found = 1;
 			}
 		}

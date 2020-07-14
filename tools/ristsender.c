@@ -87,11 +87,11 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	if (callback_object->address_family == AF_INET6) {
 		socklen_t addrlen = sizeof(struct sockaddr_in6);
-		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr6, &addrlen);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
 		//addr = (struct sockaddr *) &addr6;
 	} else {
 		socklen_t addrlen = sizeof(struct sockaddr_in);
-		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, 0, (struct sockaddr *) &addr4, &addrlen);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr4, &addrlen);
 		//addr = (struct sockaddr *) &addr4;
 	}
 
@@ -110,6 +110,11 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		int w = rist_sender_data_write(callback_object->ctx, &data_block);
 		// TODO: report error?
 		(void) w;
+	}
+	else
+	{
+		// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
+		rist_log(logging_settings, RIST_LOG_ERROR, "Input receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, callback_object->sd);
 	}
 }
 
