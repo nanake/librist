@@ -20,6 +20,7 @@
 #include <stdlib.h>
 
 #define AF_LOCAL AF_UNSPEC
+#define MSG_DONTWAIT (0)
 
 #define if_nametoindex(name)  atoi(name)
 
