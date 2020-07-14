@@ -43,7 +43,7 @@ typedef int socklen_t;
 #endif /* Windows / POSIX */
 
 /*** Public API ***/
-#define UDPSOCKET_SOCK_BUFSIZE 0x80000
+#define UDPSOCKET_SOCK_BUFSIZE (1048576)
 
 typedef struct udpsocket_url_param {
 	char *key;
@@ -68,10 +68,28 @@ RIST_API int udpsocket_open(uint16_t af);
 RIST_API int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface);
 
 /*
- * Explicitly set TX/RX buffer size for [sd] to [bufsize], in bytes.
+ * Try to set RX buffer to 1Mbyte and fallback to 256Kbytes if that fails
+ * Returns -1 on error, 0 on success.
+ */
+RIST_API int udpsocket_set_optimal_buffer_size(int sd);
+
+/*
+ * Try to set TX buffer to 1Mbyte and fallback to 256Kbytes if that fails
+ * Returns -1 on error, 0 on success.
+ */
+RIST_API int udpsocket_set_optimal_buffer_send_size(int sd);
+
+/*
+ * Explicitly set RX buffer size for [sd] to [bufsize], in bytes.
  * Returns -1 on error, 0 on success.
  */
 RIST_API int udpsocket_set_buffer_size(int sd, uint32_t bufsize);
+
+/*
+ * Explicitly set TX buffer size for [sd] to [bufsize], in bytes.
+ * Returns -1 on error, 0 on success.
+ */
+RIST_API int udpsocket_set_buffer_send_size(int sd, uint32_t bufsize);
 
 /*
  *
@@ -79,6 +97,13 @@ RIST_API int udpsocket_set_buffer_size(int sd, uint32_t bufsize);
  * Returns 0 on error, current RX bufsize on success.
  */
 RIST_API uint32_t udpsocket_get_buffer_size(int sd);
+
+/*
+ *
+ * Retrieve current TX buffer size for [sd].
+ * Returns 0 on error, current TX bufsize on success.
+ */
+RIST_API uint32_t udpsocket_get_buffer_send_size(int sd);
 
 /*
  * Explicitly set the mcast interface for the socket [sd] to [mciface] for address

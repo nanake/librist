@@ -670,13 +670,23 @@ void rist_create_socket(struct rist_peer *peer)
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
-	// Increase default OS buffer size
-	if (udpsocket_set_buffer_size(peer->sd, UDPSOCKET_SOCK_BUFSIZE)) {
-		rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Unable to set the socket buffer size to %d Bytes. %s\n",
+	// Increase default OS udp receive buffer size
+	if (udpsocket_set_optimal_buffer_size(peer->sd)) {
+		rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Unable to set the socket receive buffer size to %d Bytes. %s\n",
 			UDPSOCKET_SOCK_BUFSIZE, strerror(errno));
 	} else {
-		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Configured the starting socket buffer size to %d Bytes.\n",
-			UDPSOCKET_SOCK_BUFSIZE);
+		uint32_t current_recvbuf = udpsocket_get_buffer_size(peer->sd);
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Configured the starting socket receive buffer size to %d Bytes.\n",
+			current_recvbuf);
+	}
+	// Increase default OS udp send buffer size
+	if (udpsocket_set_optimal_buffer_send_size(peer->sd)) {
+		rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Unable to set the socket send buffer size to %d Bytes. %s\n",
+			UDPSOCKET_SOCK_BUFSIZE, strerror(errno));
+	} else {
+		uint32_t current_sendbuf = udpsocket_get_buffer_send_size(peer->sd);
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Configured the starting socket send buffer size to %d Bytes.\n",
+			current_sendbuf);
 	}
 
 	if (peer->cname[0] == 0)
