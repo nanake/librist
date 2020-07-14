@@ -273,7 +273,7 @@ static void rebuild_poll(struct evsocket_ctx *ctx)
 		e = e->next;
 	}
 
-	ctx->last_served = 0;
+	ctx->last_served = 1;
 	ctx->changed = 0;
 }
 
