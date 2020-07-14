@@ -592,6 +592,8 @@ static int rist_receiver_peer_create(struct rist_receiver *ctx,
 		p_rtcp->is_rtcp = true;
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Created RTCP peer: host %s, port %d, new_url %s, %" PRIu32 "\n", p_rtcp->url, p_rtcp->local_port, config->address, p_rtcp->adv_peer_id);
 
+		p->peer_rtcp = p_rtcp;
+
 		peer_append(p_rtcp);
 		/* jumpstart communication */
 		rist_fsm_init_comm(p_rtcp);
@@ -642,7 +644,7 @@ static int rist_sender_peer_create(struct rist_sender *ctx,
 		if (!peer_rtcp->listening)
 		{
 			sender_peer_append(ctx, peer_rtcp);
-			rist_fsm_recv_connect(peer_rtcp);
+			rist_peer_authenticate(peer_rtcp);
 		}
 	}
 	else
@@ -658,7 +660,7 @@ static int rist_sender_peer_create(struct rist_sender *ctx,
 	if (!newpeer->listening)
 	{
 		sender_peer_append(ctx, newpeer);
-		rist_fsm_recv_connect(newpeer);
+		rist_peer_authenticate(newpeer);
 	}
 
 	*peer = newpeer;

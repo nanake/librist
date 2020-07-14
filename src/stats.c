@@ -20,7 +20,7 @@ static double round_two_digits(double number)
 void rist_sender_peer_statistics(struct rist_peer *peer)
 {
 	// TODO: print warning here?? stale flow?
-	if (peer->state_local != RIST_PEER_STATE_CONNECT)
+	if (!peer->authenticated)
 	{
 		return;
 	}

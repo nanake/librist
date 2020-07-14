@@ -205,7 +205,7 @@ static void init_peer_settings(struct rist_peer *peer)
 		}
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-				"Peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
+				"New peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 				peer->adv_peer_id, peer->config.recovery_maxbitrate, peer->config.recovery_maxbitrate_return, peer->config.recovery_length_min, peer->config.recovery_length_max, peer->config.recovery_reorder_buffer,
 				peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.congestion_control_mode, peer->config.min_retries, peer->config.max_retries);
 	}
@@ -1003,10 +1003,8 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		p->remote_port = config->virt_dst_port + 1;
 	}
 
+	p->adv_peer_id = ++ctx->common.peer_counter;
 	store_peer_settings(config, p);
-
-	if (!p->listening)
-		p->adv_peer_id = ++ctx->common.peer_counter;
 
 	return p;
 }
@@ -1018,7 +1016,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 void rist_fsm_init_comm(struct rist_peer *peer)
 {
 
-	peer->state_peer = RIST_PEER_STATE_PING;
+	peer->authenticated = false;
 
 	if (!peer->receiver_mode) {
 		if (peer->listening) {
@@ -1041,7 +1039,7 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 					"Initialized Receiver Peer, connecting to sender ...\n");
 		}
 	}
-	peer->state_local = RIST_PEER_STATE_PING;
+	peer->authenticated = false;
 	rist_print_inet_info("Active ", peer);
 
 	/* Start the timer that reads data from this peer */
@@ -1107,19 +1105,16 @@ void rist_shutdown_peer(struct rist_peer *peer)
 		peer->url = NULL;
 	}
 
-	peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
-	peer->retries = 0;
+	peer->authenticated = false;
 
 }
 
-void rist_fsm_recv_connect(struct rist_peer *peer)
+void rist_peer_authenticate(struct rist_peer *peer)
 {
-	peer->state_peer = RIST_PEER_STATE_CONNECT;
-	peer->state_local = RIST_PEER_STATE_CONNECT;
+	peer->authenticated = true;
 
 	rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-			"Successfully authenticated to peer %"PRIu32", peer/local (%d/%d)\n",
-			peer->adv_peer_id, peer->state_peer, peer->state_local);
+			"Successfully Authenticated peer %"PRIu32"\n", peer->adv_peer_id);
 }
 
 void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw)
@@ -1214,7 +1209,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 				"Received nack packet on receiver, ignoring ...\n");
 		return;
-	} else if (peer->state_peer < RIST_PEER_STATE_CONNECT || peer->state_local < RIST_PEER_STATE_CONNECT) {
+	} else if (!peer->authenticated) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 				"Received nack packet but handshake is still pending, ignoring ...\n");
 		return;
@@ -1272,29 +1267,66 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 
 }
 
-static struct rist_peer *rist_find_rtcp_peer(struct rist_receiver *ctx, struct rist_flow *f, uint16_t data_port)
+static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flow_id)
 {
-	RIST_MARK_UNUSED(ctx);
-	uint16_t rtcp_port = data_port + 1;
-	for (size_t i = 0; i < f->peer_lst_len; i++) {
-		if (!f->peer_lst[i]->is_rtcp)
-			continue;
-		if (rtcp_port == f->peer_lst[i]->local_port) {
-			return f->peer_lst[i];
+	struct rist_receiver *ctx = peer->receiver_ctx;
+
+	if (ctx->common.profile == RIST_PROFILE_SIMPLE && !peer->authenticated)
+	{
+		//assert(0);
+		if (peer->parent->peer_rtcp->authenticated) {
+			peer->flow = peer->parent->peer_rtcp->flow;
+			peer->peer_rtcp = peer->parent->peer_rtcp;
+			peer->adv_flow_id = peer->parent->peer_rtcp->flow->flow_id;
+			rist_peer_authenticate(peer);
+			rist_log_priv(&ctx->common, RIST_LOG_INFO,
+				"Authenticated RTP peer %d and ssrc %"PRIu32" for connection with flowid %"PRIu32"\n",
+					peer->adv_peer_id, peer->adv_flow_id, peer->flow->flow_id);
+		} else {
+			rist_log_priv(&ctx->common, RIST_LOG_WARN,
+				"Received data packet but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n");
+			return false;
 		}
 	}
-	return NULL;
+	else if (ctx->common.profile > RIST_PROFILE_SIMPLE) {
+		if (!peer->authenticated) {
+			// rist_peer_authenticate is done during rtcp authentication (same peer)
+			rist_log_priv(&ctx->common, RIST_LOG_WARN,
+				"Received data packet but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n");
+			return false;
+		} else if (!peer->peer_rtcp) {
+			peer->peer_rtcp = peer;
+			rist_log_priv(&ctx->common, RIST_LOG_INFO,
+				"Authenticated RTP peer %d and ssrc %"PRIu32" for connection with flowid %"PRIu32"\n",
+					peer->adv_peer_id, peer->adv_flow_id, peer->peer_rtcp->adv_flow_id);
+		}
+	}
+
+	if (!peer->flow) {
+		rist_log_priv(&ctx->common, RIST_LOG_WARN,
+				"Received data packet but this peer (%d) is not associated with a flow, ignoring ...\n",
+				peer->adv_peer_id);
+		return false;
+	} else if (!peer->flow->authenticated) {
+		rist_log_priv(&ctx->common, RIST_LOG_WARN,
+				"Flow %"PRIu32" has not yet been authenticated by an RTCP peer, %"PRIu32"!\n", flow_id);
+		return false;
+	}
+
+	return true;
 }
 
-static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
-		uint32_t flow_id, struct rist_buffer *payload)
+static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq,
+		uint32_t flow_id)
 {
 	RIST_MARK_UNUSED(seq);
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
-	if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
-		// TODO: copy settings from special rtcp packet if it exists instead of peer parent (advanced mode)
+	if (!strlen(peer->receiver_name)) {
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+			"RTCP message does not have a cname, we cannot authenticate/allow this flow!\n");
+		return false;
 	}
 
 	// Check to see if this peer's flowid changed
@@ -1306,8 +1338,7 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 			uint32_t i = 0;
 			for (size_t j = 0; j < peer->flow->peer_lst_len; j++) {
 				if (peer->flow->peer_lst[j] == peer) {
-					rist_log_priv(&ctx->common, RIST_LOG_INFO,
-							"Removing peer from old flow (%"PRIu32")\n",
+					rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing peer from old flow (%"PRIu32")\n",
 							peer->flow->flow_id);
 				} else {
 					i++;
@@ -1327,17 +1358,16 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 					"Old flow deletion complete\n");
 		}
 		// Reset the peer parameters
-		peer->state_local = peer->state_peer = RIST_PEER_STATE_PING;
+		peer->authenticated = false;
 		peer->flow = NULL;
 	}
 
-	if (peer->state_peer < RIST_PEER_STATE_CONNECT || peer->state_local < RIST_PEER_STATE_CONNECT) {
+	if (!peer->authenticated) {
 
 		// the peer could already be part of a flow and it came back after timing out
 		if (!peer->flow) {
 			if (rist_receiver_associate_flow(peer, flow_id) != 1) {
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-						"Could not created/associate peer to flow.\n");
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created/associate peer to flow.\n");
 				return false;
 			}
 		}
@@ -1355,32 +1385,15 @@ static bool rist_receiver_authenticate(struct rist_peer *peer, uint32_t seq,
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Failed to detach from flow thread\n");
 				}
 			}
-
-			if (payload->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
-				if (peer->flow->authenticated) {
-					// This path is only taken by simple profile data peer
-					peer->peer_rtcp = rist_find_rtcp_peer(ctx, peer->flow, peer->local_port);
-					rist_fsm_recv_connect(peer);
-				} else
-					rist_log_priv(&ctx->common, RIST_LOG_WARN,
-							"Flow %"PRIu32" has not yet been authenticated by an RTCP peer!\n", flow_id);
-			}
-			else {
-				// Only RTCP messages can authenticate a stream ...
-				if (strlen(peer->receiver_name)) {
-					if (ctx->common.profile > RIST_PROFILE_SIMPLE)
-						peer->peer_rtcp = peer;
-					rist_fsm_recv_connect(peer);
-					peer->flow->authenticated = true;
-					rist_log_priv(&ctx->common, RIST_LOG_INFO,
-							"Authenticated peer %d and flow %"PRIu32" for connection with cname: %s\n",
-							peer->adv_peer_id, peer->adv_flow_id,
-							peer->receiver_name);
-				}
-				else {
-					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-							"RTCP message does not have a cname, we cannot authenticate/allow this flow!\n");
-				}
+			rist_peer_authenticate(peer);
+			peer->flow->authenticated = true;
+			rist_log_priv(&ctx->common, RIST_LOG_INFO,
+					"Authenticated RTCP peer %d and flow %"PRIu32" for connection with cname: %s\n",
+					peer->adv_peer_id, peer->adv_flow_id, peer->receiver_name);
+			if (ctx->common.profile == RIST_PROFILE_SIMPLE) {
+				peer->parent->flow = peer->flow;
+				peer->parent->flow->authenticated = true;
+				peer->parent->authenticated = true;
 			}
 		}
 	}
@@ -1399,33 +1412,8 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
-	if (peer->state_peer < RIST_PEER_STATE_CONNECT || peer->state_local < RIST_PEER_STATE_CONNECT) {
-		if (!rist_receiver_authenticate(peer, seq, flow_id, payload)) {
-			rist_log_priv(&ctx->common, RIST_LOG_WARN,
-					"Received data packet but handshake is still pending, ignoring ...\n");
-			return;
-		}
-	}
-
-	if (peer->retries > 0) {
-		rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but passphrase is wrong for this peer (%d), ignoring ...\n",
-				peer->adv_peer_id);
-		return;
-	} else if (peer->config.recovery_mode == RIST_RECOVERY_MODE_UNCONFIGURED) {
-		rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but no settings have been received for this peer (%d), ignoring ...\n",
-				peer->adv_peer_id);
-		return;
-	} else if (!peer->flow) {
-		rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but this peer (%d) is not associated with a flow, ignoring ...\n",
-				peer->adv_peer_id);
-		return;
-	} else if (!peer->peer_rtcp) {
-		rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but this peer (%d) does not have an associated rtcp channel, ignoring ...\n",
-				peer->adv_peer_id);
+	if (!rist_receiver_data_authenticate(peer, flow_id)) {
+		// Error logging happens inside the function
 		return;
 	}
 
@@ -1650,12 +1638,12 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					}
 					//}
 					if (peer->receiver_mode) {
-						if (rist_receiver_authenticate(peer, seq, flow_id, payload))
+						if (rist_receiver_rtcp_authenticate(peer, seq, flow_id))
 							rist_receiver_recv_rtcp(peer, seq, flow_id, payload->src_port, payload->dst_port);
 					} else if (peer->sender_ctx && peer->listening) {
 						// TODO: create rist_sender_recv_rtcp
-						if (peer->state_peer < RIST_PEER_STATE_CONNECT || peer->state_local < RIST_PEER_STATE_CONNECT) {
-							rist_fsm_recv_connect(peer);
+						if (!peer->authenticated) {
+							rist_peer_authenticate(peer);
 						}
 					}
 
@@ -1684,16 +1672,15 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		return;
 	}
 	else { //if (ctx->profile <= RIST_PROFILE_MAIN) {
-		//rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSent rctp message! peer/local (%d/%d)\n", peer->state_peer, peer->state_local);
 		if (peer->receiver_mode) {
 			rist_receiver_periodic_rtcp(peer);
 		} else {
 			rist_sender_periodic_rtcp(peer);
-			if (peer->echo_enabled)
-				rist_request_echo(peer);
+			//if (peer->echo_enabled)
+			//	rist_request_echo(peer);
 		}
 	}
-	}
+}
 
 	static inline bool equal_address(uint16_t family, struct sockaddr *A_, struct rist_peer *p)
 	{
@@ -2161,34 +2148,46 @@ protocol_bypass:
 		pthread_rwlock_unlock(peerlist_lock);
 
 		// Peer was not found, create a new one
-		if (peer->listening &&
-				(payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
+		if (peer->listening && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
 			/* No match, new peer creation when on listening mode */
-			uint32_t new_peer_id = ++cctx->peer_counter;
 			p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
+			p->adv_peer_id = ++cctx->peer_counter;
 			// Copy settings and init/update global variables that depend on settings
 			peer_copy_settings(peer, p);
 			if (cctx->profile == RIST_PROFILE_SIMPLE) {
-				p->remote_port = peer->remote_port;
+				if (peer->address_family == AF_INET) {
+					p->remote_port = htons(addr4.sin_port);
+				} else {
+					p->remote_port = htons(addr6.sin6_port);
+				}
 				p->local_port = peer->local_port;
 			}
 			else {
-				// TODO: what happens if the first packet is a keepalive??
+				// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
 				p->remote_port = payload.src_port;
 				p->local_port = payload.dst_port;
 			}
+			char peer_type[5];
+			char id_name[8];
+			if (peer->is_rtcp) {
+				strcpy(peer_type, "RTCP");
+				strcpy(id_name, "flow_id");
+			} else if (peer->is_data) {
+				strcpy(peer_type, "RTP");
+				strcpy(id_name, "ssrc");
+			}
 			if (peer->receiver_mode) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New RTCP peer connecting, flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-					flow_id, new_peer_id, p->local_port, p->remote_port);
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New %s peer connecting, %s %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+					&peer_type, &id_name, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
 				p->adv_flow_id = flow_id;
 			}
 			else {
 				if (flow_id) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse RTCP peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-							flow_id, new_peer_id, p->local_port, p->remote_port);
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+							&peer_type, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
 				} else {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse RTCP peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
-							new_peer_id, p->local_port, p->remote_port);
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
+							&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
 				}
 				p->adv_flow_id = p->sender_ctx->adv_flow_id;
 			}
@@ -2202,8 +2201,9 @@ protocol_bypass:
 			memcpy(&p->u.address, addr, addrlen);
 			p->sd = peer->sd;
 			p->parent = peer;
-			p->adv_peer_id = new_peer_id;
-			p->state_local = p->state_peer = RIST_PEER_STATE_PING;
+			p->authenticated = false;
+			// Copy the event handler reference to prevent the creation of a new one (they are per socket)
+			p->event_recv = peer->event_recv;
 
 			// Optional validation of connecting sender
 			if (cctx->auth.conn_cb) {
@@ -2217,6 +2217,9 @@ protocol_bypass:
 				if (!parent_ip_string){
 					parent_ip_string = "";
 				}
+				// Real source port vs virtual source port
+				if (cctx->profile == RIST_PROFILE_SIMPLE)
+					port = p->remote_port;
 				if (incoming_ip_string) {
 					if (cctx->auth.conn_cb(cctx->auth.arg,
 								incoming_ip_string,
@@ -2237,7 +2240,7 @@ protocol_bypass:
 					// only profile > simple
 					sender_peer_append(peer->sender_ctx, p);
 					// authenticate sender now that we have an address
-					rist_fsm_recv_connect(p);
+					rist_peer_authenticate(p);
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling reverse keepalive for peer %d\n", p->adv_peer_id);
 				}
 				p->send_keepalive = true;
@@ -2247,13 +2250,13 @@ protocol_bypass:
 		} else {
 			if (!p) {
 				if (payload.type != RIST_PAYLOAD_TYPE_DATA_RAW) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d/%d)\n",
-							 payload.type, peer->state_peer, peer->state_local);
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d)\n",
+							 payload.type, peer->authenticated);
 					rist_print_inet_info("Orphan ", peer);
 				}
 			} else {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tRogue rist_peer_recv %x (%d/%d)\n",
-						 payload.type, p->state_peer, p->state_local);
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tRogue rist_peer_recv %x (%d)\n",
+						 payload.type, p->authenticated);
 				rist_print_inet_info("Orphan ", p);
 			}
 		}
@@ -2868,7 +2871,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 	newpeer->cooldown_time = 0;
 	newpeer->is_rtcp = b_rtcp;
-	newpeer->adv_peer_id = ctx->common.peer_counter++;
+	newpeer->adv_peer_id = ++ctx->common.peer_counter;
 	newpeer->adv_flow_id = ctx->adv_flow_id;
 
 	store_peer_settings(config, newpeer);

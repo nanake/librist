@@ -456,11 +456,8 @@ struct rist_peer {
 
 	int sd;
 
-	/* States */
-	enum rist_peer_state state_local;
-	enum rist_peer_state state_peer;
-
-	uint32_t retries;
+	/* State */
+	bool authenticated;
 
 	/* Data sending */
 	uint32_t seq;
@@ -572,7 +569,7 @@ RIST_PRIV void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx 
 RIST_PRIV void rist_flush_missing_flow_queue(struct rist_flow *flow);
 
 /* defined in rist-common.c */
-RIST_PRIV void rist_fsm_recv_connect(struct rist_peer *peer);
+RIST_PRIV void rist_peer_authenticate(struct rist_peer *peer);
 RIST_PRIV void rist_shutdown_peer(struct rist_peer *peer);
 RIST_PRIV void rist_print_inet_info(char *prefix, struct rist_peer *peer);
 RIST_PRIV void rist_peer_rtcp(struct evsocket_ctx *ctx, void *arg);

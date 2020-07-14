@@ -1064,7 +1064,7 @@ peer_select:
 		if (!peer->is_data || peer->parent)
 			continue;
 
-		if ((!peer->listening && peer->state_local != RIST_PEER_STATE_CONNECT) || peer->dead
+		if ((!peer->listening && !peer->authenticated) || peer->dead
 			|| (peer->listening && !peer->child_alive_count)) {
 			ctx->weight_counter -= peer->config.weight;
 			if (ctx->weight_counter <= 0) {
@@ -1451,8 +1451,19 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 		snprintf(ipstr, INET6_ADDRSTRLEN, "%s", inet_ntoa(addr->sin_addr));
 	}
 
-	rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-		"%sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32", ports: %u->%u\n",
-		prefix, ipstr, port, peer->listening, peer->adv_peer_id,
-		peer->local_port, peer->remote_port);
+	struct rist_common_ctx *ctx = get_cctx(peer);
+	if (ctx->profile == RIST_PROFILE_SIMPLE)
+	{
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+			"%sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32", simple profile\n",
+			prefix, ipstr, port, peer->listening, peer->adv_peer_id);
+	}
+	else
+	{
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+			"%sPeer Information, IP:Port => %s:%u (%d), id: %"PRIu32", ports: %u->%u\n",
+			prefix, ipstr, port, peer->listening, peer->adv_peer_id,
+			peer->local_port, peer->remote_port);
+	}
+	
 }
