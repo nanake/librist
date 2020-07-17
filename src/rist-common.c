@@ -1277,14 +1277,15 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 		if (peer->parent->peer_rtcp->authenticated) {
 			peer->flow = peer->parent->peer_rtcp->flow;
 			peer->peer_rtcp = peer->parent->peer_rtcp;
-			peer->adv_flow_id = peer->parent->peer_rtcp->flow->flow_id;
+			peer->adv_flow_id = flow_id; // store the original ssrc here
 			rist_peer_authenticate(peer);
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
 				"Authenticated RTP peer %d and ssrc %"PRIu32" for connection with flowid %"PRIu32"\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->flow->flow_id);
 		} else {
 			rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n");
+				"Received data packet (%"PRIu32") but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n",
+					flow_id);
 			return false;
 		}
 	}
@@ -1292,10 +1293,12 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 		if (!peer->authenticated) {
 			// rist_peer_authenticate is done during rtcp authentication (same peer)
 			rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n");
+				"Received data packet (%"PRIu32") but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n",
+					flow_id);
 			return false;
 		} else if (!peer->peer_rtcp) {
 			peer->peer_rtcp = peer;
+			peer->adv_flow_id = flow_id; // store the original ssrc here
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
 				"Authenticated RTP peer %d and ssrc %"PRIu32" for connection with flowid %"PRIu32"\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->peer_rtcp->adv_flow_id);
