@@ -1836,7 +1836,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		if (recv_bufsize <= 0) {
 			// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, fd);
+			if (errno != EAGAIN)
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, fd);
 			return;
 		}
 
