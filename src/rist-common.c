@@ -3121,12 +3121,12 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	struct rist_peer *peer, *next;
 	peer = ctx->common.PEERS;
 	for (;;) {
+		if (!peer)
+			break;
 		next = peer->next;	
 		rist_shutdown_peer(peer);
 		free(peer);
 		peer = next;
-		if (!peer)
-			break;
 	}
 	free(ctx->peer_lst);
 	evsocket_destroy(ctx->common.evctx);
