@@ -1145,7 +1145,7 @@ void rist_shutdown_peer(struct rist_peer *peer)
 	peer->flow = NULL;
 
 	/* data receive event (only for listening peers, others have the pointer but are not listening) */
-	if (peer->listening && peer->event_recv) {
+	if (!peer->parent && peer->event_recv) {
 		rist_log_priv(ctx, RIST_LOG_INFO, "Removing peer data received event\n");
 		evsocket_delevent(ctx->evctx, peer->event_recv);
 		peer->event_recv = NULL;
