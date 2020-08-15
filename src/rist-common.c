@@ -2788,6 +2788,7 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	peer->config.max_retries = max_retries;
 	peer->config.weight = settings->weight;
 	peer->config.timing_mode = settings->timing_mode;
+	peer->config.virt_dst_port = settings->virt_dst_port;
 
 	init_peer_settings(peer);
 }
