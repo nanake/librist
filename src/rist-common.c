@@ -29,6 +29,76 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
 										struct rist_receiver *receiver_ctx);
 
+int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_config)
+{
+	uint32_t clean_url_len = 0;
+	char* query = NULL;
+	uint32_t prefix_len = 0;
+	struct udpsocket_url_param url_params[32];
+	int num_params = 0;
+	int i = 0;
+	int ret = 0;
+
+	if (!url || !url[0] || !output_udp_config)
+		return -1;
+
+	query = strchr( url, '/' );
+	if (query != NULL) {
+		prefix_len = (uint32_t)(query - url);
+		strncpy((void *)output_udp_config->prefix, url, prefix_len >= 16 ? 15 : prefix_len - 1);
+		output_udp_config->prefix[prefix_len] = '\0';
+		// Convert to lower
+		char *p =(char *)output_udp_config->prefix;
+		for(i = 0; i < 16; i++)
+			p[i] = p[i] > 0x40 && p[i] < 0x5b ? p[i] | 0x60 : p[i];
+		if (!strncmp(output_udp_config->prefix, "rtp", 3))
+			output_udp_config->rtp = true;
+		else
+			output_udp_config->rtp = false;
+	} else {
+		// default is udp
+		char src[] = "udp";
+		strcpy((void *)output_udp_config->prefix, src);
+		output_udp_config->rtp = false;
+	}
+
+	// Parse URL parameters
+	num_params = udpsocket_parse_url_parameters( url, url_params,
+			sizeof(url_params) / sizeof(struct udpsocket_url_param), &clean_url_len );
+	if (num_params > 0) {
+		for (i = 0; i < num_params; ++i) {
+			char* val = url_params[i].val;
+			if (!val)
+				continue;
+
+			if (strcmp( url_params[i].key, RIST_URL_PARAM_MIFACE ) == 0) {
+				strncpy((void *)output_udp_config->miface, val, 128-1);
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_STREAM_ID ) == 0) {
+				int temp = atoi( val );
+				if (temp > 0)
+					output_udp_config->stream_id = (uint16_t)temp;
+			} else if (output_udp_config->rtp && strcmp( url_params[i].key, RIST_URL_PARAM_RTP_TIMESTAMP ) == 0) {
+				int temp = atoi( val );
+				if (temp >= 0)
+					output_udp_config->rtp_timestamp = (uint16_t)temp;
+			} else if (output_udp_config->rtp && strcmp( url_params[i].key, RIST_URL_PARAM_RTP_SEQUENCE ) == 0) {
+				int temp = atoi( val );
+				if (temp >= 0)
+					output_udp_config->rtp_timestamp = (uint16_t)temp;
+			} else {
+				ret = -1;
+				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
+			}
+		}
+	}
+	strncpy((void *)output_udp_config->address, url, clean_url_len >= RIST_MAX_STRING_LONG ? RIST_MAX_STRING_LONG-1 : clean_url_len - 1);
+
+	if (ret != 0)
+		return num_params;
+	else
+		return 0;
+}
+
 int parse_url_options(const char* url, struct rist_peer_config *output_peer_config)
 {
 	uint32_t clean_url_len = 0;
@@ -108,8 +178,7 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_peer_config->compression = temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0 ||
-				strcmp( url_params[i].key, RIST_URL_PARAM_STREAM_ID ) == 0) {
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_VIRT_DST_PORT ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
 					output_peer_config->virt_dst_port = (uint16_t)temp;

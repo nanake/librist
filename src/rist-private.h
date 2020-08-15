@@ -579,6 +579,7 @@ RIST_PRIV PTHREAD_START_FUNC(sender_pthread_protocol, arg);
 RIST_PRIV PTHREAD_START_FUNC(receiver_pthread_protocol, arg);
 RIST_PRIV int rist_max_jitter_set(struct rist_common_ctx *ctx, int t);
 RIST_PRIV int parse_url_options(const char *url, struct rist_peer_config *output_peer_config);
+RIST_PRIV int parse_url_udp_options(const char *url, struct rist_udp_config *output_udp_config);
 RIST_PRIV struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 															const struct rist_peer_config *config);
 RIST_PRIV void rist_sender_destroy_local(struct rist_sender *ctx);

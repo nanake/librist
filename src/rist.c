@@ -526,36 +526,25 @@ const char *librist_version(void)
 	return LIBRIST_VERSION;
 }
 
-int rist_parse_udp_address(const char *url, const struct rist_peer_config **peer_config)
+int rist_parse_udp_address(const char *url, const struct rist_udp_config **udp_config)
 {
 
 	int ret = 0;
-	if (*peer_config == NULL)
+	if (*udp_config == NULL)
 	{
 		// Default options on new struct (specific for udp url)
-		struct rist_peer_config *output_peer_config = calloc(1, sizeof(struct rist_peer_config));
-		output_peer_config->version = RIST_PEER_CONFIG_VERSION;
-		output_peer_config->virt_dst_port = 0; // Accept all on receiver, auto-generate on sender
-		output_peer_config->recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
-		output_peer_config->recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
-		output_peer_config->recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
-		output_peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
-		output_peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
-		output_peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
-		output_peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
-		output_peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
-		output_peer_config->congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE;
-		output_peer_config->min_retries = RIST_DEFAULT_MIN_RETRIES;
-		output_peer_config->max_retries = RIST_DEFAULT_MAX_RETRIES;
-		ret = parse_url_options(url, output_peer_config);
-		*peer_config = output_peer_config;
+		struct rist_udp_config *output_udp_config = calloc(1, sizeof(struct rist_udp_config));
+		output_udp_config->version = RIST_UDP_CONFIG_VERSION;
+		output_udp_config->stream_id = 0; // Accept all on receiver, auto-generate on sender
+		ret = parse_url_udp_options(url, output_udp_config);
+		*udp_config = output_udp_config;
 	}
 	else
 	{
 		// Update incoming object with url data
-		struct rist_peer_config *existing_peer_config = (void *)*peer_config;
-		ret = parse_url_options(url, existing_peer_config);
-		*peer_config = existing_peer_config;
+		struct rist_udp_config *existing_udp_config = (void *)*udp_config;
+		ret = parse_url_udp_options(url, existing_udp_config);
+		*udp_config = existing_udp_config;
 	}
 
 	return ret;

@@ -38,6 +38,7 @@
 /* Track PROTOCOL and API changes */
 #define RIST_PEER_UDPSOCKET_VERSION (0)
 #define RIST_PEER_CONFIG_VERSION (0)
+#define RIST_UDP_CONFIG_VERSION (0)
 #define RIST_STATS_VERSION (0)
 
 /* Default peer config values */
@@ -71,7 +72,6 @@
 #define RIST_URL_PARAM_COMPRESSION "compression"
 #define RIST_URL_PARAM_CNAME "cname"
 #define RIST_URL_PARAM_VIRT_DST_PORT "virt-dst-port"
-#define RIST_URL_PARAM_STREAM_ID "stream-id"
 #define RIST_URL_PARAM_WEIGHT "weight"
 #define RIST_URL_PARAM_MIFACE "miface"
 #define RIST_URL_PARAM_SESSION_TIMEOUT "session-timeout"
@@ -86,6 +86,10 @@
 #define RIST_URL_PARAM_MIN_RETRIES "min-retries"
 #define RIST_URL_PARAM_MAX_RETRIES "max-retries"
 #define RIST_URL_PARAM_TIMING_MODE "timing-mode"
+/* udp specific parameters */
+#define RIST_URL_PARAM_STREAM_ID "stream-id"
+#define RIST_URL_PARAM_RTP_TIMESTAMP "rtp-timestamp"
+#define RIST_URL_PARAM_RTP_SEQUENCE "rtp-sequence"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT "virt-src-port"
 #define RIST_URL_PARAM_PROFILE "profile"
@@ -179,6 +183,27 @@ struct rist_oob_block
 	const void *payload;
 	size_t payload_len;
 	uint64_t ts_ntp;
+};
+
+struct rist_udp_config
+{
+	int version;
+
+	/* Communication parameters */
+	// If a value of 0 is specified for address family, the library
+	// will parse the address and populate all communication parameters.
+	// Alternatively, use either AF_INET or AF_INET6 and address will be
+	// treated like an IP address or hostname
+	int address_family;
+	int initiate_conn;
+	char address[RIST_MAX_STRING_LONG];
+	char miface[RIST_MAX_STRING_SHORT];
+	uint16_t physical_port;
+	char prefix[16];
+	int rtp_timestamp;
+	int rtp_sequence;
+	int rtp;
+	uint16_t stream_id;
 };
 
 struct rist_peer_config
