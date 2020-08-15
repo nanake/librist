@@ -485,6 +485,8 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
 	if (dst_port == 0)
 		dst_port = p->config.virt_dst_port;
+	if (src_port == 0)
+		src_port = 32768 + p->adv_peer_id;
 
 	if (p->sd < 0 || !p->address_len) {
 		rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "rist_send_common_rtcp failed\n");

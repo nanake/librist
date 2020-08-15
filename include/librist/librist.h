@@ -233,7 +233,7 @@ RIST_API int rist_start(struct rist_ctx *ctx);
 RIST_API int rist_destroy(struct rist_ctx *ctx);
 
 /**
- * @brief Parses url for peer config data (encryption, compression, etc)
+ * @brief Parses rist url for peer config data (encryption, compression, etc)
  *
  * Use this API to parse a generic URL string and turn it into a meaninful peer_config structure
  *
@@ -245,6 +245,20 @@ RIST_API int rist_destroy(struct rist_ctx *ctx);
  * of parameters that are valid
  */
 RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
+
+/**
+ * @brief Parses udp url for peer config data (multicast interface, stream-id, etc)
+ *
+ * Use this API to parse a generic URL string and turn it into a meaninful peer_config structure
+ *
+ * @param url a pointer to a url to be parsed, i.e. udp://myserver.net:1234?miface=eth0&stream-id=1968
+ * @param[out] peer_config a pointer to a the rist_peer_config structure (NULL is allowed).
+ * When passing NULL, the library will allocate a new rist_peer_config structure with the latest
+ * default values and it expects the application to free it when it is done using it.
+ * @return 0 on success or non-zero on error. The value returned is actually the number
+ * of parameters that are valid
+ */
+RIST_API int rist_parse_udp_address(const char *url, const struct rist_peer_config **peer_config);
 
 /**
  * @brief Set callback for receiving stats structs

@@ -324,7 +324,7 @@ int main(int argc, char *argv[])
 		// belong to the udp output. We do this only to avoid writing another parser for the two url
 		// parameters available to the udp input/output url
 		const struct rist_peer_config *peer_config_udp = NULL;
-		if (rist_parse_address(outputtoken, &peer_config_udp)) {
+		if (rist_parse_udp_address(outputtoken, &peer_config_udp)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
 		}
