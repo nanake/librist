@@ -148,7 +148,7 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 int main(int argc, char *argv[])
 {
 	int option_index;
-	char c;
+	int c;
 	int enable_data_callback = 1;
 	const struct rist_peer_config *peer_input_config[MAX_INPUT_COUNT];
 	char *inputurl = NULL;

@@ -232,7 +232,7 @@ int main (int argc, char **argv) {
 #endif
 
 	int option_index;
-	char c;
+	int c;
 	while ((c = (char)getopt_long(argc, argv, "i:o:s:e:N:v:S:h", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':

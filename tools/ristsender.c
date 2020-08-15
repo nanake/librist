@@ -182,7 +182,7 @@ static void intHandler(int signal) {
 int main(int argc, char *argv[])
 {
 	int rist;
-	char c;
+	int c;
 	int option_index;
 	struct rist_callback_object callback_object[MAX_INPUT_COUNT];
 	struct evsocket_event *event[MAX_INPUT_COUNT];
