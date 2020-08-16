@@ -35,8 +35,7 @@ static struct rist_logging_settings *logging_settings;
 struct rist_callback_object {
 	int sd;
 	struct rist_ctx *ctx;
-	uint16_t virt_src_port;
-	uint16_t address_family;
+	const struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE];
 };
 
@@ -86,7 +85,8 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	//struct sockaddr *addr;
 	uint8_t *recv_buf = callback_object->recv;
 
-	if (callback_object->address_family == AF_INET6) {
+	uint16_t address_family = (uint16_t)callback_object->udp_config->address_family;
+	if (address_family == AF_INET6) {
 		socklen_t addrlen = sizeof(struct sockaddr_in6);
 		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
 		//addr = (struct sockaddr *) &addr6;
@@ -100,7 +100,8 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		struct rist_data_block data_block;
 		data_block.payload = recv_buf;
 		data_block.payload_len = recv_bufsize;
-		data_block.virt_src_port = callback_object->virt_src_port;
+		// The stream-id is used as a demuxing filter based on the virtual source port of the GRE tunnel.
+		data_block.virt_src_port = callback_object->udp_config->stream_id;
 		// We should delegate population of the correct port to the lib as it needs
 		// to match the peer through which the data is being sent
 		data_block.virt_dst_port = 0;
@@ -125,7 +126,7 @@ static void input_udp_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 	RIST_MARK_UNUSED(evctx);
 	RIST_MARK_UNUSED(revents);
 	RIST_MARK_UNUSED(fd);
-	rist_log(logging_settings, RIST_LOG_ERROR, "Socket error on sd=%d, source-port=%d !\n", callback_object->sd, callback_object->virt_src_port);
+	rist_log(logging_settings, RIST_LOG_ERROR, "Socket error on sd=%d, stream-id=%d !\n", callback_object->sd, callback_object->udp_config->stream_id);
 }
 
 static void usage(char *cmd)
@@ -290,8 +291,8 @@ int main(int argc, char *argv[])
 		// We are using the rist_parse_address function to create a config object that does not really
 		// belong to the udp input. We do this only to avoid writing another parser for the two url
 		// parameters available to the udp input/output url
-		const struct rist_udp_config *peer_config_udp = NULL;
-		if (rist_parse_udp_address(inputtoken, &peer_config_udp)) {
+		const struct rist_udp_config *udp_config = NULL;
+		if (rist_parse_udp_address(inputtoken, &udp_config)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
 		}
@@ -300,32 +301,29 @@ int main(int argc, char *argv[])
 		char hostname[200] = {0};
 		int inputlisten;
 		uint16_t inputport;
-		if (udpsocket_parse_url((void *)peer_config_udp->address, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
+		if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
 			goto next;
 		}
 		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 
-		callback_object[i].sd = udpsocket_open_bind(hostname, inputport, peer_config_udp->miface);
+		callback_object[i].sd = udpsocket_open_bind(hostname, inputport, udp_config->miface);
 		if (callback_object[i].sd <= 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
-				(char *) hostname, inputport, peer_config_udp->miface);
+				(char *) hostname, inputport, udp_config->miface);
 			goto next;
 		} else {
 			udpsocket_set_nonblocking(callback_object[i].sd);
 			rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
 			atleast_one_socket_opened = true;
 		}
-		// The stream-id is used as a demuxing filter based on the virtual source port of the GRE tunnel.
-		callback_object[i].virt_src_port = peer_config_udp->stream_id;
 		callback_object[i].ctx = ctx;
-		callback_object[i].address_family = (uint16_t)peer_config_udp->address_family;
+		callback_object[i].udp_config = udp_config;
 
 		event[i] = evsocket_addevent(evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
 			(void *)&callback_object[i]);
 
 next:
-		free((void *)peer_config_udp);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
@@ -405,12 +403,15 @@ next:
 		evsocket_loop_single(evctx, -1, 100);
 	}
 
-	// Remove socket events
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
+		// Remove socket events
 		if (event[i])
 			evsocket_delevent(evctx, event[i]);
+		// Free udp_config object
+		if ((void *)callback_object[i].udp_config)
+			free((void *)(callback_object[i].udp_config));
 	}
-
+	
 	// Shut down sockets and rist contexts
 	evsocket_destroy(evctx);
 	rist_destroy(ctx);

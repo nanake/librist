@@ -70,7 +70,7 @@ static void usage(char *cmd)
 
 struct rist_callback_object {
 	int mpeg[MAX_OUTPUT_COUNT];
-	uint16_t virt_src_port[MAX_OUTPUT_COUNT];
+	const struct rist_udp_config *udp_config[MAX_OUTPUT_COUNT];
 };
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
@@ -80,8 +80,12 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	int found = 0;
 	int i = 0;
 	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
+		if (!callback_object->udp_config[i])
+			continue;
+		// The stream-id on the udp url gets translated into the virtual source port of the GRE tunnel
+		uint16_t virt_src_port = callback_object->udp_config[i]->stream_id;
 		// look for the correct mapping of source port to output
-		if (profile == RIST_PROFILE_SIMPLE ||  callback_object->virt_src_port[i] == 0 || (callback_object->virt_src_port[i] == b->virt_src_port)) {
+		if (profile == RIST_PROFILE_SIMPLE ||  virt_src_port == 0 || (virt_src_port == b->virt_src_port)) {
 			if (callback_object->mpeg[i] > 0) {
 				int ret = udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
 				if (ret <= 0 && errno != ECONNREFUSED)
@@ -164,7 +168,7 @@ int main(int argc, char *argv[])
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++)
 	{
 		callback_object.mpeg[i] = 0;
-		callback_object.virt_src_port[i] = 0;
+		callback_object.udp_config[i] = NULL;
 	}
 
 #ifdef _WIN32
@@ -323,8 +327,8 @@ int main(int argc, char *argv[])
 		// We are using the rist_parse_address function to create a config object that does not really
 		// belong to the udp output. We do this only to avoid writing another parser for the two url
 		// parameters available to the udp input/output url
-		const struct rist_udp_config *peer_config_udp = NULL;
-		if (rist_parse_udp_address(outputtoken, &peer_config_udp)) {
+		const struct rist_udp_config *udp_config = NULL;
+		if (rist_parse_udp_address(outputtoken, &udp_config)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
 		}
@@ -333,14 +337,14 @@ int main(int argc, char *argv[])
 		char hostname[200] = {0};
 		int outputlisten;
 		uint16_t outputport;
-		if (udpsocket_parse_url((void *)peer_config_udp->address, hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
+		if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse output url %s\n", outputtoken);
 			goto next;
 		}
 		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
 
 		// Open the output socket
-		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, peer_config_udp->miface);
+		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, udp_config->miface);
 		if (callback_object.mpeg[i] <= 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			goto next;
@@ -349,11 +353,9 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}
-		// The stream-id on the udp url gets translated into the virtual source port of the GRE tunnel
-		callback_object.virt_src_port[i] = peer_config_udp->stream_id;
+		callback_object.udp_config[i] = udp_config;
 
 next:
-		free((void *)peer_config_udp);
 		outputtoken = strtok_r(NULL, ",", &saveptr2);
 	}
 
@@ -397,6 +399,12 @@ next:
 	}
 
 	rist_destroy(ctx);
+
+	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
+		// Free udp_config object
+		if ((void *)callback_object.udp_config[i])
+			free((void *)(callback_object.udp_config[i]));
+	}
 
 	if (inputurl)
 		free(inputurl);
