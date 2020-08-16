@@ -226,13 +226,13 @@ struct rist_peer_config
 
 	/* Recovery options */
 	enum rist_recovery_mode recovery_mode;
-	uint32_t recovery_maxbitrate;
-	uint32_t recovery_maxbitrate_return;
-	uint32_t recovery_length_min;
-	uint32_t recovery_length_max;
-	uint32_t recovery_reorder_buffer;
-	uint32_t recovery_rtt_min;
-	uint32_t recovery_rtt_max;
+	uint32_t recovery_maxbitrate; /* kbps */
+	uint32_t recovery_maxbitrate_return; /* kbps */
+	uint32_t recovery_length_min; /* ms */
+	uint32_t recovery_length_max; /* ms */
+	uint32_t recovery_reorder_buffer; /* ms */
+	uint32_t recovery_rtt_min; /* ms */
+	uint32_t recovery_rtt_max; /* ms */
 
 	/* Load balancing weight (use 0 for duplication) */
 	uint32_t weight;
