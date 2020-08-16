@@ -77,14 +77,14 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				int temp = atoi( val );
 				if (temp > 0)
 					output_udp_config->stream_id = (uint16_t)temp;
-			} else if (output_udp_config->rtp && strcmp( url_params[i].key, RIST_URL_PARAM_RTP_TIMESTAMP ) == 0) {
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTP_TIMESTAMP ) == 0) {
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_udp_config->rtp_timestamp = (uint16_t)temp;
-			} else if (output_udp_config->rtp && strcmp( url_params[i].key, RIST_URL_PARAM_RTP_SEQUENCE ) == 0) {
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_RTP_SEQUENCE ) == 0) {
 				int temp = atoi( val );
 				if (temp >= 0)
-					output_udp_config->rtp_timestamp = (uint16_t)temp;
+					output_udp_config->rtp_sequence = (uint16_t)temp;
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
@@ -212,7 +212,7 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 					output_peer_config->max_retries = temp;
 			} else {
 				ret = -1;
-				fprintf(stderr, "Unknown parameter %s\n", url_params[i].key);
+				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
 			}
 		}
 	}

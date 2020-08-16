@@ -44,17 +44,17 @@ static struct option long_options[] = {
 };
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -i | --inputurl  rist://...           * | Comma separated list of input URLs                       |\n"
-"       -o | --outputurl udp://...            * | Comma separated list of output URLs                      |\n"
-"       -b | --buffer value                     | Default buffer size for packet retransmissions           |\n"
-"       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
-"       -e | --encryption-type TYPE             | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
-"       -p | --profile number                   | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
-"       -t | --tun IfName                       | TUN interface name for oob data output                   |\n"
-"       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
-"       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
-"       -h | --help                             | Show this help                                           |\n"
-"       -u | --help-url                         | Show all the possible url options                        |\n"
+"       -i | --inputurl  rist://...             * | Comma separated list of input rist URLs                  |\n"
+"       -o | --outputurl udp://... or rtp://... * | Comma separated list of output udp or rtp URLs           |\n"
+"       -b | --buffer value                       | Default buffer size for packet retransmissions           |\n"
+"       -s | --secret PWD                         | Default pre-shared encryption secret                     |\n"
+"       -e | --encryption-type TYPE               | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
+"       -p | --profile number                     | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
+"       -t | --tun IfName                         | TUN interface name for oob data output                   |\n"
+"       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
+"       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+"       -h | --help                               | Show this help                                           |\n"
+"       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
@@ -71,7 +71,31 @@ static void usage(char *cmd)
 struct rist_callback_object {
 	int mpeg[MAX_OUTPUT_COUNT];
 	const struct rist_udp_config *udp_config[MAX_OUTPUT_COUNT];
+	uint16_t i_seqnum[MAX_OUTPUT_COUNT];
 };
+
+static inline void risttools_rtp_set_hdr(uint8_t *p_rtp, uint8_t i_type, uint16_t i_seqnum, uint32_t i_timestamp, uint32_t i_ssrc)
+{
+	p_rtp[0] = 0x80;
+	p_rtp[1] = i_type & 0x7f;
+	p_rtp[2] = i_seqnum >> 8;
+	p_rtp[3] = i_seqnum & 0xff;
+    p_rtp[4] = (i_timestamp >> 24) & 0xff;
+    p_rtp[5] = (i_timestamp >> 16) & 0xff;
+    p_rtp[6] = (i_timestamp >> 8) & 0xff;
+    p_rtp[7] = i_timestamp & 0xff;
+	p_rtp[8] = (i_ssrc >> 24) & 0xff;
+	p_rtp[9] = (i_ssrc >> 16) & 0xff;
+	p_rtp[10] = (i_ssrc >> 8) & 0xff;
+	p_rtp[11] = i_ssrc & 0xff;
+}
+
+static uint32_t risttools_convertNTPtoRTP(uint64_t i_ntp)
+{
+	i_ntp *= 90000;
+	i_ntp = i_ntp >> 32;
+	return (uint32_t)i_ntp;
+}
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
 {
@@ -82,12 +106,31 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		if (!callback_object->udp_config[i])
 			continue;
+		const struct rist_udp_config *udp_config = callback_object->udp_config[i];
 		// The stream-id on the udp url gets translated into the virtual source port of the GRE tunnel
-		uint16_t virt_src_port = callback_object->udp_config[i]->stream_id;
+		uint16_t virt_src_port = udp_config->stream_id;
 		// look for the correct mapping of source port to output
 		if (profile == RIST_PROFILE_SIMPLE ||  virt_src_port == 0 || (virt_src_port == b->virt_src_port)) {
 			if (callback_object->mpeg[i] > 0) {
-				int ret = udpsocket_send(callback_object->mpeg[i], b->payload, b->payload_len);
+				uint8_t *payload = NULL;
+				size_t payload_len = 0;
+				if (udp_config->rtp) {
+					payload = malloc(12 + b->payload_len);
+					payload_len = 12 + b->payload_len;
+					// Transfer payload
+					memcpy(payload + 12, b->payload, b->payload_len);
+					// Set RTP header (mpegts)
+					uint16_t i_seqnum = udp_config->rtp_sequence ? (uint16_t)b->seq : callback_object->i_seqnum[i]++;
+					uint32_t i_timestamp = risttools_convertNTPtoRTP(b->ts_ntp);
+					risttools_rtp_set_hdr(payload, 0x21, i_seqnum, i_timestamp, b->flow_id);
+				}
+				else {
+					payload = (uint8_t *)b->payload;
+					payload_len = b->payload_len;
+				}
+				int ret = udpsocket_send(callback_object->mpeg[i], payload, payload_len);
+				if (udp_config->rtp)
+					free(payload);
 				if (ret <= 0 && errno != ECONNREFUSED)
 					rist_log(logging_settings, RIST_LOG_ERROR, "Error %d sending udp packet to socket %d\n", errno, callback_object->mpeg[i]);
 				found = 1;

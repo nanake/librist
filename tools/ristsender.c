@@ -55,22 +55,33 @@ static struct option long_options[] = {
 };
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -i | --inputurl  udp://...            * | Comma separated list of input udp URLs                   |\n"
-"       -o | --outputurl rist://...           * | Comma separated list of output rist URLs                 |\n"
-"       -b | --buffer value                     | Default buffer size for packet retransmissions           |\n"
-"       -s | --secret PWD                       | Default pre-shared encryption secret                     |\n"
-"       -e | --encryption-type TYPE             | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
-"       -p | --profile number                   | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
-"       -t | --tun IfName                       | TUN interface name for oob data input                    |\n"
-"       -S | --statsinterval value (ms)         | Interval at which stats get printed, 0 to disable        |\n"
-"       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
-"       -h | --help                             | Show this help                                           |\n"
-"       -u | --help-url                         | Show all the possible url options                        |\n"
+"       -i | --inputurl  udp://... or rtp://... * | Comma separated list of input udp or rtp URLs            |\n"
+"       -o | --outputurl rist://...             * | Comma separated list of output rist URLs                 |\n"
+"       -b | --buffer value                       | Default buffer size for packet retransmissions           |\n"
+"       -s | --secret PWD                         | Default pre-shared encryption secret                     |\n"
+"       -e | --encryption-type TYPE               | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
+"       -p | --profile number                     | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
+"       -t | --tun IfName                         | TUN interface name for oob data input                    |\n"
+"       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
+"       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+"       -h | --help                               | Show this help                                           |\n"
+"       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
 "       --stats 1000              \\\n"
 "       --verbose-level 6         \n";
+
+/*
+static uint64_t risttools_convertRTPtoNTP(uint32_t i_rtp)
+{
+	uint64_t i_ntp;
+    int32_t clock = 90000;
+    i_ntp = (uint64_t)i_rtp << 32;
+    i_ntp /= clock;
+	return i_ntp;
+}
+*/
 
 static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
@@ -97,18 +108,36 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	}
 
 	if (recv_bufsize > 0) {
+		ssize_t offset = 0;
 		struct rist_data_block data_block;
-		data_block.payload = recv_buf;
-		data_block.payload_len = recv_bufsize;
 		// The stream-id is used as a demuxing filter based on the virtual source port of the GRE tunnel.
 		data_block.virt_src_port = callback_object->udp_config->stream_id;
 		// We should delegate population of the correct port to the lib as it needs
 		// to match the peer through which the data is being sent
 		data_block.virt_dst_port = 0;
-		// Delegate this to the library since we do not have a real timestamp for it
+		// Delegate ts_ntp to the library ny default.
 		// If we wanted to be more accurate, we could use the kernel nic capture timestamp (linux)
 		data_block.ts_ntp = 0;
 		data_block.flags = 0;
+		if (callback_object->udp_config->rtp_timestamp && recv_bufsize > 12)
+		{
+			// Extract timestamp from rtp header
+			//uint32_t rtp_time = (recv_buf[4] << 24) | (recv_buf[5] << 16) | (recv_buf[6] << 8) | recv_buf[7];
+			// Convert to NTP (assumes 90Khz)
+			//data_block.ts_ntp = risttools_convertRTPtoNTP(rtp_time);
+			// TODO: Figure out why this does not work (commenting out for now)
+		}
+		if (callback_object->udp_config->rtp_sequence && recv_bufsize > 12)
+		{
+			// Extract sequence number from rtp header
+			//data_block.seq = (uint64_t)((recv_buf[2] << 8) | recv_buf[3]);
+			//data_block.flags = RIST_DATA_FLAGS_USE_SEQ;
+			// TODO: Figure out why this does not work (commenting out for now)
+		}
+		if (callback_object->udp_config->rtp && recv_bufsize > 12)
+			offset = 12; // TODO: check for header extensions and remove them as well
+		data_block.payload = recv_buf + offset;
+		data_block.payload_len = recv_bufsize - offset;
 		int w = rist_sender_data_write(callback_object->ctx, &data_block);
 		// TODO: report error?
 		(void) w;
