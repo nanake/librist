@@ -75,7 +75,7 @@ VideoLAN will only have the collective work rights.
 
 The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this project.
 
-# Compile using meson/nija (linux, osx and windows-mingw)
+# Compile using meson/ninja (linux, osx and windows-mingw)
 
 1. Install [Meson](https://mesonbuild.com/) (0.47 or higher), [Ninja](https://ninja-build.org/)
 2. Alternatively, use "pip3 install meson" and "pip3 install ninja" to install them
@@ -83,7 +83,7 @@ The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this pr
 4. Run `meson ..` to configure meson, add `--default-library=static` if static linking is desired
 5. Run `ninja` to compile
 
-# Compile using meson/nija (windows - Visual Studio 2019)
+# Compile using meson/ninja (windows - Visual Studio 2019)
 
 1. Open a cmd window and type "pip3 install meson" to install meson through Python Package Index
 2. Run x64 Native Tools Command Prompt for VS 2019.exe
@@ -106,7 +106,7 @@ This company can provide support and integration help, should you need it.
 
 - Although SRT provides a similar solution, it is the result of the vision and design of a single company. librist on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, rist has been based on clear and open standards.
 
-## Is librist a recursive acronym?
+## Is librist an acronym?
 
 - Yes, libRIST stands for Library - Reliable Internet Stream Transport
 
@@ -130,4 +130,4 @@ This company can provide support and integration help, should you need it.
 
 - We have included command line utilities for windows/linux/osx inside this project. They are compiled and placed into the tools folder under the build folder.
 
-- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/librist/-/wikis/tools
+- The Wiki has good information on the use of these utilities https://code.videolan.org/rist/librist/-/wikis/LibRIST%20Documentation
