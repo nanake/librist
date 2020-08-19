@@ -138,6 +138,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
 	{
 		struct rist_peer *peer = flow->peer_lst[i];
+		if (!peer->is_data)
+			peer = peer->peer_data;
 		uint32_t avg_rtt = (peer->eight_times_rtt / 8);
 		uint32_t bitrate;
 		size_t eight_times_bitrate;
