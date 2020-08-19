@@ -1364,18 +1364,31 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 			peer->flow = peer->parent->peer_rtcp->flow;
 			/* find correct rtcp */
 			peer->peer_rtcp = NULL;
-			struct rist_peer *tmp = ctx->common.PEERS;
+			struct rist_peer *tmp = peer->parent->peer_rtcp->child;
+			uint16_t rtcp_port = peer->local_port+1;
 			while (tmp) {
 				if (tmp->is_rtcp) {
-					if (peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
+					if (tmp->local_port == rtcp_port && peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
 						peer->peer_rtcp = tmp;
 						tmp->peer_data = peer;
 						break;
 					}
 				}
-				tmp = tmp->next;
+				tmp = tmp->sibling_next;
 			}
-			assert(peer->peer_rtcp != NULL);
+			if (!peer->peer_rtcp) {
+				tmp = peer->parent->peer_rtcp->child;
+				while (tmp) {
+					if (tmp->is_rtcp) {
+						if (tmp->local_port == rtcp_port && address_compare(&peer->u.address, &tmp->u.address)) {
+							peer->peer_rtcp = tmp;
+							tmp->peer_data = peer;
+							break;
+						}
+					}
+					tmp = tmp->sibling_next;
+				}
+			}
 			peer->adv_flow_id = flow_id; // store the original ssrc here
 			rist_peer_authenticate(peer);
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
