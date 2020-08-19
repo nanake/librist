@@ -1336,6 +1336,22 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 
 }
 
+static bool address_compare(struct sockaddr* addr1, struct sockaddr* addr2) {
+	if (addr1->sa_family != addr2->sa_family)
+		return false;
+	if (addr1->sa_family == AF_INET) {
+		struct sockaddr_in *sa, *sb;
+		sa = (struct sockaddr_in *)addr1;
+		sb = (struct sockaddr_in *)addr2;
+		return !(sa->sin_addr.s_addr - sb->sin_addr.s_addr);
+	} else if (addr1->sa_family == AF_INET6) {
+		struct sockaddr_in6 *sa, *sb;
+		sa = (struct sockaddr_in6 *)addr1;
+		sb = (struct sockaddr_in6 *)addr2;
+		return !(memcmp(&sa->sin6_addr, &sb->sin6_addr, sizeof(sa->sin6_addr)));
+	}
+}
+
 static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flow_id)
 {
 	struct rist_receiver *ctx = peer->receiver_ctx;
@@ -1345,7 +1361,20 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 		//assert(0);
 		if (peer->parent->peer_rtcp->authenticated) {
 			peer->flow = peer->parent->peer_rtcp->flow;
-			peer->peer_rtcp = peer->parent->peer_rtcp;
+			/* find correct rtcp */
+			peer->peer_rtcp = NULL;
+			struct rist_peer *tmp = ctx->common.PEERS;
+			while (tmp) {
+				if (tmp->is_rtcp) {
+					if (peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
+						peer->peer_rtcp = tmp;
+						tmp->peer_data = peer;
+						break;
+					}
+				}
+				tmp = tmp->next;
+			}
+			assert(peer->peer_rtcp != NULL);
 			peer->adv_flow_id = flow_id; // store the original ssrc here
 			rist_peer_authenticate(peer);
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,

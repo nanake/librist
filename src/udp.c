@@ -1014,6 +1014,8 @@ void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
 	// Loop through all peers for the flow and empty the queues
 	for (size_t j = 0; j < f->peer_lst_len; j++) {
 		struct rist_peer *outputpeer = f->peer_lst[j];
+		if (!outputpeer->is_data)
+			outputpeer = outputpeer->peer_data;
 		if (outputpeer->nacks.counter > 0) {
 			rist_send_peer_nacks(f, outputpeer);
 		}
