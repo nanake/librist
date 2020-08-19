@@ -1350,6 +1350,7 @@ static bool address_compare(struct sockaddr* addr1, struct sockaddr* addr2) {
 		sb = (struct sockaddr_in6 *)addr2;
 		return !(memcmp(&sa->sin6_addr, &sb->sin6_addr, sizeof(sa->sin6_addr)));
 	}
+	return false;
 }
 
 static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flow_id)
