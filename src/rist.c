@@ -36,6 +36,7 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 		goto fail;
 
 	ctx->common.logging_settings = logging_settings;
+	ctx->common.stats_report_time = (uint64_t)1000 * (uint64_t)RIST_CLOCK;
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Receiver Library version:%s \n", LIBRIST_VERSION);
 
@@ -502,10 +503,10 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 	{
 		return -1;
 	}
-	cctx->stats_callback = stats_cb;
-	cctx->stats_callback_argument = arg;
 	if (statsinterval != 0)
 	{
+		cctx->stats_callback = stats_cb;
+		cctx->stats_callback_argument = arg;
 		cctx->stats_report_time = statsinterval * RIST_CLOCK;
 		if (ctx->mode == RIST_RECEIVER_MODE)
 		{
@@ -517,6 +518,7 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 			}
 		}
 	}
+
 	return 0;
 }
 

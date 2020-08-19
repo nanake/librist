@@ -373,11 +373,9 @@ next:
 		}
 	}
 
-	if (statsinterval) {
-		if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
-			exit(1);
-		}
+	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		exit(1);
 	}
 
 	char *saveptr2;
