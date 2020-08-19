@@ -510,10 +510,6 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 	if (RIST_UNLIKELY(!cctx))
 		return -1;
 
-	if (stats_cb == NULL)
-	{
-		return -1;
-	}
 	if (statsinterval != 0)
 	{
 		cctx->stats_callback = stats_cb;
