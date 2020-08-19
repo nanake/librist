@@ -22,6 +22,11 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 		rist_log_priv2(logging_settings, RIST_LOG_ERROR, "Could not create ctx object, OOM!\n");
 		return -1;
 	}
+	if (profile == RIST_PROFILE_ADVANCED)
+	{
+		rist_log_priv2(logging_settings, RIST_LOG_WARN, "Advanced profile not implemented yet, using main profile instead\n");
+		profile = RIST_PROFILE_MAIN;
+	}
 	struct rist_receiver *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
 	{
@@ -174,6 +179,12 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	if (!logging_settings)
 		logging_settings = rist_get_global_logging_settings();
 	int ret;
+
+	if (profile == RIST_PROFILE_ADVANCED)
+	{
+		rist_log_priv2(logging_settings, RIST_LOG_WARN, "Advanced profile not implemented yet, using main profile instead\n");
+		profile = RIST_PROFILE_MAIN;
+	}
 
 	if (flow_id % 2 != 0)
 	{
