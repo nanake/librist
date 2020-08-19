@@ -1725,9 +1725,11 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 				struct rist_rtcp_sr_pkt *sr = (struct rist_rtcp_sr_pkt *)pkt;
 				rist_handle_sr_pkt(peer, sr);
 				break;
-
+			case PTYPE_XR:
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "RTCP XR not supported\n");
+				break;
 			default:
-				rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Unrecognized RTCP packet with PTYPE=%02x!!\n", ptype);
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Unrecognized RTCP packet with PTYPE=%02x!!\n", ptype);
 		}
 		processed_bytes += bytes;
 	}

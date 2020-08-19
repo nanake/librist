@@ -33,6 +33,7 @@
 #define PTYPE_SR 200
 #define PTYPE_RR 201
 #define PTYPE_SDES 202
+#define PTYPE_XR 207
 #define PTYPE_NACK_CUSTOM  204
 #define PTYPE_NACK_BITMASK 205
 
