@@ -65,10 +65,12 @@ else
 endif
 
 test_args = []
+threads = []
 if host_machine.system() == 'linux'
     test_args += '-D_GNU_SOURCE'
 	add_project_arguments(['-D_GNU_SOURCE'], language: 'c')
-	deps += [ dependency('threads') ]
+	threads = [ dependency('threads') ]
+	deps += threads
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
 	if cc.check_header('linux/if_alg.h')
