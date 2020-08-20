@@ -9,7 +9,7 @@ struct rist_logging_settings *logging_settings;
 
 int log_callback(void *arg, int level, const char *msg) {
     RIST_MARK_UNUSED(arg);
-    if (level <= RIST_LOG_NOTICE)
+    //if (level <= RIST_LOG_NOTICE)
         fprintf(stderr, "%s", msg);
     if (level <= RIST_LOG_ERROR) {
         atomic_store(&failed, 1);
@@ -78,7 +78,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
     struct rist_data_block data;
     /* we just try to send some string at ~20mbs for ~8 seconds */
     while (send_counter < 16000) {
-        if (atomic_load(&stop)) 
+        if (atomic_load(&stop))
             break;
         sprintf(buffer, "DEADBEAF TEST PACKET #%i", send_counter);
         data.payload = &buffer;
@@ -91,7 +91,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
         }
         send_counter++;
         usleep(500);
-        
+
     }
     usleep(1500);
     atomic_store(&stop, 1);
@@ -112,7 +112,7 @@ int main(int argc, char *argv[]) {
 
     atomic_init(&failed, 0);
     atomic_init(&stop, 0);
-    
+
 
     fprintf(stderr, "Testing profile %i with receiver url %s and sender url %s and losspercentage: %i\n", profile, url1, url2, losspercent);
 
@@ -135,7 +135,7 @@ int main(int argc, char *argv[]) {
         fprintf(stderr, "Could not start send data thread\n");
         exit(1);
     }
-			
+
     const struct rist_data_block *b;
     char rcompare[1316];
     int receive_count = 1;
@@ -145,8 +145,10 @@ int main(int argc, char *argv[]) {
             break;
         int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
         if (queue_length) {
-            if (!got_first)
+            if (!got_first) {
                 receive_count = (int)b->seq;
+				got_first = true;
+			}
             sprintf(rcompare, "DEADBEAF TEST PACKET #%i", receive_count);
             if (strcmp(rcompare, b->payload)) {
                 fprintf(stderr, "Packet contents not as expected!\n");
@@ -159,7 +161,11 @@ int main(int argc, char *argv[]) {
             receive_count++;
         }
     }
+	if (!got_first || receive_count < 12500)
+		failed = true;
     if (atomic_load(&failed))
-        return -1;
+		return -1;
+
+	fprintf(stderr, "OK\n");
     return 0;
 }
