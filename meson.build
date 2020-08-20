@@ -4,7 +4,8 @@
 
 project('libRIST', 'c',
 	version: '0.2',
-	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'])
+	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
+        meson_version: '>= 0.47.0')
 
 cc = meson.get_compiler('c')
 
