@@ -9,12 +9,15 @@ risttest_deps = [
 risttest_lib_deps = [
     librist
 ]
+comockatests = cmocka.found()
 if cmocka.found()
+    
     risttest = executable('risttest',
                             risttest_sources,
                             include_directories : inc,
                             dependencies : [risttest_deps,test_deps],
                             link_with : [risttest_lib_deps, test_dep_libs])
+                            
 endif
 
 test_send_receive = executable('test_send_receive', 
@@ -26,7 +29,9 @@ test_send_receive = executable('test_send_receive',
                                 ])
 
 
-test('rist test', risttest)
+if comockatests
+    test('rist test', risttest)
+endif
 
 ###Simple profile tests
 #Unicast
