@@ -12,8 +12,8 @@ int log_callback(void *arg, int level, const char *msg) {
     if (level <= RIST_LOG_NOTICE)
         fprintf(stderr, "%s", msg);
     if (level <= RIST_LOG_ERROR) {
-        failed = 1;
-        stop = 1;
+        atomic_store(&failed, 1);
+        atomic_store(&stop, 1);
     }
     return 0;
 }
@@ -78,15 +78,15 @@ static PTHREAD_START_FUNC(send_data, arg) {
     struct rist_data_block data;
     /* we just try to send some string at ~20mbs for ~8 seconds */
     while (send_counter < 16000) {
-        if (stop) 
+        if (atomic_load(&stop)) 
             break;
         sprintf(buffer, "DEADBEAF TEST PACKET #%i", send_counter);
         data.payload = &buffer;
         data.payload_len = 1316;
         if (rist_sender_data_write(rist_sender, &data) != 0) {
             fprintf(stderr, "Failed to send test packet!\n");
-            failed = 1;
-            stop = 1;
+            atomic_store(&failed, 1);
+            atomic_store(&stop, 1);
             break;
         }
         send_counter++;
@@ -94,7 +94,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
         
     }
     usleep(1500);
-    stop = 1;
+    atomic_store(&stop, 1);
     return 0;
 }
 
@@ -141,25 +141,25 @@ int main(int argc, char *argv[]) {
     int receive_count = 1;
     bool got_first = false;
     while (receive_count < 16000) {
-        if (stop)
+        if (atomic_load(&stop))
             break;
         int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
         if (queue_length) {
             if (!got_first)
-                receive_count = b->seq;
+                receive_count = (int)b->seq;
             sprintf(rcompare, "DEADBEAF TEST PACKET #%i", receive_count);
             if (strcmp(rcompare, b->payload)) {
                 fprintf(stderr, "Packet contents not as expected!\n");
                 fprintf(stderr, "Got : %s\n", (char*)b->payload);
                 fprintf(stderr, "Expected : %s\n", (char*)rcompare);
-                failed = 1;
-                stop = 1;
+                atomic_store(&failed, 1);
+                atomic_store(&stop, 1);
                 break;
             }
             receive_count++;
         }
     }
-    if (failed)
+    if (atomic_load(&failed))
         return -1;
     return 0;
 }
