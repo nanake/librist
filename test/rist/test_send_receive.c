@@ -23,24 +23,24 @@ struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
     struct rist_ctx *ctx;
 	if (rist_receiver_create(&ctx, profile, logging_settings) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
-		exit(1);
+		exit(99);
 	}
     // Rely on the library to parse the url
     const struct rist_peer_config *peer_config = NULL;
     if (rist_parse_address(url, (void *)&peer_config))
     {
         rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver\n");
-        exit(1);
+        exit(99);
     }
     struct rist_peer *peer;
     if (rist_peer_create(ctx, &peer, peer_config) == -1) {
         rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver\n");
-        exit(1);
+        exit(99);
     }
     free((void *)peer_config);
 	if (rist_start(ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
-		exit(1);
+		exit(99);
 	}
     return ctx;
 
@@ -50,24 +50,24 @@ struct rist_ctx *setup_rist_sender(int profile, const char *url) {
     struct rist_ctx *ctx;
     if (rist_sender_create(&ctx, profile, 0, logging_settings) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
-		exit(1);
+		exit(99);
 	}
 
     const struct rist_peer_config *peer_config_link = NULL;
     if (rist_parse_address(url, (void *)&peer_config_link))
     {
         rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
-        exit(1);
+        exit(99);
     }
 
     struct rist_peer *peer;
     if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
         rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
-        exit(1);
+        exit(99);
     }
 	if (rist_start(ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
-		exit(1);
+		exit(99);
 	}
     return ctx;
 }
@@ -101,7 +101,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
 
 int main(int argc, char *argv[]) {
     if (argc != 5) {
-        exit(1);
+        exit(99);
     }
     int profile = atoi(argv[1]);
     char *url1 = strdup(argv[2]);
@@ -165,7 +165,7 @@ int main(int argc, char *argv[]) {
 	if (!got_first || receive_count < 12500)
 		atomic_store(&failed, 1);
     if (atomic_load(&failed))
-		return -1;
+		return 1;
 
 	fprintf(stdout, "OK\n");
     return 0;
