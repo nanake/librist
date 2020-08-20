@@ -9,9 +9,10 @@ struct rist_logging_settings *logging_settings;
 
 int log_callback(void *arg, int level, const char *msg) {
     RIST_MARK_UNUSED(arg);
-    //if (level <= RIST_LOG_NOTICE)
-        fprintf(stderr, "%s", msg);
+    if (level > RIST_LOG_ERROR)
+        fprintf(stdout, "%s", msg);
     if (level <= RIST_LOG_ERROR) {
+		fprintf(stderr, "%s", msg);
         atomic_store(&failed, 1);
         atomic_store(&stop, 1);
     }
@@ -105,7 +106,7 @@ int main(int argc, char *argv[]) {
     int profile = atoi(argv[1]);
     char *url1 = strdup(argv[2]);
     char *url2 = strdup(argv[3]);
-    int losspercent = atoi(argv[4]);
+    int losspercent = atoi(argv[4]) * 10;
 
     struct rist_ctx *receiver_ctx;
     struct rist_ctx *sender_ctx;
@@ -114,7 +115,7 @@ int main(int argc, char *argv[]) {
     atomic_init(&stop, 0);
 
 
-    fprintf(stderr, "Testing profile %i with receiver url %s and sender url %s and losspercentage: %i\n", profile, url1, url2, losspercent);
+    fprintf(stdout, "Testing profile %i with receiver url %s and sender url %s and losspercentage: %i\n", profile, url1, url2, losspercent);
 
     if (rist_logging_set(&logging_settings, RIST_LOG_DEBUG, log_callback, NULL, NULL, stderr) != 0) {
 		fprintf(stderr,"Failed to setup logging!\n");
@@ -166,6 +167,6 @@ int main(int argc, char *argv[]) {
     if (atomic_load(&failed))
 		return -1;
 
-	fprintf(stderr, "OK\n");
+	fprintf(stdout, "OK\n");
     return 0;
 }
