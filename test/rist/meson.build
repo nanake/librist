@@ -1,29 +1,30 @@
 risttest_sources = [
     'example-test.c'
 ]
-
+cmocka = meson.get_compiler('c').find_library('cmocka', required: false)
 risttest_deps = [
-    meson.get_compiler('c').find_library('cmocka')
+    cmocka
 ]
 
 risttest_lib_deps = [
     librist
 ]
-
-risttest = executable('risttest', 
-    risttest_sources, 
-    include_directories : inc,
-    dependencies : [risttest_deps,test_deps], 
-    link_with : [risttest_lib_deps, test_dep_libs])
+if cmocka.found()
+    risttest = executable('risttest',
+                            risttest_sources,
+                            include_directories : inc,
+                            dependencies : [risttest_deps,test_deps],
+                            link_with : [risttest_lib_deps, test_dep_libs])
+endif
 
 test_send_receive = executable('test_send_receive', 
-    'test_send_receive.c',
-  	include_directories: inc,
-    link_with: librist,
-    dependencies: [
-        threads
-    ]
-)
+                                'test_send_receive.c',
+                                include_directories: inc,
+                                link_with: librist,
+                                dependencies: [
+                                    threads
+                                ])
+
 
 test('rist test', risttest)
 
