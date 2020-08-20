@@ -163,7 +163,7 @@ int main(int argc, char *argv[]) {
         }
     }
 	if (!got_first || receive_count < 12500)
-		failed = true;
+		atomic_store(&failed, 1);
     if (atomic_load(&failed))
 		return -1;
 
