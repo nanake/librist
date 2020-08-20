@@ -9,7 +9,8 @@ struct rist_logging_settings *logging_settings;
 
 int log_callback(void *arg, int level, const char *msg) {
     RIST_MARK_UNUSED(arg);
-    fprintf(stderr, "%s", msg);
+    if (level <= RIST_LOG_NOTICE)
+        fprintf(stderr, "%s", msg);
     if (level <= RIST_LOG_ERROR) {
         failed = 1;
         stop = 1;
@@ -92,7 +93,6 @@ static PTHREAD_START_FUNC(send_data, arg) {
         usleep(500);
         
     }
-    fprintf(stderr, "Send loop completed!\n");
     usleep(1500);
     stop = 1;
     return 0;
