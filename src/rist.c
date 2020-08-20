@@ -45,6 +45,13 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Receiver Library version:%s \n", LIBRIST_VERSION);
 
+	if (logging_settings && logging_settings->log_level == RIST_LOG_SIMULATE)
+	{
+		ctx->simulate_loss = true;
+		ctx->loss_percentage = 1;//Actually 0.1%
+		rist_log_priv(&ctx->common, RIST_LOG_WARN, "RIST receiver has been configured with self-imposed (outgoing) packet loss (0.1%%)\n");
+	}
+
 	ctx->common.receiver_id = ctx->id;
 	ctx->common.sender_id = 0;
 
@@ -250,7 +257,8 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	if (logging_settings && logging_settings->log_level == RIST_LOG_SIMULATE)
 	{
 		ctx->simulate_loss = true;
-		rist_log_priv(&ctx->common, RIST_LOG_WARN, "RIST Sender has been configured with self-imposed packet loss (1 in 1000)\n");
+		ctx->loss_percentage = 1;//Actually 0.1%
+		rist_log_priv(&ctx->common, RIST_LOG_WARN, "RIST Sender has been configured with self-imposed (outgoing) packet loss (0.1%%)\n");
 	}
 
 	if (logging_settings && logging_settings->log_level >= RIST_LOG_DEBUG)

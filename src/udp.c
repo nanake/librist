@@ -454,16 +454,20 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
 	// The difference should always stay very low < 10
 
-	if (RIST_UNLIKELY(p->sender_ctx && p->sender_ctx->simulate_loss && !(ctx->seq % 1000))) {
-	//if (p->sender_ctx && !(ctx->seq % 1000)) {// && payload_type == RIST_PAYLOAD_TYPE_RTCP) {
-		ret = len;
-		//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-		//	"\tSimulating lost packet for seq #%"PRIu32"\n", ctx->seq);
-	} else {
-		ret = sendto(p->sd,(const char*)data, len, MSG_DONTWAIT, &(p->u.address), p->address_len);
+	if (RIST_UNLIKELY((p->sender_ctx && p->sender_ctx->simulate_loss) || (p->receiver_ctx && p->receiver_ctx->simulate_loss))) {
+		uint16_t loss_percentage = p->sender_ctx? p->sender_ctx->loss_percentage : p->receiver_ctx->loss_percentage;
+		/* very crude calculation to see if we "randomly" drop packets, good enough for testing */
+		uint16_t compare = rand() % 1001;
+		if (compare <= loss_percentage) {
+			ret = len;
+			goto out;
+		}
 	}
 
-	if (ret <= 0) {
+	ret = sendto(p->sd,(const char*)data, len, MSG_DONTWAIT, &(p->u.address), p->address_len);
+
+out:
+	if (RIST_UNLIKELY(ret <= 0)) {
 		rist_log_priv(ctx, RIST_LOG_ERROR, "\tSend failed: errno=%d, ret=%d, socket=%d\n", errno, ret, p->sd);
 	} else {
 		rist_calculate_bitrate_sender(len, &p->bw);

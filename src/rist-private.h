@@ -339,6 +339,9 @@ struct rist_receiver {
 	struct rist_common_ctx common;
 
 	enum rist_nack_type nack_type;
+
+	bool simulate_loss;
+	uint16_t loss_percentage;
 };
 
 struct rist_sender {
@@ -366,6 +369,7 @@ struct rist_sender {
 	int weight_counter;
 	uint64_t last_datagram_time;
 	bool simulate_loss;
+	uint16_t loss_percentage;
 	uint64_t stats_next_time;
 	uint64_t checks_next_time;
 	uint32_t session_timeout;
