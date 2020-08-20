@@ -43,7 +43,7 @@ test('Simple profile unicast packet loss 30%', test_send_receive, args: ['0', 'r
 #Multicast (needs lo interface otherwise it breaks!)
 #Somehow broken need to investigate!
 test('Simple profile multicast', test_send_receive, args: ['0', 'rist://@239.0.0.1:1234', 'rist://239.0.0.1:1234', '0'])
-test('Simple profile multicast packet loss 10%', test_send_receive, args: ['0', 'rist://@239.0.0.2:1234?miface=lo', 'rist://239.0.0.2:1234?miface=lo', '10'])
+test('Simple profile multicast packet loss 10%', test_send_receive, args: ['0', 'rist://@239.0.0.2:1234', 'rist://239.0.0.2:1234', '10'])
 #test('Simple profile multicast packet loss 30%', test_send_receive, args: ['0', 'rist://@239.0.0.3:1234?miface=lo', 'rist://239.0.0.3:1234?miface=lo', '30'])
 #test('Simple profile multicast packet loss 35%', test_send_receive, args: ['0', 'rist://@239.0.0.4:1234?miface=lo', 'rist://239.0.0.4:1234?miface=lo', '35'], is_parallel : false)
 
