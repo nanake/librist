@@ -83,7 +83,7 @@ enum rist_peer_state {
 struct rist_key {
 	int key_size;
 	char password[128];
-	uint32_t used_times;
+	uint64_t used_times;
 	uint32_t gre_nonce;
 	uint32_t aes_key_sched[60];
 	uint32_t key_rotation;
