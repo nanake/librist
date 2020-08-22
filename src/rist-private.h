@@ -504,6 +504,8 @@ struct rist_peer {
 
 	/* listening mode with @ */
 	bool listening;
+	/* multicast */
+	bool multicast;
 
 	/* rist ctx */
 	struct rist_sender *sender_ctx;

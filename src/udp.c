@@ -665,6 +665,19 @@ void rist_create_socket(struct rist_peer *peer)
 		}
 	}
 	else {
+		if (peer->u.address.sa_family == AF_INET)
+		{
+			struct sockaddr_in *addrv4 = (struct sockaddr_in *)&(peer->u);
+			peer->multicast = IN_MULTICAST(ntohl(addrv4->sin_addr.s_addr));
+		}
+		else
+		{
+			struct sockaddr_in6 *addrv6 = (struct sockaddr_in6 *)&(peer->u);
+			peer->multicast = IN6_IS_ADDR_MULTICAST(&addrv6->sin6_addr);
+		}
+		if (peer->multicast) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Peer configured for multicast");
+		}
 		// We use sendto ... so, no need to connect directly here
 		peer->sd = udpsocket_open(peer->address_family);
 		// TODO : set max hops

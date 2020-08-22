@@ -2266,7 +2266,7 @@ protocol_bypass:
 		pthread_rwlock_unlock(peerlist_lock);
 
 		// Peer was not found, create a new one
-		if (peer->listening && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
+		if ((peer->listening || peer->multicast) && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
 			/* No match, new peer creation when on listening mode */
 			p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
 			p->adv_peer_id = ++cctx->peer_counter;
@@ -2316,6 +2316,8 @@ protocol_bypass:
 			p->is_rtcp = peer->is_rtcp;
 			p->is_data = peer->is_data;
 			p->peer_data = p;
+			if (peer->multicast)
+				p->peer_data = peer->peer_data;
 			memcpy(&p->u.address, addr, addrlen);
 			p->sd = peer->sd;
 			p->parent = peer;
