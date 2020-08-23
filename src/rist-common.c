@@ -21,6 +21,7 @@
 #ifdef LINUX_CRYPTO
 #include "linux-crypto.h"
 #endif
+#include "mbedtls/aes.h"
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
@@ -1044,12 +1045,14 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		memcpy(&p->key_tx, &p->key_rx, sizeof(p->key_rx));
 
 #ifdef LINUX_CRYPTO
-		linux_crypto_init(&p->cryptoctx_rx);
-		if (p->cryptoctx_rx) {
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
-			linux_crypto_init(&p->cryptoctx_tx);
-		}
+		//linux_crypto_init(&p->cryptoctx_rx);
+		//if (p->cryptoctx_rx) {
+		//	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
+		//	linux_crypto_init(&p->cryptoctx_tx);
+		//}
 #endif
+		mbedtls_aes_init(&p->aes_tx);
+		mbedtls_aes_init(&p->aes_rx);
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -2074,14 +2077,9 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 							(const void *) &k->gre_nonce, sizeof(k->gre_nonce),
 							RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 							aes_key, k->key_size / 8);
-#ifndef LINUX_CRYPTO
-					aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
-#else
-					if (peer->cryptoctx_rx)
-						linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx_rx);
-					else
-						aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
-#endif
+
+					mbedtls_aes_setkey_enc(&peer->aes_rx, aes_key, k->key_size);
+					mbedtls_aes_setkey_dec(&peer->aes_rx, aes_key, k->key_size);
 				}
 
 				if (k->used_times > RIST_AES_KEY_REUSE_TIMES) {
@@ -2104,12 +2102,15 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 						k->aes_key_sched, k->key_size, IV);
 #else
-				if (peer->cryptoctx_rx)
-					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx_rx);
-				else
-					aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
-							k->aes_key_sched, k->key_size, IV);
+				//if (peer->cryptoctx_rx)
+				//	linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx_rx);
+				//else
+				//	aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
+				//			k->aes_key_sched, k->key_size, IV);
 #endif
+				size_t aes_offset = 0;
+				unsigned char buf[16];
+				mbedtls_aes_crypt_ctr(&peer->aes_rx, (recv_bufsize - gre_size), &aes_offset, IV, buf,(const unsigned char*)(recv_buf + gre_size), (unsigned char*)(recv_buf + gre_size));
 			} else if (has_seq) {
 				// Key bit is not set, that means the other side does not want to send
 				//  encrypted data
@@ -2978,12 +2979,14 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		newpeer->key_rx.key_rotation = config->key_rotation;
 		memcpy(&newpeer->key_tx, &newpeer->key_rx, sizeof(newpeer->key_rx));
 #ifdef LINUX_CRYPTO
-		linux_crypto_init(&newpeer->cryptoctx_rx);
-		if (newpeer->cryptoctx_rx) {
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
-			linux_crypto_init(&newpeer->cryptoctx_tx);
-		}
+		//linux_crypto_init(&newpeer->cryptoctx_rx);
+		//if (newpeer->cryptoctx_rx) {
+		//	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
+		//	linux_crypto_init(&newpeer->cryptoctx_tx);
+		//}
 #endif
+		mbedtls_aes_init(&newpeer->aes_tx);
+		mbedtls_aes_init(&newpeer->aes_rx);
 	}
 
 	if (config->keepalive_interval > 0) {

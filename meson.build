@@ -136,6 +136,9 @@ if builtin_lz4
 								  include_directories: include_directories('contrib/lz4'))
 endif
 
+mbedtls = cc.find_library('mbedcrypto')
+deps += mbedtls
+
 subdir('include')
 
 librist = library('librist',

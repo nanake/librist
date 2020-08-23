@@ -30,10 +30,10 @@ uint64_t timestampNTP_u64(void)
 	// and can produce duplicate times (too close to kernel timer)
 
 	// We use the NTP time standard: rfc5905 (https://tools.ietf.org/html/rfc5905#section-6)
-	// The 64-bit timestamps used by NTP consist of a 32-bit part for seconds 
-	// and a 32-bit part for fractional second, giving a time scale that rolls 
-	// over every 232 seconds (136 years) and a theoretical resolution of 
-	// 2−32 seconds (233 picoseconds). NTP uses an epoch of January 1, 1900. 
+	// The 64-bit timestamps used by NTP consist of a 32-bit part for seconds
+	// and a 32-bit part for fractional second, giving a time scale that rolls
+	// over every 232 seconds (136 years) and a theoretical resolution of
+	// 2−32 seconds (233 picoseconds). NTP uses an epoch of January 1, 1900.
 	// Therefore, the first rollover occurs on February 7, 2036.
 
 	timespec_t ts;
@@ -129,7 +129,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 		if ((size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) == ctx->sender_queue_delete_index) {
 			break;
 		}
-		
+
 		size_t safety_counter = 0;
 		while (!b && ((ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1)) != atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire)) {
 			ctx->sender_queue_delete_index = (ctx->sender_queue_delete_index + 1)& (ctx->sender_queue_max -1);
@@ -207,7 +207,7 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 			aes_key, key->key_size / 8);
 /*
 		int i=0;
-		fprintf(stderr, "KEY: nonce %"PRIu32", size %d, pwd=%s : ", key->gre_nonce, 
+		fprintf(stderr, "KEY: nonce %"PRIu32", size %d, pwd=%s : ", key->gre_nonce,
 		key->key_size, key->password);
 		while (i < key->key_size/8)
 		{
@@ -219,10 +219,12 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 #ifndef LINUX_CRYPTO
 		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
 #else
-		if (peer->cryptoctx_tx)
-			linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
-		else
-			aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
+		//if (peer->cryptoctx_tx)
+		//	linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
+		//else
+		//	aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
+		mbedtls_aes_setkey_enc(&peer->aes_tx, aes_key, key->key_size);
+		mbedtls_aes_setkey_dec(&peer->aes_tx, aes_key, key->key_size);
 #endif
 	}
 }
@@ -242,9 +244,9 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	uint8_t *_payload = NULL;
 	bool compressed = false;
 	bool retry = false;
-	
-	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE 
-							&& payload_type == RIST_PAYLOAD_TYPE_DATA_RAW 
+
+	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
+							&& payload_type == RIST_PAYLOAD_TYPE_DATA_RAW
 							&& (k->key_size || p->compression));
 
 	assert(payload != NULL);
@@ -262,8 +264,8 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	//		seq, seq_rtp, payload_type);
 	//else
 	//	rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Sending seq %"PRIu32" and idx is %zu/%zu/%zu (read/write/delete) and payload is %d\n",
-	//		seq, p->sender_ctx->sender_queue_read_index, 
-	//		p->sender_ctx->sender_queue_write_index, 
+	//		seq, p->sender_ctx->sender_queue_read_index,
+	//		p->sender_ctx->sender_queue_write_index,
 	//		p->sender_ctx->sender_queue_delete_index,
 	//		payload_type);
 
@@ -309,7 +311,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			} else {
 				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
 				if (!ctx->birthtime_rtp_offset) {
-					// Force a 32bit timestamp wrap-around 60 seconds after startup. It will break 
+					// Force a 32bit timestamp wrap-around 60 seconds after startup. It will break
 					// crappy implementations and/or will guarantee 13 hours of clean stream.
 					ctx->birthtime_rtp_offset = UINT32_MAX - timestampRTP_u32(0, source_time) - (90000*60);
 				}
@@ -360,7 +362,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 					SET_BIT(gre_key_seq->flags1, 3); // set compression bit
 				if (retry)
 					SET_BIT(gre_key_seq->flags1, 2); // set retry bit
-				// TODO: implement fragmentation and fill in this data 
+				// TODO: implement fragmentation and fill in this data
 				// (fragmentation to be done at API data entry point)
 				uint8_t fragment_final = 0;
 				uint8_t fragment_number = 0;
@@ -401,14 +403,17 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			fprintf(stderr, "\n");
 	*/
 #ifndef LINUX_CRYPTO
-			aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
+			aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len,
 				(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #else
-			if (p->cryptoctx_tx)
-				linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
-			else
-				aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
-					(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+			//if (p->cryptoctx_tx)
+			//	linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
+			//else
+			//	aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
+			//		(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+			size_t aes_offset = 0;
+			unsigned char buf[16];
+			mbedtls_aes_crypt_ctr(&p->aes_tx, (hdr_len + payload_len), &aes_offset, IV, buf, (const unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len));
 #endif
 		} else {
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
@@ -431,7 +436,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				if (CHECK_BIT(fragment_number, 4)) SET_BIT(gre_seq->flags2, 4);
 				if (CHECK_BIT(fragment_number, 5)) SET_BIT(gre_seq->flags2, 3);
 			}
-		
+
 			gre_seq->prot_type = htobe16(proto_type);
 			gre_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
 			gre_seq->seq = htobe32(seq);
@@ -554,7 +559,7 @@ int rist_set_url(struct rist_peer *peer)
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Host %s cannot be resolved\n",
 				(char *) host);
 		return -1;
-	} 
+	}
 	if (peer->u.inaddr6.sin6_family == AF_INET6) {
 		peer->address_family = AF_INET6;
 		peer->address_len = sizeof(struct sockaddr_in6);
@@ -1067,7 +1072,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 
 	//We can do it safely here, since this function is only to be called once per packet
 	buffer->seq = ctx->common.seq++;
-	
+
 peer_select:
 
 	peercnt = 0;
@@ -1153,7 +1158,7 @@ peer_select:
 
 static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq)
 {
-	// This is by design in advanced mode, that is why we push all output data and handshakes 
+	// This is by design in advanced mode, that is why we push all output data and handshakes
 	// through the sender_queue, so we can keep the seq and idx in sync
 	size_t idx = (seq + 1)& (ctx->sender_queue_max -1);
 	if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
@@ -1251,7 +1256,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Resending %"PRIu32"/%"PRIu32"/%"PRIu16" (idx %zu) after %" PRIu64
 			"ms of first transmission and %"PRIu64"ms in queue, bitrate is %zu + %zu, %zu\n",
-			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, retry->peer->bw.bitrate, 
+			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, retry->peer->bw.bitrate,
 			retry_bw->bitrate, retry->peer->bw.bitrate + retry_bw->bitrate);
 
 	uint8_t *payload = buffer->data;
@@ -1478,5 +1483,5 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 			prefix, ipstr, port, peer->listening, peer->adv_peer_id,
 			peer->local_port, peer->remote_port);
 	}
-	
+
 }

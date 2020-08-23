@@ -28,6 +28,7 @@
 #ifdef LINUX_CRYPTO
 #include "linux-crypto.h"
 #endif
+#include "mbedtls/aes.h"
 #include <errno.h>
 #include <stdatomic.h>
 #include "librist/logging.h"
@@ -486,6 +487,8 @@ struct rist_peer {
 	struct linux_crypto *cryptoctx_tx;
 	struct linux_crypto *cryptoctx_rx;
 #endif
+	mbedtls_aes_context aes_tx;
+	mbedtls_aes_context aes_rx;
 
 	/* compression flag (sender only) */
 	bool compression;
