@@ -36,6 +36,7 @@ build-win64:
                       --libdir lib
                       --cross-file common/ci/x86_64-w64-mingw32.meson
                       -Ddefault_library=both
+                      -Duse_mbedtls=false
         - ninja -C build
 
 build-macos:
@@ -46,6 +47,7 @@ build-macos:
         - meson build --buildtype release
                       --werror
                       -Ddefault_library=both
+                      -Duse_mbedtls=false
         - ninja -C build
 
 analyze-ubuntu:
