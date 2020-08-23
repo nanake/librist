@@ -27,7 +27,7 @@
 #include "aes.h"
 #ifdef USE_MBEDTLS
 #include "mbedtls/aes.h"
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 #include "linux-crypto.h"
 #endif
 #include <errno.h>
@@ -487,7 +487,7 @@ struct rist_peer {
 #ifdef USE_MBEDTLS
 	mbedtls_aes_context aes_tx;
 	mbedtls_aes_context aes_rx;
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 	struct linux_crypto *cryptoctx_tx;
 	struct linux_crypto *cryptoctx_rx;
 #endif

@@ -219,7 +219,7 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 #ifdef USE_MBEDTLS
 		mbedtls_aes_setkey_enc(&peer->aes_tx, aes_key, key->key_size);
 		mbedtls_aes_setkey_dec(&peer->aes_tx, aes_key, key->key_size);
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 		if (peer->cryptoctx_tx)
 			linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
 		else
@@ -406,7 +406,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			size_t aes_offset = 0;
 			unsigned char buf[16];
 			mbedtls_aes_crypt_ctr(&p->aes_tx, (hdr_len + payload_len), &aes_offset, IV, buf, (const unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len));
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 			if (p->cryptoctx_tx)
 				linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
 			else

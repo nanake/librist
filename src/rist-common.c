@@ -20,7 +20,7 @@
 #include <assert.h>
 #ifdef USE_MBEDTLS
 #include "mbedtls/aes.h"
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 #include "linux-crypto.h"
 #endif
 
@@ -1048,7 +1048,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 #ifdef USE_MBEDTLS
 		mbedtls_aes_init(&p->aes_tx);
 		mbedtls_aes_init(&p->aes_rx);
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 		linux_crypto_init(&p->cryptoctx_rx);
 		if (p->cryptoctx_rx) {
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
@@ -2085,7 +2085,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 #ifdef USE_MBEDTLS
 					mbedtls_aes_setkey_enc(&peer->aes_rx, aes_key, k->key_size);
 					mbedtls_aes_setkey_dec(&peer->aes_rx, aes_key, k->key_size);
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 					if (peer->cryptoctx_rx)
 						linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx_rx);
 					else
@@ -2116,7 +2116,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				size_t aes_offset = 0;
 				unsigned char buf[16];
 				mbedtls_aes_crypt_ctr(&peer->aes_rx, (recv_bufsize - gre_size), &aes_offset, IV, buf, (const unsigned char *)(recv_buf + gre_size), (unsigned char *)(recv_buf + gre_size));
-#elif LINUX_CRYPTO
+#elif defined(LINUX_CRYPTO)
 				if (peer->cryptoctx_rx)
 					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx_rx);
 				else
@@ -2997,8 +2997,8 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 #ifdef USE_MBEDTLS
 		mbedtls_aes_init(&newpeer->aes_tx);
 		mbedtls_aes_init(&newpeer->aes_rx);
-#elif LINUX_CRYPTO
-			linux_crypto_init(&newpeer->cryptoctx_rx);
+#elif defined(LINUX_CRYPTO)
+		linux_crypto_init(&newpeer->cryptoctx_rx);
 		if (newpeer->cryptoctx_rx) {
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
 			linux_crypto_init(&newpeer->cryptoctx_tx);
