@@ -216,15 +216,16 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 		}
 		fprintf(stderr, "\n");
 */
-#ifndef LINUX_CRYPTO
-		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
-#else
-		//if (peer->cryptoctx_tx)
-		//	linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
-		//else
-		//	aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
+#ifdef USE_MBEDTLS
 		mbedtls_aes_setkey_enc(&peer->aes_tx, aes_key, key->key_size);
 		mbedtls_aes_setkey_dec(&peer->aes_tx, aes_key, key->key_size);
+#elif LINUX_CRYPTO
+		if (peer->cryptoctx_tx)
+			linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
+		else
+			aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
+#else
+		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
 #endif
 	}
 }
@@ -345,7 +346,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				}
 			}
 		}
-
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
 			_ensure_key_is_valid(k, p);
@@ -402,18 +402,19 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			}
 			fprintf(stderr, "\n");
 	*/
-#ifndef LINUX_CRYPTO
-			aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len,
-				(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
-#else
-			//if (p->cryptoctx_tx)
-			//	linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
-			//else
-			//	aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len, 
-			//		(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+#ifdef USE_MBEDTLS
 			size_t aes_offset = 0;
 			unsigned char buf[16];
 			mbedtls_aes_crypt_ctr(&p->aes_tx, (hdr_len + payload_len), &aes_offset, IV, buf, (const unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len));
+#elif LINUX_CRYPTO
+			if (p->cryptoctx_tx)
+				linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
+			else
+				aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len,
+					(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
+#else
+			aes_encrypt_ctr((const void *)(_payload - hdr_len), hdr_len + payload_len,
+							(void *)(_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
 #endif
 		} else {
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;

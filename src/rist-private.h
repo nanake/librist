@@ -25,10 +25,11 @@
 #include "librist.h"
 #include "udpsocket.h"
 #include "aes.h"
-#ifdef LINUX_CRYPTO
+#ifdef USE_MBEDTLS
+#include "mbedtls/aes.h"
+#elif LINUX_CRYPTO
 #include "linux-crypto.h"
 #endif
-#include "mbedtls/aes.h"
 #include <errno.h>
 #include <stdatomic.h>
 #include "librist/logging.h"
@@ -483,12 +484,14 @@ struct rist_peer {
 	/* Encryption */
 	struct rist_key key_tx; // used for transmitted packets
 	struct rist_key key_rx; // used for received packets
-#ifdef __linux
+#ifdef USE_MBEDTLS
+	mbedtls_aes_context aes_tx;
+	mbedtls_aes_context aes_rx;
+#elif LINUX_CRYPTO
 	struct linux_crypto *cryptoctx_tx;
 	struct linux_crypto *cryptoctx_rx;
 #endif
-	mbedtls_aes_context aes_tx;
-	mbedtls_aes_context aes_rx;
+
 
 	/* compression flag (sender only) */
 	bool compression;

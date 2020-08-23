@@ -5,7 +5,7 @@
 project('libRIST', 'c',
 	version: '0.2',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
-        meson_version: '>= 0.47.0')
+        meson_version: '>= 0.51.0')
 
 cc = meson.get_compiler('c')
 
@@ -26,10 +26,18 @@ librist_src_root = meson.current_source_dir()
 deps = []
 platform_files = []
 contrib_libs = []
-inc = include_directories('.', 'include/librist', 'include', 'contrib')
+inc = []
+inc += include_directories('.', 'include/librist', 'include', 'contrib')
 
 builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
+builtin_mbedtls = get_option('builtin_mbedtls')
+use_mbedtls = get_option('use_mbedtls')
+
+required_library = false
+if not get_option('fallback_builtin')
+	required_library = true
+endif
 
 if host_machine.system() == 'windows'
 	deps += [ cc.find_library('ws2_32') ]
@@ -74,7 +82,7 @@ if host_machine.system() == 'linux'
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
 	if cc.check_header('linux/if_alg.h')
-		add_project_arguments(['-DLINUX_CRYPTO'], language: 'c')
+		add_project_arguments(['-DLINUX_CRYPTO=1'], language: 'c')
 		platform_files += 'contrib/linux-crypto.c'
 	endif
 endif
@@ -107,7 +115,7 @@ endif
 if not builtin_cjson
 	cjson_lib = dependency('cJSON', required: false)
 	if not cjson_lib.found()
-		cjson_lib = cc.find_library('cjson', required: false)
+		cjson_lib = cc.find_library('cjson', required: required_library, has_headers: ['cjson/cJSON.h'])
 		if not cjson_lib.found()
 			builtin_cjson = true
 		endif
@@ -121,7 +129,7 @@ if builtin_cjson
 endif
 
 if not builtin_lz4
-	lz4_lib = dependency('liblz4', required: false)
+	lz4_lib = dependency('liblz4', required: required_library)
 	if not lz4_lib.found()
 		builtin_lz4 = true
 	endif
@@ -136,8 +144,31 @@ if builtin_lz4
 								  include_directories: include_directories('contrib/lz4'))
 endif
 
-mbedtls = cc.find_library('mbedcrypto')
-deps += mbedtls
+if use_mbedtls
+	add_project_arguments(['-DUSE_MBEDTLS'], language: 'c')
+	if not builtin_mbedtls
+		mbedcrypto_lib = dependency('mbedcrypto', required: false)
+		if not mbedcrypto_lib.found()
+			mbedcrypto_lib = cc.find_library('mbedcrypto', required: required_library, has_headers: ['mbedtls/aes.h'])
+			if not mbedcrypto_lib.found()
+				builtin_mbedtls = true
+			endif
+		endif
+	endif
+	if builtin_mbedtls
+		cmake = import('cmake')
+		### meson 0.55.0:
+		#mbedtls_options = cmake.subproject_options()
+		#mbedtls_options.add_cmake_defines({'ENABLE_TESTING' : false})
+		#mbedtls_options.add_cmake_defines({'ENABLE_PROGRAMS': false})
+		#mbedtls_options.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
+		### backwards compatible way is via cmake_options kwarg
+		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON'])
+		inc += mbedtls_proj.include_directories('mbedcrypto')
+		mbedcrypto_lib = mbedtls_proj.dependency('mbedcrypto')
+	endif
+	deps += mbedcrypto_lib
+endif
 
 subdir('include')
 
@@ -164,7 +195,7 @@ librist = library('librist',
 		deps,
 		stdatomic_dependency,
 		cjson_lib,
-		lz4_lib,
+		lz4_lib
 	],
 	name_prefix : '',
 	version: librist_version,
