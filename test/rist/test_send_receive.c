@@ -117,8 +117,8 @@ int main(int argc, char *argv[]) {
     int losspercent = atoi(argv[4]) * 10;
 	int ret = 0;
 
-    struct rist_ctx *receiver_ctx;
-    struct rist_ctx *sender_ctx;
+    struct rist_ctx *receiver_ctx = NULL;
+    struct rist_ctx *sender_ctx = NULL;
 
     atomic_init(&failed, 0);
     atomic_init(&stop, 0);
