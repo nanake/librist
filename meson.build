@@ -82,7 +82,7 @@ if host_machine.system() == 'linux'
 	lib_rt = cc.find_library('rt', required: false)
 	deps += [ lib_rt ]
 	if cc.check_header('linux/if_alg.h')
-		add_project_arguments(['-DLINUX_CRYPTO=1'], language: 'c')
+		add_project_arguments(['-DLINUX_CRYPTO'], language: 'c')
 		platform_files += 'contrib/linux-crypto.c'
 	endif
 endif
