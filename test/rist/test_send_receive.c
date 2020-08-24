@@ -5,48 +5,50 @@
 atomic_ulong failed;
 atomic_ulong stop;
 
-struct rist_logging_settings *logging_settings;
+struct rist_logging_settings *logging_settings_sender;
+struct rist_logging_settings *logging_settings_receiver;
+char* senderstring = "sender";
+char* receiverstring = "receiver";
 
 int log_callback(void *arg, int level, const char *msg) {
-    RIST_MARK_UNUSED(arg);
     if (level > RIST_LOG_ERROR)
-        fprintf(stdout, "%s", msg);
+        fprintf(stdout, "[%s] %s",(char*)arg, msg);
     if (level <= RIST_LOG_ERROR) {
-		fprintf(stderr, "%s", msg);
-		/* This SHOULD fail the test, I've disabled it so that we pass the encryption tests.
-		   in the encryption test we are hitting a condition where the linux crypto stuff seems
-		   to not be initialized quickly enough, and we print error messages because decryption
-		   is not working correctly, however this is an intermittent issue and solves itself.
-		   Furthermore it is not triggered by the CLI tools.
-		   This should be investigated and fixed */
-        //atomic_store(&failed, 1);
-        //atomic_store(&stop, 1);
+	fprintf(stdout, "[%s] %s", (char* )arg, msg);
+	/* This SHOULD fail the test, I've disabled it so that we pass the encryption tests.
+	   in the encryption test we are hitting a condition where the linux crypto stuff seems
+	   to not be initialized quickly enough, and we print error messages because decryption
+	   is not working correctly, however this is an intermittent issue and solves itself.
+	   Furthermore it is not triggered by the CLI tools.
+	   This should be investigated and fixed */
+        atomic_store(&failed, 1);
+        atomic_store(&stop, 1);
     }
     return 0;
 }
 
 struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
     struct rist_ctx *ctx;
-	if (rist_receiver_create(&ctx, profile, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
-		exit(99);
+	if (rist_receiver_create(&ctx, profile, logging_settings_receiver) != 0) {
+		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not create rist receiver context\n");
+		return NULL;
 	}
     // Rely on the library to parse the url
     const struct rist_peer_config *peer_config = NULL;
     if (rist_parse_address(url, (void *)&peer_config))
     {
-        rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver\n");
-        exit(99);
-    }
+		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not parse peer options for receiver\n");
+		return NULL;
+	}
     struct rist_peer *peer;
     if (rist_peer_create(ctx, &peer, peer_config) == -1) {
-        rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver\n");
-        exit(99);
-    }
+		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not add peer connector to receiver\n");
+		return NULL;
+	}
     free((void *)peer_config);
 	if (rist_start(ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
-		exit(99);
+		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not start rist sender\n");
+		return NULL;
 	}
     return ctx;
 
@@ -54,26 +56,26 @@ struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
 
 struct rist_ctx *setup_rist_sender(int profile, const char *url) {
     struct rist_ctx *ctx;
-    if (rist_sender_create(&ctx, profile, 0, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
-		exit(99);
+    if (rist_sender_create(&ctx, profile, 0, logging_settings_sender) != 0) {
+		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not create rist sender context\n");
+		return NULL;
 	}
 
     const struct rist_peer_config *peer_config_link = NULL;
     if (rist_parse_address(url, (void *)&peer_config_link))
     {
-        rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
-        exit(99);
-    }
+		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
+		return NULL;
+	}
 
     struct rist_peer *peer;
     if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
-        rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
-        exit(99);
-    }
+		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
+		return NULL;
+	}
 	if (rist_start(ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
-		exit(99);
+		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not start rist sender\n");
+		return NULL;
 	}
     return ctx;
 }
@@ -107,12 +109,13 @@ static PTHREAD_START_FUNC(send_data, arg) {
 
 int main(int argc, char *argv[]) {
     if (argc != 5) {
-        exit(99);
+        return 99;
     }
     int profile = atoi(argv[1]);
     char *url1 = strdup(argv[2]);
     char *url2 = strdup(argv[3]);
     int losspercent = atoi(argv[4]) * 10;
+	int ret = 0;
 
     struct rist_ctx *receiver_ctx;
     struct rist_ctx *sender_ctx;
@@ -123,13 +126,24 @@ int main(int argc, char *argv[]) {
 
     fprintf(stdout, "Testing profile %i with receiver url %s and sender url %s and losspercentage: %i\n", profile, url1, url2, losspercent);
 
-    if (rist_logging_set(&logging_settings, RIST_LOG_DEBUG, log_callback, NULL, NULL, stderr) != 0) {
+    if (rist_logging_set(&logging_settings_sender, RIST_LOG_DEBUG, log_callback, senderstring, NULL, stderr) != 0) {
 		fprintf(stderr,"Failed to setup logging!\n");
-		exit(1);
+		ret = 99;
+		goto out;
 	}
 
-    receiver_ctx = setup_rist_receiver(profile, url1);
+	if (rist_logging_set(&logging_settings_receiver, RIST_LOG_DEBUG, log_callback, receiverstring, NULL, stderr) != 0)
+	{
+		fprintf(stderr, "Failed to setup logging!\n");
+		ret = 99;
+		goto out;
+	}
+	receiver_ctx = setup_rist_receiver(profile, url1);
     sender_ctx = setup_rist_sender(profile, url2);
+	if (!sender_ctx || !receiver_ctx) {
+		ret = 99;
+		goto out;
+	}
 
     if (losspercent > 0) {
         receiver_ctx->receiver_ctx->simulate_loss = true;
@@ -141,8 +155,9 @@ int main(int argc, char *argv[]) {
     if (pthread_create(&send_loop, NULL, send_data, (void *)sender_ctx) != 0)
     {
         fprintf(stderr, "Could not start send data thread\n");
-        exit(1);
-    }
+		ret = 99;
+		goto out;
+	}
 
     const struct rist_data_block *b;
     char rcompare[1316];
@@ -171,8 +186,15 @@ int main(int argc, char *argv[]) {
     }
 	if (!got_first || receive_count < 12500)
 		atomic_store(&failed, 1);
-    if (atomic_load(&failed))
-		return 1;
+	if (atomic_load(&failed))
+		ret = 1;
+out:
+	if (sender_ctx)
+		rist_destroy(sender_ctx);
+	if (receiver_ctx)
+		rist_destroy(receiver_ctx);
+	if (ret > 0)
+		return ret;
 
 	fprintf(stdout, "OK\n");
     return 0;
