@@ -475,9 +475,11 @@ struct rist_peer {
 	uint32_t missing_counter_max;
 
 	/* Encryption */
-	struct rist_key key_secret; // used for received packets
+	struct rist_key key_tx; // used for transmitted packets
+	struct rist_key key_rx; // used for received packets
 #ifdef __linux
-	struct linux_crypto *cryptoctx;
+	struct linux_crypto *cryptoctx_tx;
+	struct linux_crypto *cryptoctx_rx;
 #endif
 
 	/* compression flag (sender only) */

@@ -1039,13 +1039,17 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 	}
 
 	if (config->key_size) {
-		p->key_secret.key_size = config->key_size;
-		strncpy(&p->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
-		p->key_secret.key_rotation = config->key_rotation;
+		p->key_rx.key_size = config->key_size;
+		strncpy(&p->key_rx.password[0], config->secret, RIST_MAX_STRING_SHORT);
+		p->key_rx.key_rotation = config->key_rotation;
+		memcpy(&p->key_tx, &p->key_rx, sizeof(p->key_rx));
+
 #ifdef LINUX_CRYPTO
-		linux_crypto_init(&p->cryptoctx);
-		if (p->cryptoctx)
+		linux_crypto_init(&p->cryptoctx_rx);
+		if (p->cryptoctx_rx) {
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
+			linux_crypto_init(&p->cryptoctx_tx);
+		}
 #endif
 	}
 
@@ -1164,9 +1168,13 @@ void rist_shutdown_peer(struct rist_peer *peer)
 	}
 
 #ifdef LINUX_CRYPTO
-	if (!peer->parent && peer->cryptoctx) {
-		free(peer->cryptoctx);
-		peer->cryptoctx = NULL;
+	if (!peer->parent && peer->cryptoctx_tx) {
+		free(peer->cryptoctx_tx);
+		peer->cryptoctx_tx = NULL;
+	}
+	if (!peer->parent && peer->cryptoctx_rx) {
+		free(peer->cryptoctx_rx);
+		peer->cryptoctx_rx = NULL;
 	}
 #endif
 	if (peer->url) {
@@ -1860,12 +1868,15 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 	static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 	{
-		peer->key_secret.key_size = peer_src->key_secret.key_size;
-		peer->key_secret.key_rotation = peer_src->key_secret.key_rotation;
+		peer->key_rx.key_size = peer_src->key_rx.key_size;
+		peer->key_rx.key_rotation = peer_src->key_rx.key_rotation;
 #ifdef LINUX_CRYPTO
-		peer->cryptoctx = peer_src->cryptoctx;
+		linux_crypto_init(&peer->cryptoctx_tx);
+		linux_crypto_init(&peer->cryptoctx_rx);
 #endif
-		strncpy(&peer->key_secret.password[0], &peer_src->key_secret.password[0], RIST_MAX_STRING_SHORT);
+		strncpy(&peer->key_rx.password[0], &peer_src->key_rx.password[0], RIST_MAX_STRING_SHORT);
+		memcpy(&peer->key_tx, &peer->key_rx, sizeof(peer->key_rx));
+
 		strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 		strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
 		peer->config.weight = peer_src->config.weight;
@@ -1955,7 +1966,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			return;
 		}
 
-		struct rist_key *k = &peer->key_secret;
+		struct rist_key *k = &peer->key_rx;
 		struct rist_gre *gre = NULL;
 		uint32_t seq = 0;
 		uint32_t time_extension = 0;
@@ -2061,8 +2072,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 #ifndef LINUX_CRYPTO
 					aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
 #else
-					if (peer->cryptoctx)
-						linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx);
+					if (peer->cryptoctx_rx)
+						linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx_rx);
 					else
 						aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
 #endif
@@ -2088,8 +2099,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 						k->aes_key_sched, k->key_size, IV);
 #else
-				if (peer->cryptoctx)
-					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx);
+				if (peer->cryptoctx_rx)
+					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx_rx);
 				else
 					aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
 							k->aes_key_sched, k->key_size, IV);
@@ -2941,13 +2952,16 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	}
 
 	if (config->key_size) {
-		newpeer->key_secret.key_size = config->key_size;
-		strncpy(&newpeer->key_secret.password[0], config->secret, RIST_MAX_STRING_SHORT);
-		newpeer->key_secret.key_rotation = config->key_rotation;
+		newpeer->key_rx.key_size = config->key_size;
+		strncpy(&newpeer->key_rx.password[0], config->secret, RIST_MAX_STRING_SHORT);
+		newpeer->key_rx.key_rotation = config->key_rotation;
+		memcpy(&newpeer->key_tx, &newpeer->key_rx, sizeof(newpeer->key_rx));
 #ifdef LINUX_CRYPTO
-		linux_crypto_init(&newpeer->cryptoctx);
-		if (newpeer->cryptoctx)
+		linux_crypto_init(&newpeer->cryptoctx_rx);
+		if (newpeer->cryptoctx_rx) {
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
+			linux_crypto_init(&newpeer->cryptoctx_tx);
+		}
 #endif
 	}
 
