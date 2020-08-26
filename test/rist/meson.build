@@ -26,7 +26,8 @@ test_send_receive = executable('test_send_receive',
                                 include_directories: inc,
                                 link_with: librist,
                                 dependencies: [
-                                    threads
+                                    threads,
+									stdatomic_dependency
                                 ])
 
 
