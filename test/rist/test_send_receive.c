@@ -2,6 +2,10 @@
 #include "src/rist-private.h"
 #include <stdatomic.h>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 atomic_ulong failed;
 atomic_ulong stop;
 
@@ -14,7 +18,7 @@ int log_callback(void *arg, int level, const char *msg) {
     if (level > RIST_LOG_ERROR)
         fprintf(stdout, "[%s] %s",(char*)arg, msg);
     if (level <= RIST_LOG_ERROR) {
-	fprintf(stdout, "[%s] %s", (char* )arg, msg);
+	fprintf(stdout, "[%s] [ERROR] %s", (char* )arg, msg);
 	/* This SHOULD fail the test, I've disabled it so that we pass the encryption tests.
 	   in the encryption test we are hitting a condition where the linux crypto stuff seems
 	   to not be initialized quickly enough, and we print error messages because decryption
@@ -101,10 +105,19 @@ static PTHREAD_START_FUNC(send_data, arg) {
             break;
         }
         send_counter++;
+#ifdef _WIN32
+		Sleep(5);
+#else
         usleep(500);
-
+#endif
     }
+
+#ifdef _WIN32
+	Sleep(2);
+#else
     usleep(1500);
+#endif
+
     atomic_store(&stop, 1);
     return 0;
 }
