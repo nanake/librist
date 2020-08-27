@@ -1446,9 +1446,9 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (!strlen(peer->receiver_name)) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-			"RTCP message does not have a cname, we cannot authenticate/allow this flow!\n");
-		return false;
+		char tmpbuf[128] = {0};
+		sprintf(tmpbuf, "empty-sdes-name peer id#%i", peer->adv_peer_id);
+		strcpy(peer->receiver_name, tmpbuf);
 	}
 
 	// Check to see if this peer's flowid changed
