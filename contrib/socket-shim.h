@@ -22,8 +22,6 @@
 #define AF_LOCAL AF_UNSPEC
 #define MSG_DONTWAIT (0)
 
-#define if_nametoindex(name)  atoi(name)
-
 typedef int socklen_t;
 
 #else /* Unix like OSes */
