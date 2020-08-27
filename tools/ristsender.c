@@ -108,7 +108,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 
 	if (recv_bufsize > 0) {
 		ssize_t offset = 0;
-		struct rist_data_block data_block;
+		struct rist_data_block data_block = { 0 };
 		// The stream-id is used as a demuxing filter based on the virtual source port of the GRE tunnel.
 		data_block.virt_src_port = callback_object->udp_config->stream_id;
 		// We should delegate population of the correct port to the lib as it needs
