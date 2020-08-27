@@ -89,7 +89,7 @@ struct rist_ctx *setup_rist_sender(int profile, const char *url) {
 static PTHREAD_START_FUNC(send_data, arg) {
     struct rist_ctx *rist_sender = arg;
     int send_counter = 0;
-    char buffer[1316];
+    char buffer[1316] = { 0 };
     struct rist_data_block data = { 0 };
     /* we just try to send some string at ~20mbs for ~8 seconds */
     while (send_counter < 16000) {
@@ -211,6 +211,8 @@ out:
 		rist_destroy(sender_ctx);
 	if (receiver_ctx)
 		rist_destroy(receiver_ctx);
+	free(logging_settings_receiver);
+	free(logging_settings_sender);
 	if (ret > 0)
 		return ret;
 

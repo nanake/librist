@@ -319,38 +319,26 @@ static void init_peer_settings(struct rist_peer *peer)
 
 struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
+	RIST_MARK_UNUSED(ctx);
 	// TODO: we will ran out of stack before heap and when that happens malloc will crash not just
 	// return NULL ... We need to find and remove all heap allocations
 	struct rist_buffer *b;
-	pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
-	if (ctx->rist_free_buffer) {
-		b = ctx->rist_free_buffer;
-		ctx->rist_free_buffer = b->next_free;
-		if (b->alloc_size < len) {
-			b->data = realloc(b->data, len + RIST_MAX_PAYLOAD_OFFSET);
-			b->alloc_size = len;
-		}
-		ctx->rist_free_buffer_count--;
-		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
-	} else {
-		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
-		b = malloc(sizeof(*b));
-		if (!b) {
+	b = malloc(sizeof(*b));
+	if (!b) {
+		fprintf(stderr, "OOM\n");
+		return NULL;
+	}
+
+	if (buf != NULL && len > 0)
+	{
+		b->data = malloc(len + RIST_MAX_PAYLOAD_OFFSET);
+		if (!b->data) {
+			free(b);
 			fprintf(stderr, "OOM\n");
 			return NULL;
 		}
-
-		if (buf != NULL && len > 0)
-		{
-			b->data = malloc(len + RIST_MAX_PAYLOAD_OFFSET);
-			if (!b->data) {
-				free(b);
-				fprintf(stderr, "OOM\n");
-				return NULL;
-			}
-		}
-		b->alloc_size = len;
 	}
+	b->alloc_size = len;
 	if (buf != NULL && len > 0)
 	{
 		memcpy((uint8_t *)b->data + RIST_MAX_PAYLOAD_OFFSET, buf, len);
@@ -368,24 +356,14 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 	b->last_retry_request = 0;
 	b->transmit_count = 0;
 	b->use_seq = 0;
-
 	return b;
 }
 
 void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 {
-	if (RIST_LIKELY(!ctx->shutdown)) {
-		pthread_mutex_lock(&ctx->rist_free_buffer_mutex);
-		b->next_free = ctx->rist_free_buffer;
-		ctx->rist_free_buffer = b;
-		b->free = true;
-		ctx->rist_free_buffer_count++;
-		pthread_mutex_unlock(&ctx->rist_free_buffer_mutex);
-	}else {
-		if (RIST_LIKELY(b->size))
-			free(b->data);
-		free(b);
-	}
+	RIST_MARK_UNUSED(ctx);
+	free(b->data);
+	free(b);
 	
 }
 
@@ -1871,8 +1849,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->key_rx.key_size = peer_src->key_rx.key_size;
 		peer->key_rx.key_rotation = peer_src->key_rx.key_rotation;
 #ifdef LINUX_CRYPTO
-		linux_crypto_init(&peer->cryptoctx_tx);
-		linux_crypto_init(&peer->cryptoctx_rx);
+		peer->cryptoctx_rx = peer_src->cryptoctx_rx;
+		peer->cryptoctx_tx = peer_src->cryptoctx_tx;
 #endif
 		strncpy(&peer->key_rx.password[0], &peer_src->key_rx.password[0], RIST_MAX_STRING_SHORT);
 		memcpy(&peer->key_tx, &peer->key_rx, sizeof(peer->key_rx));
