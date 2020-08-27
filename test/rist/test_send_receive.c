@@ -24,6 +24,7 @@ int log_callback(void *arg, int level, const char *msg) {
         atomic_store(&failed, 1);
         atomic_store(&stop, 1);
     }
+	free((void *)msg);
     return 0;
 }
 
@@ -73,6 +74,7 @@ struct rist_ctx *setup_rist_sender(int profile, const char *url) {
 		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
 		return NULL;
 	}
+	free((void *)peer_config_link);
 	if (rist_start(ctx) == -1) {
 		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not start rist sender\n");
 		return NULL;
@@ -84,7 +86,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
     struct rist_ctx *rist_sender = arg;
     int send_counter = 0;
     char buffer[1316];
-    struct rist_data_block data;
+    struct rist_data_block data = { 0 };
     /* we just try to send some string at ~20mbs for ~8 seconds */
     while (send_counter < 16000) {
         if (atomic_load(&stop))
@@ -188,7 +190,10 @@ int main(int argc, char *argv[]) {
 		atomic_store(&failed, 1);
 	if (atomic_load(&failed))
 		ret = 1;
+	pthread_join(send_loop, NULL);
 out:
+	free(url1);
+	free(url2);
 	if (sender_ctx)
 		rist_destroy(sender_ctx);
 	if (receiver_ctx)
