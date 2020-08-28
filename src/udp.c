@@ -837,26 +837,17 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 	if (RIST_LIKELY(array_len > 0)) {
 		// Add nack requests (if any)
 		struct rist_rtp_nack_record *rec;
-
-		// First the sequence extension message (to transmit the upper 16 bits of the seq)
-		struct rist_rtcp_seqext *seqext_buf = (struct rist_rtcp_seqext *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len);
-		seqext_buf->flags = RTCP_NACK_SEQEXT_FLAGS;
-		seqext_buf->ptype = PTYPE_NACK_CUSTOM;
-		seqext_buf->ssrc = htobe32(peer->adv_flow_id);
-		seqext_buf->len = htons(3);
-		uint32_t seq = seq_array[0];
-		seqext_buf->seq_msb = htobe16(seq >> 16);
 		uint32_t fci_count = 1;
 
 		// Now the NACK message
 		if (peer->receiver_ctx->nack_type == RIST_NACK_BITMASK)
 		{
-			struct rist_rtcp_nack_bitmask *rtcp = (struct rist_rtcp_nack_bitmask *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext));
+			struct rist_rtcp_nack_bitmask *rtcp = (struct rist_rtcp_nack_bitmask *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len);
 			rtcp->flags = RTCP_NACK_BITMASK_FLAGS;
 			rtcp->ptype = PTYPE_NACK_BITMASK;
 			rtcp->ssrc_source = 0; // TODO
 			rtcp->ssrc = htobe32(peer->adv_flow_id);
-			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE);
+			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + RTCP_FB_HEADER_SIZE);
 			uint32_t last_seq, tmp_seq;
 			tmp_seq = last_seq = seq_array[0];
 			uint32_t boundary = tmp_seq +16;
@@ -883,12 +874,12 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 		}
 		else // PTYPE_NACK_CUSTOM
 		{
-			struct rist_rtcp_nack_range *rtcp = (struct rist_rtcp_nack_range *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext));
+			struct rist_rtcp_nack_range *rtcp = (struct rist_rtcp_nack_range *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len);
 			rtcp->flags = RTCP_NACK_RANGE_FLAGS;
 			rtcp->ptype = PTYPE_NACK_CUSTOM;
 			rtcp->ssrc_source = htobe32(peer->adv_flow_id);
 			memcpy(rtcp->name, "RIST", 4);
-			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE);
+			rec = (struct rist_rtp_nack_record *)(rtcp_buf + RIST_MAX_PAYLOAD_OFFSET + payload_len + RTCP_FB_HEADER_SIZE);
 			uint16_t tmp_seq = (uint16_t)seq_array[0];
 			uint16_t last_seq = tmp_seq;
 			rec->start = htons(tmp_seq);
@@ -916,7 +907,7 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 			rec->extra = htons(extra);
 			rtcp->len = htons((uint16_t)(2 + fci_count));
 		}
-		int nack_bufsize = sizeof(struct rist_rtcp_seqext) + RTCP_FB_HEADER_SIZE + RTCP_FB_FCI_GENERIC_NACK_SIZE * fci_count;
+		int nack_bufsize = RTCP_FB_HEADER_SIZE + RTCP_FB_FCI_GENERIC_NACK_SIZE * fci_count;
 		payload_len += nack_bufsize;
 		payload_type = RIST_PAYLOAD_TYPE_RTCP_NACK;
 	}
