@@ -115,8 +115,8 @@ if not builtin_cjson
 endif
 if builtin_cjson
 	message('Using builtin cJSON library')
-	add_project_arguments('-DCJSON_HIDE_SYMBOLS', language: 'c')
-	cjson_lib = declare_dependency( sources: 'contrib/contrib_cJSON/cjson/cJSON.c',
+	cjson_lib = declare_dependency( compile_args : '-DCJSON_HIDE_SYMBOLS',
+									sources: 'contrib/contrib_cJSON/cjson/cJSON.c',
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
@@ -128,7 +128,8 @@ if not builtin_lz4
 endif
 if builtin_lz4
 	message('Using builtin lz4 library')
-	lz4_lib = declare_dependency( sources: ['contrib/lz4/lz4.c',
+	lz4_lib = declare_dependency( compile_args : '-DLZ4LIB_VISIBILITY=',
+								  sources: ['contrib/lz4/lz4.c',
 											'contrib/lz4/lz4frame.c',
 											'contrib/lz4/lz4hc.c',
 											'contrib/lz4/xxhash.c',],
