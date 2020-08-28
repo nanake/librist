@@ -73,7 +73,7 @@ extern "C" {
 #  define LZ4FLIB_API __declspec(dllexport)
 #elif defined(LZ4_DLL_IMPORT) && (LZ4_DLL_IMPORT==1)
 #  define LZ4FLIB_API __declspec(dllimport)
-#elif defined(__GNUC__) && (__GNUC__ >= 4)
+#elif defined(__GNUC__) && (__GNUC__ >= 4) && !defined(LZ4FLIB_API)
 #  define LZ4FLIB_API __attribute__ ((__visibility__ ("default")))
 #else
 #  define LZ4FLIB_API

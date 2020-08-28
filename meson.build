@@ -128,7 +128,7 @@ if not builtin_lz4
 endif
 if builtin_lz4
 	message('Using builtin lz4 library')
-	lz4_lib = declare_dependency( compile_args : '-DLZ4LIB_VISIBILITY=',
+	lz4_lib = declare_dependency( compile_args : [ '-DLZ4LIB_VISIBILITY=',  '-DLZ4FLIB_API='],
 								  sources: ['contrib/lz4/lz4.c',
 											'contrib/lz4/lz4frame.c',
 											'contrib/lz4/lz4hc.c',
