@@ -1447,6 +1447,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 
 	if (!strlen(peer->receiver_name)) {
 		snprintf(peer->receiver_name, 128, "empty-sdes-name peer id#%i", peer->adv_peer_id);
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peer has empty cname in SDES packet, generating default name");
 	}
 
 	// Check to see if this peer's flowid changed
