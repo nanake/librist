@@ -1446,9 +1446,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
 	if (!strlen(peer->receiver_name)) {
-		char tmpbuf[128] = {0};
-		sprintf(tmpbuf, "empty-sdes-name peer id#%i", peer->adv_peer_id);
-		strcpy(peer->receiver_name, tmpbuf);
+		snprintf(peer->receiver_name, 128, "empty-sdes-name peer id#%i", peer->adv_peer_id);
 	}
 
 	// Check to see if this peer's flowid changed
