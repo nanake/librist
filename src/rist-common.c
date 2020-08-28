@@ -2228,6 +2228,12 @@ protocol_bypass:
 		// We need this protocol bypass to manage keepalives of any kind,
 		// they need to trigger peering at the bottom of this function
 
+		/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
+		if (RIST_UNLIKELY(payload.type == RIST_PAYLOAD_TYPE_RTCP && peer->receiver_ctx && peer->remote_port != payload.src_port)) {
+			peer->remote_port = payload.src_port;
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port");
+		}
+
 		pthread_rwlock_rdlock(peerlist_lock);
 		bool inchild = false;
 		while (p) {
@@ -2304,7 +2310,7 @@ protocol_bypass:
 				}
 				p->local_port = peer->local_port;
 			}
-			else {
+			else if (peer->receiver_ctx){
 				// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
 				p->remote_port = payload.src_port;
 				p->local_port = payload.dst_port;
