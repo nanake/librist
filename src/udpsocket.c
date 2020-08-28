@@ -6,7 +6,7 @@
 #include "log-private.h"
 #ifdef _WIN32
 #include <ws2ipdef.h>
-#include <netioapi.h>
+#include <iphlpapi.h>
 #ifndef MCAST_JOIN_GROUP
 #define MCAST_JOIN_GROUP 41
 #endif
