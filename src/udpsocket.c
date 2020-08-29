@@ -201,6 +201,10 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	}
 	if (miface != NULL && miface[0] != '\0') {
 		ifindex = if_nametoindex(miface);
+		if (!ifindex) {
+			rist_log_priv3(RIST_LOG_ERROR, "Failed to get interface index error: %s\n", strerror(errno));
+			rist_log_priv3(RIST_LOG_INFO, "Falling back to joining via default route\n");
+		}
 	}
 #ifdef MCAST_JOIN_GROUP
 	if (ifindex) {
