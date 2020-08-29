@@ -1939,15 +1939,16 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 #ifndef _WIN32
 		if (recv_bufsize <= 0) {
 			int errorcode = errno;
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+					return;
 #else
 		if (recv_bufsize == SOCKET_ERROR) {
 			int errorcode = WSAGetLastError();
 			if (errorcode == WSAEWOULDBLOCK)
 				return;
 #endif
-			// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
-			if (errno != EAGAIN)
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errorcode, recv_bufsize, fd);
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errorcode, recv_bufsize, fd);
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "%s\n", strerror(errorcode));
 			return;
 		}
 
