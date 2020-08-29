@@ -291,8 +291,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 	if (raw.sin6_family == AF_INET6) {
 		addrlen = sizeof(struct sockaddr_in6);
 		is_multicast = IN6_IS_ADDR_MULTICAST(&raw.sin6_addr);
-	}
-	else {
+	} else {
 		struct sockaddr_in *tmp = (struct sockaddr_in*)&raw;
 		addrlen = sizeof(struct sockaddr_in);
 		is_multicast = IN_MULTICAST(ntohl(tmp->sin_addr.s_addr));
@@ -301,13 +300,21 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-
-	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0) {
+#ifdef _WIN32
+	if (is_multicast) {
+		struct sockaddr_in6 sa = { .sin6_family = raw.sin6_family, .sin6_port = raw.sin6_port };
+		if (bind(sd, (struct sockaddr *)&sa, addrlen) < 0)	{
+			rist_log_priv3(RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
+			close(sd);
+			return -1;
+		}
+	} else
+#endif
+	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)	{
 		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
 		close(sd);
 		return -1;
 	}
-
 	if (is_multicast) {
 		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0) {
 			rist_log_priv3( RIST_LOG_ERROR, "Could not join multicast group: %s on %s\n", host, mciface);
