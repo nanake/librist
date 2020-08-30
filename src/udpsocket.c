@@ -6,7 +6,6 @@
 #include "log-private.h"
 #ifdef _WIN32
 #include <ws2ipdef.h>
-#include <iphlpapi.h>
 #ifndef MCAST_JOIN_GROUP
 #define MCAST_JOIN_GROUP 41
 #endif
@@ -162,7 +161,11 @@ uint32_t udpsocket_get_buffer_send_size(int sd)
 
 int udpsocket_set_mcast_iface(int sd, const char *mciface, uint16_t family)
 {
+#ifndef _WIN32
 	int scope = if_nametoindex(mciface);
+#else
+	int scope = atoi(mciface);
+#endif
 	if (scope == 0)
 		return -1;
 #ifdef _WIN32
@@ -195,12 +198,14 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	uint32_t src_addr = htonl(INADDR_ANY);
 	int ifindex = 0;
 
-	if (is_ip_address(miface, AF_INET))
-	{
+	if (is_ip_address(miface, AF_INET))	{
 		src_addr = inet_addr(miface);
-	}
-	if (miface != NULL && miface[0] != '\0') {
+	} else if (miface != NULL && miface[0] != '\0') {
+#ifndef _WIN32
 		ifindex = if_nametoindex(miface);
+#else
+		ifindex = atoi(miface);
+#endif
 		if (!ifindex) {
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to get interface index error: %s\n", strerror(errno));
 			rist_log_priv3(RIST_LOG_INFO, "Falling back to joining via default route\n");
