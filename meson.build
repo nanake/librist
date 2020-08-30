@@ -163,7 +163,13 @@ if use_mbedtls
 		#mbedtls_options.add_cmake_defines({'ENABLE_PROGRAMS': false})
 		#mbedtls_options.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
 		### backwards compatible way is via cmake_options kwarg
-		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON'])
+		toolchainfile = ''
+		if meson.is_cross_build()
+			if meson.get_cross_property('mingw_toolchainfile')
+				toolchainfile = '-DCMAKE_TOOLCHAIN_FILE='+meson.current_source_dir() + '/common/ci/x86_64-w64-mingw32.cmake'
+			endif
+		endif
+		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON', toolchainfile])
 		inc += mbedtls_proj.include_directories('mbedcrypto')
 		mbedcrypto_lib = mbedtls_proj.dependency('mbedcrypto')
 	endif
