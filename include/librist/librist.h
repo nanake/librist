@@ -64,6 +64,15 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
 	int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 	void *arg);
 
+/**
+ * @brief Helper function used to create valid random 32 bit flow_id.
+ *
+ * Use this function when you want to generate a valid random flow_id.
+ *
+ * @return random uint32_t number that complies with the flow_id rules
+ */
+RIST_API uint32_t rist_flow_id_create();
+
 /* Sender specific functions, use rist_sender_create to create a sender rist_ctx */
 
 /**

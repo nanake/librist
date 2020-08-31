@@ -159,6 +159,21 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	return (int)num;
 }
 
+uint32_t rist_flow_id_create()
+{
+	char hostname[RIST_MAX_HOSTNAME];
+	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
+	if (ret_hostname == -1)
+	{
+		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
+	}
+#ifndef _WIN32
+	return generate_flowid(timestampNTP_u64(), getpid(), hostname);
+#else
+	return generate_flowid(timestampNTP_u64(), GetCurrentProcessId(), hostname);
+#endif
+}
+
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
 									int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 									void *arg)
@@ -267,19 +282,7 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	}
 
 	if (flow_id == 0)
-	{
-		char hostname[RIST_MAX_HOSTNAME];
-		int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
-		if (ret_hostname == -1)
-		{
-			snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
-		}
-#ifndef _WIN32
-		flow_id = generate_flowid(timestampNTP_u64(), getpid(), hostname);
-#else
-		flow_id = generate_flowid(timestampNTP_u64(), GetCurrentProcessId(), hostname);
-#endif
-	}
+		flow_id = rist_flow_id_create();
 
 	ctx->adv_flow_id = flow_id;
 
