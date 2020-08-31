@@ -7,8 +7,6 @@
 #include <processthreadsapi.h>
 #endif
 
-extern uint32_t generate_flowid(uint64_t birthtime, uint32_t pid, const char *phrase);
-
 /* Receiver functions */
 
 int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
@@ -161,17 +159,17 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 
 uint32_t rist_flow_id_create()
 {
-	char hostname[RIST_MAX_HOSTNAME];
-	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
-	if (ret_hostname == -1)
-	{
-		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
+	uint32_t u32;
+	uint8_t *u8 = (void *) &u32;
+
+	for (size_t i = 0; i < sizeof(u32); i++) {
+		u8[i] = rand() % 256;
 	}
-#ifndef _WIN32
-	return generate_flowid(timestampNTP_u64(), getpid(), hostname);
-#else
-	return generate_flowid(timestampNTP_u64(), GetCurrentProcessId(), hostname);
-#endif
+
+	// It must be an even number
+	u32 &= ~(1UL << 0);
+
+	return u32;
 }
 
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
