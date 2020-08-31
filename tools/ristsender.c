@@ -57,6 +57,7 @@ struct rist_sender_args {
 	char* shared_secret;
 	int buffer_size;
 	int statsinterval;
+	uint16_t stream_id;
 };
 
 static struct option long_options[] = {
@@ -129,12 +130,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	if (recv_bufsize > 0) {
 		ssize_t offset = 0;
 		struct rist_data_block data_block = { 0 };
-		// The stream-id is used as a demuxing filter based on the virtual source port of the GRE tunnel.
-		data_block.virt_src_port = callback_object->udp_config->stream_id;
-		// We should delegate population of the correct port to the lib as it needs
-		// to match the peer through which the data is being sent
-		data_block.virt_dst_port = 0;
-		// Delegate ts_ntp to the library ny default.
+		// Delegate ts_ntp to the library by default.
 		// If we wanted to be more accurate, we could use the kernel nic capture timestamp (linux)
 		data_block.ts_ntp = 0;
 		data_block.flags = 0;
@@ -274,6 +270,14 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	if (setup->buffer_size) {
 		overrides_peer_config->recovery_length_min = setup->buffer_size;
 		overrides_peer_config->recovery_length_max = setup->buffer_size;
+	}
+	if (setup->stream_id) {
+		if (setup->stream_id % 2 != 0) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Error parsing peer options for sender: %s, stream-id (%d) must be even!\n\n", setup->token, setup->stream_id);
+			return NULL;
+		}
+		else
+			overrides_peer_config->virt_dst_port = setup->stream_id;
 	}
 
 	/* Print config */
@@ -446,6 +450,7 @@ int main(int argc, char *argv[])
 		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
 			peer_args.token = outputtoken;
 			peer_args.ctx = callback_object[i].sender_ctx;
+			peer_args.stream_id = udp_config->stream_id;
 			struct rist_peer *peer = setup_rist_peer(&peer_args);
 			if (peer == NULL)
 				goto shutdown;

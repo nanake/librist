@@ -106,10 +106,10 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 		if (!callback_object->udp_config[i])
 			continue;
 		const struct rist_udp_config *udp_config = callback_object->udp_config[i];
-		// The stream-id on the udp url gets translated into the virtual source port of the GRE tunnel
-		uint16_t virt_src_port = udp_config->stream_id;
-		// look for the correct mapping of source port to output
-		if (profile == RIST_PROFILE_SIMPLE ||  virt_src_port == 0 || (virt_src_port == b->virt_src_port)) {
+		// The stream-id on the udp url gets translated into the virtual destination port of the GRE tunnel
+		uint16_t virt_dst_port = udp_config->stream_id;
+		// look for the correct mapping of destination port to output
+		if (profile == RIST_PROFILE_SIMPLE ||  virt_dst_port == 0 || (virt_dst_port == b->virt_dst_port)) {
 			if (callback_object->mpeg[i] > 0) {
 				uint8_t *payload = NULL;
 				size_t payload_len = 0;
@@ -139,7 +139,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 
 	if (found == 0)
 	{
-		rist_log(logging_settings, RIST_LOG_ERROR, "Source port mismatch, no output found for %d\n", b->virt_src_port);
+		rist_log(logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
 		return -1;
 	}
 
