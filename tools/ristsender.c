@@ -160,7 +160,8 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	else
 	{
 		// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
-		rist_log(logging_settings, RIST_LOG_ERROR, "Input receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, callback_object->sd);
+		if (errno != EWOULDBLOCK)
+			rist_log(logging_settings, RIST_LOG_ERROR, "Input receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, callback_object->sd);
 	}
 }
 
