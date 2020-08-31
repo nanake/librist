@@ -15,6 +15,7 @@
 #include <signal.h>
 #include "common/attributes.h"
 #include "risturlhelp.h"
+#include "src/rist-private.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s
@@ -27,16 +28,35 @@
 
 #define MAX_INPUT_COUNT 10
 #define MAX_OUTPUT_COUNT 10
-#define RIST_MAX_PACKET_SIZE 10000
 
 static int signalReceived = 0;
 static struct rist_logging_settings *logging_settings;
 
 struct rist_callback_object {
 	int sd;
-	struct rist_ctx *ctx;
+	struct evsocket_ctx *evctx;
+	struct rist_ctx *receiver_ctx;
+	struct rist_ctx *sender_ctx[MAX_OUTPUT_COUNT];
 	const struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE];
+};
+
+struct receive_thread_object {
+	int sd;
+	struct rist_ctx *ctx[MAX_OUTPUT_COUNT];
+	const struct rist_udp_config *udp_config;
+	uint8_t recv[RIST_MAX_PACKET_SIZE];
+};
+
+struct rist_sender_args {	
+	bool sender;
+	char* token;
+	int profile;
+	enum rist_log_level loglevel;
+	int encryption_type;
+	char* shared_secret;
+	int buffer_size;
+	int statsinterval;
 };
 
 static struct option long_options[] = {
@@ -81,6 +101,18 @@ static uint64_t risttools_convertRTPtoNTP(uint32_t i_rtp)
 	return i_ntp;
 }
 */
+
+static void send_to_output_peers(void *arg, const struct rist_data_block *data_block)
+{
+	struct rist_callback_object *callback_object = (void *) arg;
+	for (size_t k = 0; k < MAX_OUTPUT_COUNT; k++) {
+		if (callback_object->sender_ctx[k]) {
+			int w = rist_sender_data_write(callback_object->sender_ctx[k], data_block);
+			// TODO: report error?
+			(void) w;
+		}
+	}
+}
 
 static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
@@ -137,9 +169,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			offset = 12; // TODO: check for header extensions and remove them as well
 		data_block.payload = recv_buf + offset;
 		data_block.payload_len = recv_bufsize - offset;
-		int w = rist_sender_data_write(callback_object->ctx, &data_block);
-		// TODO: report error?
-		(void) w;
+		send_to_output_peers(callback_object, &data_block);
 	}
 	else
 	{
@@ -196,21 +226,130 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
-static int cb_stats(void *arg, const struct rist_stats *stats_container) {
+static int cb_stats(void *arg, const struct rist_stats *stats_container)
+{
 	(void)arg;
 	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }
 
-static void intHandler(int signal) {
+static void intHandler(int signal)
+{
 	rist_log(logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
 	signalReceived = signal;
 }
 
+static struct rist_ctx* setup_rist_peer(struct rist_sender_args *setup)
+{
+
+	struct rist_ctx *ctx;
+
+	if (setup->sender) {
+		if (rist_sender_create(&ctx, setup->profile, 0, logging_settings) != 0) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
+			return NULL;
+		}
+	} else {
+		if (rist_receiver_create(&ctx, RIST_PROFILE_SIMPLE, logging_settings) != 0) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
+			return NULL;
+		}
+	}
+
+	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		rist_destroy(ctx);
+		return NULL;
+	}
+
+	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) < 0) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
+		rist_destroy(ctx);
+		return NULL;
+	}
+
+	if (setup->profile != RIST_PROFILE_SIMPLE) {
+		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
+			rist_destroy(ctx);
+			return NULL;
+		}
+	}
+
+	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		rist_destroy(ctx);
+		return NULL;
+	}
+
+	// Rely on the library to parse the url
+	const struct rist_peer_config *peer_config_link = NULL;
+	if (rist_parse_address(setup->token, (void *)&peer_config_link))
+	{
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender: %s\n", setup->token);
+		rist_destroy(ctx);
+		return NULL;
+	}
+
+	/* Process overrides */
+	struct rist_peer_config *overrides_peer_config = (void *)peer_config_link;
+	if (setup->shared_secret && peer_config_link->secret[0] == 0) {
+		strncpy(overrides_peer_config->secret, setup->shared_secret, RIST_MAX_STRING_SHORT -1);
+		if (setup->encryption_type)
+			overrides_peer_config->key_size = setup->encryption_type;
+		else if (!overrides_peer_config->key_size)
+			overrides_peer_config->key_size = 128;
+	}
+	if (setup->buffer_size) {
+		overrides_peer_config->recovery_length_min = setup->buffer_size;
+		overrides_peer_config->recovery_length_max = setup->buffer_size;
+	}
+
+	/* Print config */
+	rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
+		peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max, 
+		peer_config_link->recovery_reorder_buffer, peer_config_link->recovery_rtt_min, peer_config_link->recovery_rtt_max,
+		peer_config_link->congestion_control_mode, peer_config_link->min_retries, peer_config_link->max_retries);
+
+	struct rist_peer *peer;
+	if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to %s\n", peer_config_link->address);
+		rist_destroy(ctx);
+		free((void *)peer_config_link);
+		return NULL;
+	}
+
+	free((void *)peer_config_link);
+
+	return ctx;
+}
+
+static PTHREAD_START_FUNC(input_loop, arg)
+{
+	struct rist_callback_object *callback_object = (void *) arg;
+	// This is my main loop (one thread per receiver)
+	while (!signalReceived) {
+		if (callback_object->receiver_ctx)
+		{
+			// RIST receiver
+			const struct rist_data_block *b;
+			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 65536);
+			if (queue_size && queue_size % 10 == 0)
+				rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
+			if (b && b->payload) send_to_output_peers(&callback_object, b);
+		}
+		else
+		{
+			// UDP recevier. Infinite wait, 100 socket events
+			evsocket_loop_single(callback_object->evctx, -1, 100);
+		}
+	}
+	return 0;
+}
+
 int main(int argc, char *argv[])
 {
-	int rist;
 	int c;
 	int option_index;
 	struct rist_callback_object callback_object[MAX_INPUT_COUNT];
@@ -219,12 +358,13 @@ int main(int argc, char *argv[])
 	char *outputurl = NULL;
 	char *oobtun = NULL;
 	char *shared_secret = NULL;
-	int buffer = 0;
+	int buffer_size = 0;
 	int encryption_type = 0;
-	struct rist_ctx *ctx;
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
+	struct rist_sender_args peer_args;
+	struct rist_ctx *sender_ctx[MAX_OUTPUT_COUNT];
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
@@ -257,7 +397,7 @@ int main(int argc, char *argv[])
 			outputurl = strdup(optarg);
 		break;
 		case 'b':
-			buffer = atoi(optarg);
+			buffer_size = atoi(optarg);
 		break;
 		case 's':
 			shared_secret = strdup(optarg);
@@ -301,148 +441,143 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 	}
 
-	if (rist_sender_create(&ctx, profile, 0, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
-		exit(1);
+	peer_args.loglevel = loglevel;
+	peer_args.profile = profile;
+	peer_args.encryption_type = encryption_type;
+	peer_args.shared_secret = shared_secret;
+	peer_args.buffer_size = buffer_size;
+	peer_args.statsinterval = statsinterval;
+
+	// Setup the output rist objects
+	char *saveptroutput;
+	char *outputtoken = strtok_r(outputurl, ",", &saveptroutput);
+	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
+		peer_args.token = outputtoken;
+		peer_args.sender = true;
+
+		fprintf(stderr,"Adding %s\n", outputtoken);
+
+		sender_ctx[i] = setup_rist_peer(&peer_args);
+		if (sender_ctx[i] == NULL)
+			exit(1);
+
+		outputtoken = strtok_r(NULL, ",", &saveptroutput);
+		if (!outputtoken)
+			break;
 	}
 
-	/* MPEG Side: listen to the given addresses */
-	struct evsocket_ctx *evctx = evsocket_create();
+	/* Setup the input udp/rist objects: listen to the given address(es) */
 	bool atleast_one_socket_opened = false;
-	char *saveptr1;
-	char *inputtoken = strtok_r(inputurl, ",", &saveptr1);
+	char *saveptrinput;
+	char *inputtoken = strtok_r(inputurl, ",", &saveptrinput);
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (!inputtoken)
 			break;
 
-		// First parse extra parameters (?miface=lo&stream-id=1971) and separate the address
-		// We are using the rist_parse_address function to create a config object that does not really
-		// belong to the udp input. We do this only to avoid writing another parser for the two url
-		// parameters available to the udp input/output url
+		// First parse extra url and parameters
 		const struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address(inputtoken, &udp_config)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
 		}
 
-		// Now parse the address 127.0.0.1:5000
-		char hostname[200] = {0};
-		int inputlisten;
-		uint16_t inputport;
-		if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
-			goto next;
-		}
-		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++)
+			callback_object[i].sender_ctx[j] = sender_ctx[j];
 
-		callback_object[i].sd = udpsocket_open_bind(hostname, inputport, udp_config->miface);
-		if (callback_object[i].sd <= 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
-				(char *) hostname, inputport, udp_config->miface);
-			goto next;
-		} else {
-			udpsocket_set_nonblocking(callback_object[i].sd);
-			rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
-			atleast_one_socket_opened = true;
+		if (strcmp(udp_config->prefix, "rist") == 0) {
+			// This is a rist inputs
+			peer_args.token = inputtoken;
+			peer_args.sender = false;
+			callback_object[i].receiver_ctx = setup_rist_peer(&peer_args);
+			if (callback_object[i].receiver_ctx)
+				atleast_one_socket_opened = true;
 		}
-		callback_object[i].ctx = ctx;
-		callback_object[i].udp_config = udp_config;
+		else {
+			// This is a udp input, i.e. 127.0.0.1:5000
+			char hostname[200] = {0};
+			int inputlisten;
+			uint16_t inputport;
+			if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
+				goto next;
+			}
+			rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 
-		event[i] = evsocket_addevent(evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
-			(void *)&callback_object[i]);
+			callback_object[i].sd = udpsocket_open_bind(hostname, inputport, udp_config->miface);
+			if (callback_object[i].sd <= 0) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
+					(char *) hostname, inputport, udp_config->miface);
+				goto next;
+			} else {
+				udpsocket_set_nonblocking(callback_object[i].sd);
+				rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
+				atleast_one_socket_opened = true;
+			}
+			callback_object[i].udp_config = udp_config;
+
+			callback_object[i].evctx = evsocket_create();
+			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
+				(void *)&callback_object[i]);
+		}
 
 next:
-		inputtoken = strtok_r(NULL, ",", &saveptr1);
+		inputtoken = strtok_r(NULL, ",", &saveptrinput);
 	}
 
 	if (!atleast_one_socket_opened) {
-		exit(1);
+		goto shutdown;
 	}
 
-	rist = rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
-	if (rist < 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
-		exit(1);
-	}
+	pthread_t thread_main_loop[MAX_INPUT_COUNT];
 
-	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
-			exit(1);
-		}
-	}
-
-	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
-		exit(1);
-	}
-
-	char *saveptr2;
-	char *outputtoken = strtok_r(outputurl, ",", &saveptr2);
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
-
-		// Rely on the library to parse the url
-		const struct rist_peer_config *peer_config_link = NULL;
-		if (rist_parse_address(outputtoken, (void *)&peer_config_link))
-		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender #%d\n", (int)(i + 1));
-			exit(1);
+		if (sender_ctx[i] && rist_start(sender_ctx[i]) == -1) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
+			goto shutdown;
 		}
-
-		/* Process overrides */
-		struct rist_peer_config *overrides_peer_config = (void *)peer_config_link;
-		if (shared_secret && peer_config_link->secret[0] == 0) {
-			strncpy(overrides_peer_config->secret, shared_secret, RIST_MAX_STRING_SHORT -1);
-			if (encryption_type)
-				overrides_peer_config->key_size = encryption_type;
-			else if (!overrides_peer_config->key_size)
-				overrides_peer_config->key_size = 128;
-		}
-		if (buffer) {
-			overrides_peer_config->recovery_length_min = buffer;
-			overrides_peer_config->recovery_length_max = buffer;
-		}
-
-		/* Print config */
-		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
-			peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max, 
-			peer_config_link->recovery_reorder_buffer, peer_config_link->recovery_rtt_min, peer_config_link->recovery_rtt_max,
-			peer_config_link->congestion_control_mode, peer_config_link->min_retries, peer_config_link->max_retries);
-
-		struct rist_peer *peer;
-		if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender #%i\n", (int)(i + 1));
-			exit(1);
-		}
-
-		free((void *)peer_config_link);
-		outputtoken = strtok_r(NULL, ",", &saveptr2);
-		if (!outputtoken)
-			break;
-	}
-
-	if (rist_start(ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
-		exit(1);
-	}
-
-	while (!signalReceived) {
-		// This is my main loop (Infinite wait, 100 socket events)
-		evsocket_loop_single(evctx, -1, 100);
 	}
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
+		if (callback_object[i].receiver_ctx && rist_start(callback_object[i].receiver_ctx) == -1) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
+			goto shutdown;
+		}
+		if ((callback_object[i].evctx || callback_object[i].receiver_ctx) && pthread_create(&thread_main_loop[i], NULL, input_loop, (void *)callback_object) != 0)
+		{
+			fprintf(stderr, "Could not start send data thread\n");
+			goto shutdown;
+		}
+	}
+
+#ifdef _WIN32
+		system("pause");
+#else
+		pause();
+#endif
+
+shutdown:
+	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		// Remove socket events
 		if (event[i])
-			evsocket_delevent(evctx, event[i]);
+			evsocket_delevent(callback_object[i].evctx, event[i]);
 		// Free udp_config object
 		if ((void *)callback_object[i].udp_config)
 			free((void *)(callback_object[i].udp_config));
+		// Cleanup rist listeners
+		if (callback_object[i].receiver_ctx)
+			rist_destroy(callback_object[i].receiver_ctx);
 	}
 	
 	// Shut down sockets and rist contexts
-	evsocket_destroy(evctx);
-	rist_destroy(ctx);
+	for (size_t k = 0; k < MAX_OUTPUT_COUNT; k++) {
+		if (sender_ctx[k])
+			rist_destroy(sender_ctx[k]);
+	}
+
+	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
+		if (thread_main_loop[i])
+			pthread_join(thread_main_loop[i], NULL);
+	}
 
 	if (inputurl)
 		free(inputurl);

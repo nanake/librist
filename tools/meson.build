@@ -5,9 +5,12 @@ if host_machine.system() == 'windows'
 	tools_deps += ['../contrib/getopt-shim.c']
 endif
 
+tools_deps += [	'../contrib/pthread-shim.c']
+
 executable('ristsender',
 	['ristsender.c', tools_deps],
 	link_with : [librist],
+	dependencies: [threads],
 	include_directories: inc,
 	install: true)
 
