@@ -26,8 +26,6 @@
 #include <linux-crypto.h>
 #endif
 
-extern uint32_t generate_flowid(uint64_t birthtime, uint32_t pid, const char *phrase);
-
 uint64_t timestampNTP_u64(void)
 {
 
@@ -168,21 +166,6 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 }
 
-static uint32_t rand_u32(void)
-{
-	char hostname[RIST_MAX_HOSTNAME];
-	int ret_hostname = gethostname(hostname, RIST_MAX_HOSTNAME);
-	if (ret_hostname == -1)
-	{
-		snprintf(hostname, RIST_MAX_HOSTNAME, "UnknownHost%d", rand());
-	}
-#ifndef _WIN32
-	return generate_flowid(timestampNTP_u64(), getpid(), hostname);
-#else
-	return generate_flowid(timestampNTP_u64(), GetCurrentProcessId(), hostname);
-#endif
-}
-
 static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 {
 	RIST_MARK_UNUSED(peer);
@@ -202,7 +185,7 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 
 	if (new_nonce) {
 		do {
-			key->gre_nonce = rand_u32();
+			key->gre_nonce = prand_u32();
 		} while (!key->gre_nonce);
 
 		key->used_times = 0;

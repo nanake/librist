@@ -2,6 +2,7 @@
 #include "log-private.h"
 #include "udp-private.h"
 #include "vcs_version.h"
+#include "crypto-private.h"
 #include <assert.h>
 #ifdef _WIN32
 #include <processthreadsapi.h>
@@ -159,14 +160,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 
 uint32_t rist_flow_id_create()
 {
-	uint32_t u32;
-	uint8_t *u8 = (void *) &u32;
-
-	for (size_t i = 0; i < sizeof(u32); i++) {
-		u8[i] = rand() % 256;
-	}
-
-	// It must be an even number
+	uint32_t u32 = prand_u32();
 	u32 &= ~(1UL << 0);
 
 	return u32;
