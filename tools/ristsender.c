@@ -16,6 +16,7 @@
 #include "common/attributes.h"
 #include "risturlhelp.h"
 #include "src/rist-private.h"
+#include <stdatomic.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s

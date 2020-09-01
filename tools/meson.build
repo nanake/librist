@@ -10,7 +10,10 @@ tools_deps += [	'../contrib/pthread-shim.c']
 executable('ristsender',
 	['ristsender.c', tools_deps],
 	link_with : [librist],
-	dependencies: [threads],
+	dependencies: [
+		threads,
+		stdatomic_dependency
+	],
 	include_directories: inc,
 	install: true)
 
