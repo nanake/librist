@@ -278,8 +278,9 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 			rist_log(logging_settings, RIST_LOG_ERROR, "Error parsing peer options for sender: %s, stream-id (%d) must be even!\n\n", setup->token, setup->stream_id);
 			return NULL;
 		}
-		else
+		else {
 			overrides_peer_config->virt_dst_port = setup->stream_id;
+		}
 	}
 
 	/* Print config */
@@ -427,6 +428,10 @@ int main(int argc, char *argv[])
 	peer_args.statsinterval = statsinterval;
 
 	// Setup the input udp/rist objects: listen to the given address(es)
+	int32_t stream_id_check[MAX_INPUT_COUNT];
+	for (size_t j = 0; j < MAX_INPUT_COUNT; j++)
+		stream_id_check[j] = -1;
+	struct evsocket_ctx *evctx = NULL;
 	bool atleast_one_socket_opened = false;
 	char *saveptrinput;
 	char *inputtoken = strtok_r(inputurl, ",", &saveptrinput);
@@ -439,6 +444,18 @@ int main(int argc, char *argv[])
 		if (rist_parse_udp_address(inputtoken, &udp_config)) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
+		}
+
+		// Check for duplicate stream-ids and reject the entire config if we have any dups
+		for (size_t j = 0; j < MAX_INPUT_COUNT; j++) {
+			if (stream_id_check[j] == -1) {
+				stream_id_check[j] = (int32_t)udp_config->stream_id;
+				rist_log(logging_settings, RIST_LOG_INFO, "Assigning stream-id %d to this input\n", udp_config->stream_id);
+				break;
+			} else if ((uint16_t)stream_id_check[j] == udp_config->stream_id) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Every input must have a unique stream-id (%d) when you multiplex\n", udp_config->stream_id);
+				goto shutdown;
+			}
 		}
 
 		// Setup the output rist objects (a brand new instance per receiver)
@@ -475,6 +492,8 @@ int main(int argc, char *argv[])
 				atleast_one_socket_opened = true;
 		}
 		else {
+			if(!evctx)
+				evctx = evsocket_create();
 			// This is a udp input, i.e. 127.0.0.1:5000
 			char hostname[200] = {0};
 			int inputlisten;
@@ -497,7 +516,7 @@ int main(int argc, char *argv[])
 			}
 			callback_object[i].udp_config = udp_config;
 
-			callback_object[i].evctx = evsocket_create();
+			callback_object[i].evctx = evctx;
 			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
 				(void *)&callback_object[i]);
 		}
@@ -510,7 +529,13 @@ next:
 		goto shutdown;
 	}
 
-	pthread_t thread_main_loop[MAX_INPUT_COUNT];
+	pthread_t thread_main_loop[MAX_INPUT_COUNT+1];
+
+	if (evctx && pthread_create(&thread_main_loop[0], NULL, input_loop, (void *)callback_object) != 0)
+	{
+		fprintf(stderr, "Could not start udp receiver thread\n");
+		goto shutdown;
+	}
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
@@ -521,9 +546,9 @@ next:
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 			goto shutdown;
 		}
-		if ((callback_object[i].evctx || callback_object[i].receiver_ctx) && pthread_create(&thread_main_loop[i], NULL, input_loop, (void *)callback_object) != 0)
+		if (callback_object[i].receiver_ctx && pthread_create(&thread_main_loop[i+1], NULL, input_loop, (void *)callback_object) != 0)
 		{
-			fprintf(stderr, "Could not start send data thread\n");
+			fprintf(stderr, "Could not start send rist receiver thread\n");
 			goto shutdown;
 		}
 	}
@@ -550,7 +575,7 @@ shutdown:
 			rist_destroy(callback_object[i].sender_ctx);
 	}
 
-	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
+	for (size_t i = 0; i <= MAX_INPUT_COUNT; i++) {
 		if (thread_main_loop[i])
 			pthread_join(thread_main_loop[i], NULL);
 	}
