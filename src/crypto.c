@@ -43,7 +43,7 @@ static bool seeded = false;
 //Generate pseudo-random 32 bit
 uint32_t prand_u32() {
 	if (!seeded) {
-		srand(timestampNTP_u64());
+		srand((unsigned int)timestampNTP_u64());
 		seeded = true;
 	}
 	uint32_t u32;
