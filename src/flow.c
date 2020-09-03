@@ -10,6 +10,8 @@
 
 void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt)
 {
+	pthread_mutex_lock(&f->nack_mutex);
+
 	uint64_t now = timestampNTP_u64();
 
 	struct rist_missing_buffer *m = calloc(1, sizeof(*m));
@@ -36,6 +38,7 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 		f->missing_tail->next = m;
 		f->missing_tail = m;
 	}
+	pthread_mutex_unlock(&f->nack_mutex);
 }
 
 void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
@@ -60,6 +63,7 @@ void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx)
 
 void rist_flush_missing_flow_queue(struct rist_flow *flow)
 {
+	pthread_mutex_lock(&flow->nack_mutex);
 	struct rist_missing_buffer *current = flow->missing;
 	while (current)
 	{
@@ -70,6 +74,7 @@ void rist_flush_missing_flow_queue(struct rist_flow *flow)
 	}
 	flow->missing = NULL;
 	flow->missing_counter = 0;
+	pthread_mutex_unlock(&flow->nack_mutex);
 }
 
 void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
@@ -115,7 +120,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Deleting missing queue elements\n");
 	/* Delete all missing queue elements (if any) */
-	rist_flush_missing_flow_queue(f);
+	//rist_flush_missing_flow_queue(f);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Deleting output buffer data\n");
 	/* Delete all buffer data (if any) */
@@ -181,6 +186,14 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 		pthread_cond_destroy(&f->condition);
 		free(f);
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d calling pthread_mutex_init\n", ret);
+		return NULL;
+	}
+	ret = pthread_mutex_init(&f->nack_mutex, NULL);
+	if (ret) {
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR,  "Error %d calling pthread_mutex_init\n", ret);
+		pthread_cond_destroy(&f->condition);
+		pthread_mutex_destroy(&f->mutex);
+		free(f);
 		return NULL;
 	}
 

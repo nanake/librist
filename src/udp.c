@@ -1196,14 +1196,14 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	size_t idx = rist_sender_index_get(ctx, retry->seq);
 	if (ctx->sender_queue[idx] == NULL) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			" Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), consider increasing the buffer size\n",
 			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	} else if (ctx->common.profile == RIST_PROFILE_ADVANCED && ctx->sender_queue[idx]->seq != retry->seq) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			" Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), something is very wrong!\n",
 			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
@@ -1211,7 +1211,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		return -1;
 	}
 	else if (ctx->common.profile < RIST_PROFILE_ADVANCED && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			" Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), bitrate is too high, use advanced profile instead\n",
 			(uint16_t)retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
@@ -1228,7 +1228,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
 
 	if (current_bitrate > max_bitrate) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
 			cli_bw->bitrate, retry_bw->bitrate, max_bitrate, idx);
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
@@ -1239,7 +1239,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	uint64_t data_age = (now - ctx->sender_queue[idx]->time) / RIST_CLOCK;
 	uint64_t retry_age = (now - retry->insert_time) / RIST_CLOCK;
 	if (retry_age > retry->peer->config.recovery_length_max) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Retry-request of element %" PRIu32 " (idx %zu) that was sent %" PRIu64
 				"ms ago has been in the queue too long to matter: %"PRIu64"ms > %ums\n",
 			retry->seq, idx, data_age, retry_age, retry->peer->config.recovery_length_max);
@@ -1312,9 +1312,10 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 
 	if (!buffer)
 	{
-		rist_log_priv(&ctx->common, RIST_LOG_WARN,
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
 			ctx->sender_recover_min_time);
+			peer->stats_sender_instant.retrans_skip++;
 		return;
 	} else {
 		uint64_t age_ticks =  (now - buffer->time);
@@ -1338,7 +1339,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
 					if (delta < peer->config.recovery_rtt_min)
 					{
-						rist_log_priv(&ctx->common, RIST_LOG_WARN,
+						rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 							"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu32 " ms\n",
 							buffer->seq, age_ticks / RIST_CLOCK, delta, peer->config.recovery_rtt_min);
 						peer->stats_sender_instant.bloat_skip++;
@@ -1347,7 +1348,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				}
 				else
 				{
-					rist_log_priv(&ctx->common, RIST_LOG_WARN,
+					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 ", delta/age %"PRIu64"ms/%"PRIu64"ms is already queued, skipped\n",
 						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
 						peer->stats_sender_instant.bloat_skip++;
@@ -1393,7 +1394,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
 						if (delta < peer->config.recovery_rtt_min)
 						{
-							rist_log_priv(&ctx->common, RIST_LOG_WARN,
+							rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 								"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
 								buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 							peer->stats_sender_instant.bloat_skip++;
@@ -1405,7 +1406,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 							break;
 						}
 					} else {
-						rist_log_priv(&ctx->common, RIST_LOG_WARN,
+						rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 							"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued, skipped, peer #%d '%s'\n",
 							buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 						peer->stats_sender_instant.bloat_skip++;

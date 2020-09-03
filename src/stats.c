@@ -104,6 +104,12 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	if (!flow)
 		return;
 
+	//Log errors that used to be packet
+	if (flow->stats_instant.dropped_full)
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Dropped %u packets due to buffers being full\n", flow->stats_instant.dropped_full );
+	if (flow->stats_instant.dropped_late)
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Dropped %u late packets\n", flow->stats_instant.dropped_late);
+
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
 	stats_container->version = RIST_STATS_VERSION;
@@ -223,7 +229,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		cJSON_AddItemToArray(peers, peer_obj);
 
 		// Calculate flow instant stats
-		flow_recv_instant += peer->stats_receiver_instant.recv;
+		flow_recv_instant += flow->stats_instant.received;
 		flow_sent_instant += peer->stats_receiver_instant.sent;
 		flow_missing_instant += peer->stats_receiver_instant.missing;
 		flow_recovered_instant += peer->stats_receiver_instant.recovered;
@@ -290,11 +296,13 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "\tThe flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
 			flow_missing_instant, flow_recv_instant);
 		/* Delete all missing queue elements (if any) */
-		rist_flush_missing_flow_queue(flow);
+		//rist_flush_missing_flow_queue(flow);
 	}
 
 	cJSON_AddNumberToObject(json_stats, "quality", Q);
 	cJSON_AddNumberToObject(json_stats, "received", (double)flow_recv_instant);
+	cJSON_AddNumberToObject(json_stats, "dropped_late", (double)flow->stats_instant.dropped_late);
+	cJSON_AddNumberToObject(json_stats, "dropped_full", (double)flow->stats_instant.dropped_late);
 	cJSON_AddNumberToObject(json_stats, "missing", (double)flow_missing_instant);
 	cJSON_AddNumberToObject(json_stats, "recovered_total", (double)flow_recovered_instant);
 	cJSON_AddNumberToObject(json_stats, "reordered", (double)flow_reordered_instant);
@@ -305,7 +313,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(json_stats, "recovered_four_nacks", (double)flow_recovered_3nack_instant);
 	cJSON_AddNumberToObject(json_stats, "recovered_more_nacks", (double)flow_recovered_morenack_instant);
 	cJSON_AddNumberToObject(json_stats, "lost", (double)flow->stats_instant.lost);
-	cJSON_AddNumberToObject(json_stats, "duplicates", (double)flow_dups_instant);
+	cJSON_AddNumberToObject(json_stats, "duplicates", (double)flow->stats_instant.dupe);
 	cJSON_AddNumberToObject(json_stats, "missing_queue", (double)flow->missing_counter);
 	cJSON_AddNumberToObject(json_stats, "missing_queue_max", (double)flow->missing_counter_max);
 	cJSON_AddNumberToObject(json_stats, "min_inter_packet_spacing", (double)flow->stats_instant.min_ips);

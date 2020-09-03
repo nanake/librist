@@ -434,7 +434,7 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 		if (RIST_UNLIKELY(peer->buffer_bloat_active || f->missing_counter > peer->missing_counter_max))
 		{
 			if (f->missing_counter > peer->missing_counter_max)
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 					"Retry buffer is already too large (%d) for the configured "
 					"bandwidth ... ignoring missing packet(s).\n",
 					f->missing_counter);
@@ -470,8 +470,11 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 					"Clearing up old %zu bytes of old buffer data\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 			/* Delete all buffer data (if any) */
+			pthread_mutex_lock(&f->nack_mutex);
 			empty_receiver_queue(f, get_cctx(peer));
+			pthread_mutex_unlock(&f->nack_mutex);
 		}
+		rist_flush_missing_flow_queue(f);
 		/* Initialize flow session timeout and stats timers */
 		f->last_recv_ts = now;
 		f->checks_next_time = now;
@@ -517,11 +520,12 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		   written idx */
 		if ((highest_written_idx > reader_idx && !(idx < highest_written_idx && idx > reader_idx))
 			|| (highest_written_idx < reader_idx && !(idx < highest_written_idx || idx > reader_idx))) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet %"PRIu32" too late, dropping!\n", seq);
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
+			f->stats_instant.dropped_late++;
 			return -1;
 		}
 		if (!retry) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 				"Out of order packet received, seq %" PRIu32 " / age %" PRIu64 " ms\n",
 				seq, (timestampNTP_u64() - packet_time) / RIST_CLOCK);
 			out_of_order = true;
@@ -531,15 +535,18 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	if (idx == reader_idx)
 	{
 		//Buffer full!
-		rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
+		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
+		if (packet_time > f->last_packet_ts)
+			f->last_seq_found  = seq;
+		f->stats_instant.dropped_full++;
 		return -1;
 	}
 	if (f->receiver_queue[idx]) {
 		// TODO: record stats
 		struct rist_buffer *b = f->receiver_queue[idx];
 		if (b->source_time == source_time) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Dupe! %"PRIu32"/%zu\n", seq, idx);
-			peer->stats_receiver_instant.dups++;
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Dupe! %"PRIu32"/%zu\n", seq, idx);
+			f->stats_instant.dupe++;
 			return 1;
 		}
 		else {
@@ -555,6 +562,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
+	f->stats_instant.received++;
 
 	// Check for missing data and queue retries
 	if (!retry) {
@@ -580,7 +588,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	struct rist_peer *peer = b->peer;
 
 	if (b->nack_count >= peer->config.max_retries) {
-		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Datagram %"PRIu32
+		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Datagram %"PRIu32
 				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, max_retries %d, congestion_control_mode %d, stats_receiver_total.recovered_average %d\n",
 				b->seq,
 				b->nack_count,
@@ -592,7 +600,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 		return 8;
 	} else {
 		if ((uint64_t)(now - b->insertion_time) > peer->recovery_buffer_ticks) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 					"Datagram %" PRIu32 " is missing but it is too late (%" PRIu64
 					"ms) to send NACK!, retry #%lu, retry queue %d, max time %"PRIu64"\n",
 					b->seq, (now - b->insertion_time)/RIST_CLOCK, b->nack_count,
@@ -681,7 +689,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				b = f->receiver_queue[counter];
 				if (counter == output_idx) {
 					// TODO: with the check below, this should never happen
-					rist_log_priv(&ctx->common, RIST_LOG_WARN, "Did not find any data after a full counter loop (%zu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
+					rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Did not find any data after a full counter loop (%zu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					// if the entire buffer is empty, something is very wrong, reset the queue ...
 					f->receiver_queue_has_items = false;
 					atomic_store_explicit(&f->receiver_queue_size, 0, memory_order_release);
@@ -690,7 +698,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				}
 				if (holes > f->missing_counter_max)
 				{
-					rist_log_priv(&ctx->common, RIST_LOG_WARN, "Did not find any data after %zu holes (%zu bytes in queue)\n",
+					rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Did not find any data after %zu holes (%zu bytes in queue)\n",
 							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					break;
 				}
@@ -706,7 +714,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			}
 			f->stats_instant.lost += holes;
 			output_idx = counter;
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+			rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
 					holes, counter, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 		}
@@ -723,6 +731,13 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					rist_log_priv(&ctx->common, RIST_LOG_WARN,
 							"Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, releasing data\n",
 							b->seq, b->size, delay_rtc / RIST_CLOCK, delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
+							//Reset the flow if we keep hitting packets that are too late, likely our time offset is wrong.
+							f->too_late_ctr++;	
+							if (f->too_late_ctr > 100) {
+								f->receiver_queue_has_items = false;
+								return;
+							}
+
 				}
 				else if (b->target_output_time >= now) {
 					// This is how we keep the buffer at the correct level
@@ -730,7 +745,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
 					break;
 				}
-
+				//Reset the counter if our delay is correct
+				if (RIST_LIKELY(delay_rtc < recovery_buffer_ticks))
+					f->too_late_ctr = 0;
 				// Check sequence number and report lost packet
 				uint32_t next_seq = f->last_seq_output + 1;
 				if (f->short_seq)
@@ -779,7 +796,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 			atomic_store_explicit(&f->receiver_queue_output_idx, output_idx, memory_order_release);
 			if (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) == 0) {
 				uint64_t delta = now - f->last_output_time;
-				rist_log_priv(&ctx->common, RIST_LOG_WARN, "Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
+				rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Buffer is empty, it has been for %"PRIu64" < %"PRIu64" (ms)!\n",
 						delta / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK);
 				// if the entire buffer is empty, something is very wrong, reset the queue ...
 				if (delta > recovery_buffer_ticks)
@@ -899,7 +916,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				send_nack_group(ctx, f, NULL);
 			}
 			else if (mb->peer->nacks.counter == (maxcounter - 1)) {
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"nack max counter per packet (%d) exceeded. Skipping the rest\n",
 						maxcounter);
 				send_nack_group(ctx, f, mb->peer);
@@ -3188,7 +3205,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				}
 				if (now > f->stats_next_time) {
 					f->stats_next_time += f->stats_report_time;
+					pthread_mutex_lock(&f->nack_mutex);
 					rist_receiver_flow_statistics(ctx, f);
+					pthread_mutex_unlock(&f->nack_mutex);
 				}
 				f = f->next;
 			}

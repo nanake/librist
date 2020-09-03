@@ -134,6 +134,10 @@ struct rist_bandwidth_estimation {
 
 struct rist_peer_flow_stats {
 	uint32_t lost;
+	uint32_t received;
+	uint32_t dupe;
+	uint32_t dropped_full;
+	uint32_t dropped_late;
 
 	/* Inter-packet spacing */
 	uint64_t min_ips;
@@ -211,6 +215,7 @@ struct rist_flow {
 	uint64_t last_ipstats_time;
 	uint64_t last_output_time;
 	uint64_t max_source_time;
+	uint64_t too_late_ctr;
 
 	int64_t time_offset;//Current offset between our clock and RTP packets.
 	int64_t time_offset_old;//Old offset between our clock and RTP packets.
@@ -224,6 +229,7 @@ struct rist_flow {
 	/* data out thread signaling */
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;
+	pthread_mutex_t nack_mutex;
 
 	/* variable used for seq number length (16bit or 32bit) */
 	bool short_seq;
