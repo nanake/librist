@@ -460,8 +460,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 	//	seq, source_time);
 	uint64_t now = timestampNTP_u64();
-
-	if (!f->receiver_queue_has_items) {
+	if (RIST_UNLIKELY(!f->receiver_queue_has_items && retry))
+		return -1;
+	if (RIST_UNLIKELY(!f->receiver_queue_has_items)) {
 		/* we just received our first packet for this flow */
 		if (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0)
 		{
@@ -470,9 +471,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 					"Clearing up old %zu bytes of old buffer data\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 			/* Delete all buffer data (if any) */
-			pthread_mutex_lock(&f->nack_mutex);
 			empty_receiver_queue(f, get_cctx(peer));
-			pthread_mutex_unlock(&f->nack_mutex);
 		}
 		rist_flush_missing_flow_queue(f);
 		/* Initialize flow session timeout and stats timers */
@@ -512,7 +511,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	size_t idx = seq & (f->receiver_queue_max - 1);
 	size_t reader_idx;
 	bool out_of_order = false;
-	if (packet_time < f->last_packet_ts) {
+	if (RIST_UNLIKELY(packet_time < f->last_packet_ts)) {
 		size_t highest_written_idx = f->last_seq_found & (f->receiver_queue_max -1);
 		reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 		/* Either highest written packet is ahead of read idx, and packet should go in between, or
@@ -532,16 +531,19 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 	}
 	reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
-	if (idx == reader_idx)
+	if (RIST_UNLIKELY(idx == reader_idx))
 	{
 		//Buffer full!
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
 		if (packet_time > f->last_packet_ts)
 			f->last_seq_found  = seq;
 		f->stats_instant.dropped_full++;
+		//Something is wrong, and we should reset
+		if (f->stats_instant.dropped_full > 100)
+			f->receiver_queue_has_items = false;
 		return -1;
 	}
-	if (f->receiver_queue[idx]) {
+	if (RIST_UNLIKELY(f->receiver_queue[idx])) {
 		// TODO: record stats
 		struct rist_buffer *b = f->receiver_queue[idx];
 		if (b->source_time == source_time) {
@@ -3205,9 +3207,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				}
 				if (now > f->stats_next_time) {
 					f->stats_next_time += f->stats_report_time;
-					pthread_mutex_lock(&f->nack_mutex);
 					rist_receiver_flow_statistics(ctx, f);
-					pthread_mutex_unlock(&f->nack_mutex);
 				}
 				f = f->next;
 			}

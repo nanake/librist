@@ -296,7 +296,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "\tThe flow link is dead %" PRIu32 " > %" PRIu64 ", deleting all missing queue elements!\n",
 			flow_missing_instant, flow_recv_instant);
 		/* Delete all missing queue elements (if any) */
-		//rist_flush_missing_flow_queue(flow);
+		rist_flush_missing_flow_queue(flow);
 	}
 
 	cJSON_AddNumberToObject(json_stats, "quality", Q);

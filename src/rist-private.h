@@ -229,7 +229,6 @@ struct rist_flow {
 	/* data out thread signaling */
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;
-	pthread_mutex_t nack_mutex;
 
 	/* variable used for seq number length (16bit or 32bit) */
 	bool short_seq;
