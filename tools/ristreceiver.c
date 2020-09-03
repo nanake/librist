@@ -406,7 +406,7 @@ next:
 	}
 
 	// callback is best unless you are using the timestamps passed with the buffer
-	enable_data_callback = 1;
+	enable_data_callback = 0;
 
 	if (enable_data_callback == 1) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
@@ -434,8 +434,10 @@ next:
 		{
 			const struct rist_data_block *b;
 			int queue_size = rist_receiver_data_read(ctx, &b, 5);
-			if (queue_size && queue_size % 10 == 0)
-				rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
+			if (queue_size && queue_size % 10 == 0) {
+				uint32_t flow_id = b ? b->flow_id : 0;
+				rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %"PRIu32"\n", queue_size, flow_id);
+			}
 			if (b && b->payload) cb_recv(&callback_object, b);
 		}
 	}

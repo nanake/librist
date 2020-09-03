@@ -75,9 +75,6 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 
 	*_ctx = rist_ctx;
 
-	atomic_init(&ctx->dataout_fifo_queue_counter, 0);
-	atomic_init(&ctx->dataout_fifo_queue_write_index, 0);
-	atomic_init(&ctx->dataout_fifo_queue_read_index, 0);
 	return 0;
 
 fail:
@@ -104,6 +101,25 @@ int rist_receiver_nack_type_set(struct rist_ctx *rist_ctx, enum rist_nack_type n
 	return 0;
 }
 
+static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_t *num)
+{
+	// Select the flow with highest queue count
+	ssize_t num_loop = 0;
+	struct rist_flow *f = NULL;
+	struct rist_flow *f_loop = ctx->common.FLOWS;
+	while (f_loop) {
+		struct rist_flow *nextflow = f_loop->next;
+		num_loop = atomic_load_explicit(&f_loop->dataout_fifo_queue_counter, memory_order_acquire);
+		if (num_loop > *num)
+		{
+			f = f_loop;
+			*num = num_loop;
+		}
+		f_loop = nextflow;
+	}
+	return f;
+}
+
 int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_block **data_buffer, int timeout)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
@@ -116,34 +132,50 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_read call with CTX not set up for receiving\n");
 		return -1;
 	}
-
 	struct rist_receiver *ctx = rist_ctx->receiver_ctx;
+
+	if (RIST_UNLIKELY(!ctx->common.FLOWS)) {
+		// No flows = no data (no need to log)
+		usleep(timeout * 1000);
+		return -1;
+	}
 
 	const struct rist_data_block *data_block = NULL;
 	/* We could enter the lock now, to read the counter. However performance penalties apply.
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
 	   risks are tolerable */
-	ssize_t num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
+	
+	ssize_t num = 0;
+	// Select the flow with highest queue count to minimize jitter for calling app
+	struct rist_flow *f = rist_get_longest_flow(ctx, &num);
 	if (!num && timeout > 0)
 	{
 		pthread_mutex_lock(&(ctx->mutex));
 		pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), timeout);
 		pthread_mutex_unlock(&(ctx->mutex));
+		f = rist_get_longest_flow(ctx, &num);
 	}
 
-	size_t dataout_read_index = atomic_load_explicit(&ctx->dataout_fifo_queue_read_index, memory_order_relaxed);
-	if ((size_t)atomic_load_explicit(&ctx->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
+	if (RIST_UNLIKELY(!num || !f))
 	{
-		data_block = ctx->dataout_fifo_queue[dataout_read_index];
-		num = atomic_load_explicit(&ctx->dataout_fifo_queue_counter, memory_order_acquire);
-		atomic_store_explicit(&ctx->dataout_fifo_queue_read_index, (dataout_read_index + 1) & (RIST_DATAOUT_QUEUE_BUFFERS - 1), memory_order_release);
+		//No need to log, these can be triggered by gaps in data or low bitrate stream with low timeout values
+		//rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_read call with no flow data, %d/%"PRIu32"\n", num, f);
+		return 0;
+	}
+
+	size_t dataout_read_index = atomic_load_explicit(&f->dataout_fifo_queue_read_index, memory_order_relaxed);
+	if ((size_t)atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
+	{
+		data_block = f->dataout_fifo_queue[dataout_read_index];
+		num = atomic_load_explicit(&f->dataout_fifo_queue_counter, memory_order_acquire);
+		atomic_store_explicit(&f->dataout_fifo_queue_read_index, (dataout_read_index + 1) & (RIST_DATAOUT_QUEUE_BUFFERS - 1), memory_order_release);
 		if (data_block)
 		{
 			//rist_log_priv(&ctx->common, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
 			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
-			ctx->dataout_fifo_queue_bytesize -= data_block->payload_len;
-			atomic_fetch_sub_explicit(&ctx->dataout_fifo_queue_counter, 1, memory_order_release);
+			f->dataout_fifo_queue_bytesize -= data_block->payload_len;
+			atomic_fetch_sub_explicit(&f->dataout_fifo_queue_counter, 1, memory_order_release);
 		}
 	}
 

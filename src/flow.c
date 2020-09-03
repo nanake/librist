@@ -121,6 +121,21 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	/* Delete all buffer data (if any) */
 	empty_receiver_queue(f, &ctx->common);
 
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing data fifo queue\n");
+	for (int i = 0; i < RIST_DATAOUT_QUEUE_BUFFERS; i++)
+	{
+		if (f->dataout_fifo_queue[i])
+		{
+			const uint8_t *payload = f->dataout_fifo_queue[i]->payload;
+			if (payload) {
+				free((void*)payload);
+				payload = NULL;
+			}
+			free(f->dataout_fifo_queue[i]);
+			f->dataout_fifo_queue[i] = NULL;
+		}
+	}
+
 	// Delete flow
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Deleting flow\n");
 	struct rist_flow **prev_flow = &ctx->common.FLOWS;
@@ -186,6 +201,9 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 
 	atomic_init(&f->receiver_queue_size, 0);
 	atomic_init(&f->receiver_queue_output_idx, 0);
+	atomic_init(&f->dataout_fifo_queue_counter, 0);
+	atomic_init(&f->dataout_fifo_queue_write_index, 0);
+	atomic_init(&f->dataout_fifo_queue_read_index, 0);
 
 	f->session_timeout = RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK;
 

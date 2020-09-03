@@ -238,6 +238,13 @@ struct rist_flow {
 	/* Session timeouts variables */
 	uint64_t session_timeout;
 	uint64_t last_recv_ts;
+
+	/* Receiver timed async data output */
+	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
+	size_t dataout_fifo_queue_bytesize;
+	atomic_ulong dataout_fifo_queue_counter;
+	atomic_ulong dataout_fifo_queue_read_index;
+	atomic_ulong dataout_fifo_queue_write_index;
 };
 
 struct rist_retry {
@@ -328,13 +335,6 @@ struct rist_receiver {
 	/* Receiver data callback */
 	int (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
 	void *receiver_data_callback_argument;
-
-	/* Receiver timed async data output */
-	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
-	size_t dataout_fifo_queue_bytesize;
-	atomic_ulong dataout_fifo_queue_counter;
-	atomic_ulong dataout_fifo_queue_read_index;
-	atomic_ulong dataout_fifo_queue_write_index;
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;

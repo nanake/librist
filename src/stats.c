@@ -60,6 +60,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON *stats = cJSON_CreateObject();
 	cJSON *rist_sender_stats = cJSON_AddObjectToObject(stats, "sender-stats");
 	cJSON *peer_obj = cJSON_AddObjectToObject(rist_sender_stats, "peer");
+	cJSON_AddNumberToObject(peer_obj, "flow_id", peer->adv_flow_id);
 	cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
 	cJSON_AddStringToObject(peer_obj, "cname", peer->receiver_name);
 	cJSON *json_stats = cJSON_AddObjectToObject(peer_obj, "stats");
