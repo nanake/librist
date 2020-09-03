@@ -125,19 +125,25 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
 		rist_log_priv3(RIST_LOG_ERROR, "ctx is null on rist_receiver_data_read call!\n");
+		if (timeout > 0)
+			usleep(timeout * 1000);
 		return -1;
 	}
 	if (RIST_UNLIKELY(rist_ctx->mode != RIST_RECEIVER_MODE || !rist_ctx->receiver_ctx))
 	{
 		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_read call with CTX not set up for receiving\n");
-		return -1;
+		if (timeout > 0)
+			usleep(timeout * 1000);
+		return -2;
 	}
+
 	struct rist_receiver *ctx = rist_ctx->receiver_ctx;
 
 	if (RIST_UNLIKELY(!ctx->common.FLOWS)) {
 		// No flows = no data (no need to log)
-		usleep(timeout * 1000);
-		return -1;
+		if (timeout > 0)
+			usleep(timeout * 1000);
+		return -3;
 	}
 
 	const struct rist_data_block *data_block = NULL;
@@ -172,8 +178,8 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 		atomic_store_explicit(&f->dataout_fifo_queue_read_index, (dataout_read_index + 1) & (RIST_DATAOUT_QUEUE_BUFFERS - 1), memory_order_release);
 		if (data_block)
 		{
-			//rist_log_priv(&ctx->common, RIST_LOG_INFO, "[INFO]data queue level %u -> %zu bytes, index %u!\n", ctx->dataout_fifo_queue_counter,
-			//		ctx->dataout_fifo_queue_bytesize, ctx->dataout_fifo_queue_read_index);
+			//rist_log_priv(&ctx->common, RIST_LOG_INFO, "[INFO] data queue level %u -> %zu bytes, index %u!\n", f->dataout_fifo_queue_counter,
+			//		f->dataout_fifo_queue_bytesize, f->dataout_fifo_queue_read_index);
 			f->dataout_fifo_queue_bytesize -= data_block->payload_len;
 			atomic_fetch_sub_explicit(&f->dataout_fifo_queue_counter, 1, memory_order_release);
 		}

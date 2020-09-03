@@ -182,7 +182,7 @@ int main(int argc, char *argv[]) {
         if (atomic_load(&stop))
             break;
         int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
-        if (queue_length) {
+        if (queue_length > 0) {
             if (!got_first) {
                 receive_count = (int)b->seq;
 				got_first = true;
