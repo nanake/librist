@@ -310,19 +310,21 @@ static PTHREAD_START_FUNC(input_loop, arg)
 		{
 			// RIST receiver
 			const struct rist_data_block *b;
-			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 65536);
-			if (queue_size && queue_size % 10 == 0)
-				rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
-			if (b && b->payload) {
-				int w = rist_sender_data_write(callback_object->sender_ctx, b);
-				// TODO: report error?
-				(void) w;
+			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 5);
+			if (queue_size > 0) {
+				if (queue_size % 10 == 0 || queue_size > 50)
+					rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
+				if (b && b->payload) {
+					int w = rist_sender_data_write(callback_object->sender_ctx, b);
+					// TODO: report error?
+					(void) w;
+				}
 			}
 		}
 		else
 		{
 			// UDP recevier. Infinite wait, 100 socket events
-			evsocket_loop_single(callback_object->evctx, -1, 100);
+			evsocket_loop_single(callback_object->evctx, 5, 100);
 		}
 	}
 	return 0;
