@@ -592,6 +592,7 @@ int rist_parse_udp_address(const char *url, const struct rist_udp_config **udp_c
 int rist_parse_address(const char *url, const struct rist_peer_config **peer_config)
 {
 
+	char * url_local = strdup(url);
 	int ret = 0;
 	if (*peer_config == NULL)
 	{
@@ -610,16 +611,17 @@ int rist_parse_address(const char *url, const struct rist_peer_config **peer_con
 		output_peer_config->congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE;
 		output_peer_config->min_retries = RIST_DEFAULT_MIN_RETRIES;
 		output_peer_config->max_retries = RIST_DEFAULT_MAX_RETRIES;
-		ret = parse_url_options(url, output_peer_config);
+		ret = parse_url_options(url_local, output_peer_config);
 		*peer_config = output_peer_config;
 	}
 	else
 	{
 		// Update incoming object with url data
 		struct rist_peer_config *existing_peer_config = (void *)*peer_config;
-		ret = parse_url_options(url, existing_peer_config);
+		ret = parse_url_options(url_local, existing_peer_config);
 		*peer_config = existing_peer_config;
 	}
+	free(url_local);
 
 	return ret;
 }
