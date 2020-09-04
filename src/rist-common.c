@@ -521,6 +521,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			|| (highest_written_idx < reader_idx && !(idx < highest_written_idx || idx > reader_idx))) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
 			f->stats_instant.dropped_late++;
+                        if (packet_time > f->last_packet_ts)
+                            f->last_seq_found = seq;
 			return -1;
 		}
 		if (!retry) {

@@ -109,6 +109,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Dropped %u packets due to buffers being full\n", flow->stats_instant.dropped_full );
 	if (flow->stats_instant.dropped_late)
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Dropped %u late packets\n", flow->stats_instant.dropped_late);
+        if (flow->stats_instant.lost)
+		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Lost %u packets\n", flow->stats_instant.lost);
 
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_RECEIVER_FLOW;
