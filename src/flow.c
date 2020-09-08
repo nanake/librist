@@ -80,6 +80,33 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
 		usleep(5000);
 	}
+	struct rist_peer *p = NULL;
+	for (size_t i = 0; i <f->peer_lst_len; i++)
+	{
+		p = f->peer_lst[i];
+		if (p->peer_data) {
+			p->peer_data->flow = NULL;
+			p->peer_data->authenticated = false;
+		}
+		if (p->peer_rtcp) {
+			p->peer_rtcp->flow = NULL;
+			p->peer_rtcp->authenticated = false;
+		}
+		p->authenticated = false;
+		p->flow = NULL;
+		if (ctx->common.profile == RIST_PROFILE_SIMPLE && p->parent) {
+			if (p->parent->peer_rtcp) {
+				p->parent->peer_rtcp->flow = NULL;
+				p->parent->peer_rtcp->authenticated = false;
+			}
+			if (p->parent->peer_data) {
+				p->parent->peer_data->flow = NULL;
+				p->parent->peer_data->authenticated = false;
+			}
+			p->parent->authenticated = false;
+			p->parent->flow = NULL;
+		}
+	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Free flow peer list\n");
 	f->peer_lst_len = 0;
