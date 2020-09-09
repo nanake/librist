@@ -2209,6 +2209,7 @@ protocol_bypass:
 		// they need to trigger peering at the bottom of this function
 
 		pthread_rwlock_rdlock(peerlist_lock);
+		bool inchild = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
 				payload.peer = p;
@@ -2258,7 +2259,13 @@ protocol_bypass:
 				pthread_rwlock_unlock(peerlist_lock);
 				return;
 			}
-			p = p->next;
+			if (p->listening) {
+				if (!inchild)
+					p = p->child;
+				else
+					p = p->sibling_next;
+			} else
+				p = p->next;
 		}
 		pthread_rwlock_unlock(peerlist_lock);
 
