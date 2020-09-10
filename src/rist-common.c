@@ -2051,6 +2051,16 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					return;
 				}
 
+				while (p) {
+					if (equal_address(family, addr, p))
+						break;
+					p = p->next;
+				}
+				if (!p)
+					p = peer;
+				k = &p->key_rx;
+				p = peer;
+
 				// GRE
 				uint32_t nonce = 0;
 				struct rist_gre_key_seq *gre_key_seq = (void *) recv_buf;
