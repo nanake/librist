@@ -1276,7 +1276,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
 	}
 	else {
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port);
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, retry->peer->local_port, retry->peer->remote_port);
 	}
 
 	// update bandwidh value
