@@ -199,11 +199,10 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 		key->used_times = 0;
 
 		// The nonce MUST be fed to the function in network byte order
-		uint32_t nonce_be = be32toh(key->gre_nonce);
 		uint8_t aes_key[256 / 8];
 		fastpbkdf2_hmac_sha256(
 			(const void *) key->password, strlen(key->password),
-			(const void *) &nonce_be, sizeof(nonce_be),
+			(const void *) &key->gre_nonce, sizeof(key->gre_nonce),
 			RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 			aes_key, key->key_size / 8);
 /*
@@ -379,7 +378,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 
 			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
-			gre_key_seq->nonce = htobe32(k->gre_nonce);
+			gre_key_seq->nonce = k->gre_nonce;
 			gre_key_seq->seq = htobe32(seq);
 
 			/* Prepare AES IV */

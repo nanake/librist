@@ -2047,11 +2047,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				gre_size = sizeof(*gre_key_seq);
 				if (has_checksum) {
 					seq = be32toh(gre_key_seq->seq);
-					nonce = be32toh(gre_key_seq->nonce);
+					nonce = gre_key_seq->nonce;
 				} else {
 					// shifted by 4 missing checksum bytes (non-librist senders)
 					seq = be32toh(gre_key_seq->nonce);
-					nonce = be32toh(gre_key_seq->checksum_reserved1);
+					nonce = gre_key_seq->checksum_reserved1;
 					gre_size -= 4;
 				}
 
@@ -2068,11 +2068,10 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					k->used_times = 0;
 					k->gre_nonce = nonce;
 					// The nonce MUST be fed to the function in network byte order
-					uint32_t nonce_be = htobe32(k->gre_nonce);
 					uint8_t aes_key[256 / 8];
 					fastpbkdf2_hmac_sha256(
 							(const void *) k->password, strlen(k->password),
-							(const void *) &nonce_be, sizeof(nonce_be),
+							(const void *) &k->gre_nonce, sizeof(k->gre_nonce),
 							RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 							aes_key, k->key_size / 8);
 #ifndef LINUX_CRYPTO
