@@ -18,6 +18,10 @@
 #include <errno.h>
 #include <stdint.h>
 #include <assert.h>
+#ifdef USE_MBEDTLS
+#include "mbedtls/md.h"
+#include "mbedtls/pkcs5.h"
+#endif
 #ifdef LINUX_CRYPTO
 #include <linux-crypto.h>
 #endif
@@ -200,11 +204,41 @@ static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
 
 		// The nonce MUST be fed to the function in network byte order
 		uint8_t aes_key[256 / 8];
+#ifndef USE_MBEDTLS
 		fastpbkdf2_hmac_sha256(
 			(const void *) key->password, strlen(key->password),
 			(const void *) &key->gre_nonce, sizeof(key->gre_nonce),
 			RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 			aes_key, key->key_size / 8);
+#else
+		mbedtls_md_context_t sha_ctx;
+		const mbedtls_md_info_t *info_sha;
+		int ret = -1;
+		/* Setup the hash/HMAC function, for the PBKDF2 function. */
+		mbedtls_md_init(&sha_ctx);
+		info_sha = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
+		if (info_sha == NULL)
+		{
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS hash info\n");
+		}
+
+		ret = mbedtls_md_setup(&sha_ctx, info_sha, 1);
+		if (ret != 0)
+		{
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS MD ctx");
+		}
+
+		ret = mbedtls_pkcs5_pbkdf2_hmac(&sha_ctx,
+										(const unsigned char *)key->password, strlen(key->password),
+										(const uint8_t *)&key->gre_nonce, sizeof(key->gre_nonce),
+										RIST_PBKDF2_HMAC_SHA256_ITERATIONS, key->key_size /8, aes_key);
+		if (ret != 0)
+		{
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Mbed TLS pbkdf2 function failed\n");
+		}
+
+		mbedtls_md_free(&sha_ctx);
+#endif
 /*
 		int i=0;
 		fprintf(stderr, "KEY: nonce %"PRIu32", size %d, pwd=%s : ", key->gre_nonce,
