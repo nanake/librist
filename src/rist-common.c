@@ -538,7 +538,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 	}
 	reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
-	if (RIST_UNLIKELY(idx == reader_idx))
+	if (RIST_UNLIKELY(idx == reader_idx -1))
 	{
 		//Buffer full!
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
