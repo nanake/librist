@@ -1744,6 +1744,8 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					peer->last_rtcp_received = timestampNTP_u64();
 					if (peer->dead) {
 						peer->dead = false;
+						if (peer->peer_data)
+							peer->peer_data->dead = false;
 						if (peer->parent)
 							++peer->parent->child_alive_count;
 						rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
