@@ -15,7 +15,7 @@ cc = meson.get_compiler('c')
 #If any interfaces have been added, removed, or changed since the last update, increment major and minor to 0.
 #If any interfaces have been added since the last public release, then increment minor.
 #If any interfaces have been removed or changed since the last public release, then set micro to 0.
-librist_api_version_major = 3
+librist_api_version_major = 4
 librist_api_version_minor = 0
 librist_api_version_patch = 0
 librist_version = '@0@.@1@.@2@'.format(librist_api_version_major, librist_api_version_minor, librist_api_version_patch)
