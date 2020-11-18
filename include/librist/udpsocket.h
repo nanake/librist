@@ -125,6 +125,7 @@ RIST_API int udpsocket_resolve_host(const char *host, uint16_t port, struct sock
 
 RIST_API int udpsocket_set_nonblocking(int sd);
 RIST_API int udpsocket_send(int sd, const void *buf, size_t size);
+RIST_API int udpsocket_send_async(int sd, const void *buf, size_t size);
 RIST_API int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port);
 RIST_API int udpsocket_recv(int sd, void *buf, size_t size);
 RIST_API int udpsocket_recvfrom(int sd, void *buf, size_t size, int flags, struct sockaddr *addr, socklen_t *addr_len);

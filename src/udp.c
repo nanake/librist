@@ -565,6 +565,9 @@ void rist_create_socket(struct rist_peer *peer)
 		} else {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not start in URL listening mode. %s\n", strerror(errno));
 		}
+
+		// Set non-blocking only for receive sockets
+		udpsocket_set_nonblocking(peer->sd);
 	}
 	else {
 		if (peer->u.address.sa_family == AF_INET)
@@ -591,7 +594,6 @@ void rist_create_socket(struct rist_peer *peer)
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
 
-	udpsocket_set_nonblocking(peer->sd);
 	// Increase default OS udp receive buffer size
 	if (udpsocket_set_optimal_buffer_size(peer->sd)) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_WARN, "Unable to set the socket receive buffer size to %d Bytes. %s\n",
