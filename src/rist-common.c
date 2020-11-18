@@ -12,11 +12,13 @@
 #include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
+#include "eap.h"
 #include "lz4.h"
 #include "mpegts.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
+
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
@@ -137,6 +139,10 @@ int parse_url_options(const char* url, struct rist_peer_config *output_peer_conf
 				strncpy((void *)output_peer_config->miface, val, 128-1);
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SECRET ) == 0) {
 				strncpy((void *)output_peer_config->secret, val, 128-1);
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SRP_USERNAME) == 0) {
+				strncpy((void *)output_peer_config->srp_username, val, 256 -1);
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_SRP_PASSWORD) == 0) {
+				strncpy((void *)output_peer_config->srp_password, val, 256 -1);
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_CNAME ) == 0) {
 				strncpy((void *)output_peer_config->cname, val, 128-1);
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_AES_TYPE ) == 0) {
@@ -1211,13 +1217,12 @@ void rist_shutdown_peer(struct rist_peer *peer)
 		udpsocket_close(peer->sd);
 		peer->sd = -1;
 	}
-#ifndef USE_MBEDTLS
-#ifdef LINUX_CRYPTO
 	if (!peer->parent) {
 		_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
 		_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
 	}
-#endif
+#ifdef USE_MBEDTLS
+	eap_delete_ctx(&peer->eap_ctx);
 #endif
 	if (peer->url) {
 		free(peer->url);
@@ -1974,7 +1979,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	{
 		_librist_crypto_psk_rist_key_clone(&peer_src->key_rx, &peer->key_rx);
 		_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx);
-
 		strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 		strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
 		peer->config.weight = peer_src->config.weight;
@@ -2086,15 +2090,16 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		if (cctx->profile > RIST_PROFILE_SIMPLE)
 		{
-
 			// Make sure we have enought bytes
 			if (recv_bufsize < (int)sizeof(struct rist_gre)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 				return;
 			}
 
+
 			gre = (void *) recv_buf;
-			if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL)) {
+			if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL) &&
+				gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL)) {
 
 				if (htobe16(gre->prot_type) == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)
 				{
@@ -2131,7 +2136,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				time_extension = be32toh(gre->checksum_reserved1);
 			}
 
-			if (has_seq && has_key) {
+			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 				// Key bit is set, that means the other side want to send
 				// encrypted data.
 				//
@@ -2171,7 +2176,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				//
 				// make sure we do not have a key
 				// (ie also interested in unencrypted communication)
-				if (k->key_size) {
+				if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 					fprintf(stderr, "Has seq %hhu has key %hhu\n", has_seq, has_seq);
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
@@ -2196,6 +2201,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_FULL))
 			{
 				payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
+				goto protocol_bypass;
+			}
+			if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL))
+			{
+				payload.type = RIST_PAYLOAD_TYPE_EAPOL;
 				goto protocol_bypass;
 			}
 			// Decompress if necessary
@@ -2300,6 +2310,7 @@ protocol_bypass:
 		bool inchild = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
+
 				payload.peer = p;
 				if (cctx->profile == RIST_PROFILE_SIMPLE)
 				{
@@ -2307,6 +2318,13 @@ protocol_bypass:
 					payload.dst_port = p->local_port;
 				}
 				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
+#ifdef USE_MBEDTLS
+				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && !eap_is_authenticated(p->eap_ctx))
+				{
+					pthread_rwlock_unlock(peerlist_lock);
+					return;
+				}
+#endif
 				switch(payload.type) {
 					case RIST_PAYLOAD_TYPE_UNKNOWN:
 						// Do nothing ...TODO: check for port changes?
@@ -2342,6 +2360,17 @@ protocol_bypass:
 						else
 							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
 						break;
+#ifdef USE_MBEDTLS
+					case RIST_PAYLOAD_TYPE_EAPOL:
+						if (peer->eap_ctx == NULL)
+							return;
+						int eapret = 0;
+						if ((eapret = eap_process_eapol(p->eap_ctx,
+														(void *)(recv_buf + gre_size),
+														(recv_bufsize - gre_size))) < 0)
+							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
+						break;
+#endif
 					default:
 						rist_recv_rtcp(p, seq, flow_id, &payload);
 						break;
@@ -2421,14 +2450,20 @@ protocol_bypass:
 			p->authenticated = false;
 			// Copy the event handler reference to prevent the creation of a new one (they are per socket)
 			p->event_recv = peer->event_recv;
-
+			uint16_t port = 0;
+			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
+#ifdef USE_MBEDTLS
+			eap_clone_ctx(peer->eap_ctx, p);
+			eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
+#endif
 			// Optional validation of connecting sender
 			if (cctx->auth.conn_cb) {
-				char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+
 				char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-				uint16_t port = 0;
+
 				uint16_t dummyport;
-				char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
+
 				char *parent_ip_string =
 					get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], &dummyport, INET6_ADDRSTRLEN);
 				if (!parent_ip_string){
@@ -2697,7 +2732,6 @@ protocol_bypass:
 		pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 
 		pthread_rwlock_wrlock(peerlist_lock);
-
 		for (size_t j = 0; j < ctx->peer_lst_len; j++) {
 			struct rist_peer *peer = ctx->peer_lst[j];
 			if (peer->send_keepalive) {
@@ -2706,6 +2740,10 @@ protocol_bypass:
 					rist_peer_rtcp(NULL, peer);
 				}
 			}
+#ifdef USE_MBEDTLS
+			if (!peer->listening && peer->parent)
+				eap_periodic(peer->eap_ctx);
+#endif
 		}
 
 		pthread_rwlock_unlock(peerlist_lock);
@@ -3117,6 +3155,10 @@ void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 				rist_peer_rtcp(NULL, p);
 			}
 		}
+#ifdef USE_MBEDTLS
+		if (!p->listening && p->parent)
+			eap_periodic(p->eap_ctx);
+#endif
 	}
 
 	pthread_rwlock_unlock(peerlist_lock);

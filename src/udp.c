@@ -10,6 +10,7 @@
 #include "socket-shim.h"
 #include "endian-shim.h"
 #include "lz4.h"
+#include "eap.h"
 #include "crypto/psk.h"
 #include "mpegts.h"
 #include <stdlib.h>
@@ -365,7 +366,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		}
 	}
 
-	ret = sendto(p->sd,(const char*)data, len, MSG_DONTWAIT, &(p->u.address), p->address_len);
+	ret = sendto(p->sd,(const char*)data, len, 0, &(p->u.address), p->address_len);
 
 out:
 	if (RIST_UNLIKELY(ret <= 0)) {
@@ -1014,7 +1015,10 @@ peer_select:
 
 		if (!peer->is_data || peer->parent)
 			continue;
-
+#ifdef USE_MBEDTLS
+		if (!peer->listening && !eap_is_authenticated(peer->eap_ctx))
+			continue;
+#endif
 		if ((!peer->listening && !peer->authenticated) || peer->dead
 			|| (peer->listening && !peer->child_alive_count)) {
 			ctx->weight_counter -= peer->config.weight;
@@ -1036,6 +1040,12 @@ peer_select:
 			if (peer->listening) {
 				struct rist_peer *child = peer->child;
 				while (child) {
+#ifdef USE_MBEDTLS
+					if (!eap_is_authenticated(child->eap_ctx))
+					{
+						//do nothing
+					} else
+#endif
 					if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
 					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
@@ -1063,6 +1073,12 @@ peer_select:
 		if (peer->listening) {
 			struct rist_peer *child = peer->child;
 			while (child) {
+#ifdef USE_MBEDTLS
+					if (!eap_is_authenticated(child->eap_ctx))
+					{
+						//do nothing
+					} else
+#endif
 				if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
 					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);

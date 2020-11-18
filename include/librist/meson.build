@@ -13,3 +13,7 @@ install_headers('librist.h',
 				'headers.h',
 				'logging.h',
 				 version_h_target, subdir: 'librist')
+
+if use_mbedtls
+	install_headers('librist_srp.h', subdir: 'librist')
+endif

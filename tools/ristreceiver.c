@@ -5,6 +5,10 @@
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
 #include "librist/version.h"
+#ifdef USE_MBEDTLS
+#include "librist/librist_srp.h"
+#include "srp_shared.h"
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -41,6 +45,9 @@ static struct option long_options[] = {
 { "tun",             required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
+#ifdef USE_MBEDTLS
+{ "srpfile",         required_argument, NULL, 'F' },
+#endif
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 { 0, 0, 0, 0 },
@@ -55,6 +62,11 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -p | --profile number                     | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+#ifdef USE_MBEDTLS
+"       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
+"                                                 | of usernames and passwords to validate against. Use the  |\n"
+"                                                 | ristsrppasswd tool to create the line entries.           |\n"
+#endif
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -245,6 +257,10 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 
+#ifdef USE_MBEDTLS
+	FILE *srpfile = NULL;
+#endif
+
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++)
 	{
 		callback_object.mpeg[i] = 0;
@@ -270,7 +286,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
 
-	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -303,6 +319,13 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 		break;
+#ifdef USE_MBEDTLS
+		case 'F':
+			srpfile = fopen(optarg, "r");
+			if (!srpfile)
+				return 1;
+			break;
+#endif
 		case 'u':
 			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
@@ -389,6 +412,16 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
+#ifdef USE_MBEDTLS
+		if (strlen(peer_config->srp_username) > 0 && strlen(peer_config->srp_password) > 0)
+		{
+			rist_enable_eap_srp(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
+		}
+		if (srpfile)
+		{
+			rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+		}
+#endif
 
 		free((void *)peer_config);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);

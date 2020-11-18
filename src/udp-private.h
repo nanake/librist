@@ -15,6 +15,7 @@
 #define RIST_GRE_PROTOCOL_TYPE_KEEPALIVE 0x88B5
 #define RIST_GRE_PROTOCOL_TYPE_REDUCED 0x88B6
 #define RIST_GRE_PROTOCOL_TYPE_FULL 0x0800
+#define RIST_GRE_PROTOCOL_TYPE_EAPOL 0x888E
 #define RIST_GRE_PROTOCOL_REDUCED_SIZE 4
 
 #define RIST_GRE_FLAGS_KEY_SEQ 0x000C
@@ -28,6 +29,7 @@
 #define RIST_PAYLOAD_TYPE_DATA_RAW          0x5
 #define RIST_PAYLOAD_TYPE_DATA_OOB          0x6 // Out-of-band data
 #define RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT  0x7
+#define RIST_PAYLOAD_TYPE_EAPOL				0x8
 
 // RTCP constants
 #define RTCP_FB_HEADER_SIZE 12
@@ -202,6 +204,12 @@ RIST_PACKED_STRUCT(rist_gre_keepalive,{
 	uint8_t mac_array[6];
 	uint8_t capabilities1;
 	uint8_t capabilities2;
+})
+
+RIST_PACKED_STRUCT(rist_gre_hdr,{
+	uint8_t flags1;
+	uint8_t flags2;
+	uint16_t prot_type;
 })
 
 RIST_PACKED_STRUCT(rist_gre,{

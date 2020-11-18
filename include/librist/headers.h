@@ -76,6 +76,8 @@
 #define RIST_URL_PARAM_MIFACE "miface"
 #define RIST_URL_PARAM_SESSION_TIMEOUT "session-timeout"
 #define RIST_URL_PARAM_KEEPALIVE_INT "keepalive-interval"
+#define RIST_URL_PARAM_SRP_USERNAME "username"
+#define RIST_URL_PARAM_SRP_PASSWORD "password"
 /* Less common URL parameters */
 #define RIST_URL_PARAM_BUFFER_SIZE_MIN "buffer-min"
 #define RIST_URL_PARAM_BUFFER_SIZE_MAX "buffer-max"
@@ -259,6 +261,8 @@ struct rist_peer_config
 	uint32_t session_timeout;
 	uint32_t keepalive_interval;
 	uint32_t timing_mode;
+	char srp_username[RIST_MAX_STRING_LONG];
+	char srp_password[RIST_MAX_STRING_LONG];
 };
 
 struct rist_stats_sender_peer

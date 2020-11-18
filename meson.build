@@ -62,7 +62,8 @@ else
 		'-Wshorten-64-to-32',
 		'-Watomic-implicit-seq-cst',
 		'-Wunused-parameter',
-		'-Wmaybe-uninitialized'
+		'-Wmaybe-uninitialized',
+		'-Wno-error=deprecated-declarations'
 		]), language : 'c')
 endif
 
@@ -174,6 +175,8 @@ if use_mbedtls
 		mbedcrypto_lib = mbedtls_proj.dependency('mbedcrypto')
 	endif
 	deps += mbedcrypto_lib
+	platform_files += 'contrib/srp.c'
+	platform_files += 'src/eap.c'
 endif
 
 subdir('include')

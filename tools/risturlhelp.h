@@ -27,6 +27,8 @@ const char help_urlstr[] = "\nUsage: append to end of individual rist:// url(s) 
 "    param min-retries=##  min retries count before congestion control kicks in\n"
 "    param max-retries=##  max retries count\n"
 "    param weight=#  default weight for multi-path load balancing. Use 0 for duplicate paths.\n"
+"    param username=abcde  Username to identify this peer during authentication\n"
+"    param password=abcde  Password corresponding to this peer's Username\n"
 "  Advanced Profile\n"
 "    param compression=1|0  enable lz4 levels\n"
 "\n"

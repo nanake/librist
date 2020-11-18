@@ -5,6 +5,10 @@
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
 #include "librist/version.h"
+#ifdef USE_MBEDTLS
+#include "librist/librist_srp.h"
+#include "srp_shared.h"
+#endif
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -72,6 +76,9 @@ static struct option long_options[] = {
 { "tun",             required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
+#ifdef USE_MBEDTLS
+{ "srpfile",         required_argument, NULL, 'F' },
+#endif
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 { 0, 0, 0, 0 },
@@ -87,6 +94,11 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -n | --null-packet-deletion               | Enable NPD, receiver needs to support this!              |\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+#ifdef USE_MBEDTLS
+"       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
+"                                                 | of usernames and passwords to validate against. Use the  |\n"
+"                                                 | ristsrppasswd tool to create the line entries.           |\n"
+#endif
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -105,6 +117,10 @@ static uint64_t risttools_convertRTPtoNTP(uint32_t i_rtp)
 	return i_ntp;
 }
 */
+
+#ifdef USE_MBEDTLS
+	FILE *srpfile = NULL;
+#endif
 
 static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
@@ -298,6 +314,17 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 		return NULL;
 	}
 
+#ifdef USE_MBEDTLS
+		if (strlen(peer_config_link->srp_username) > 0 && strlen(peer_config_link->srp_password) > 0)
+		{
+			rist_enable_eap_srp(peer, peer_config_link->srp_username, peer_config_link->srp_password, NULL, NULL);
+		}
+		if (srpfile)
+		{
+			rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+		}
+#endif
+
 	free((void *)peer_config_link);
 
 	return peer;
@@ -350,6 +377,7 @@ int main(int argc, char *argv[])
 	bool npd = false;
 	struct rist_sender_args peer_args;
 
+
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
 
@@ -372,7 +400,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTSENDER_VERSION);
 
-	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:hun", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:F:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -405,6 +433,13 @@ int main(int argc, char *argv[])
 				exit(1);
 			}
 		break;
+#ifdef USE_MBEDTLS
+		case 'F':
+			srpfile = fopen(optarg, "r");
+			if (!srpfile)
+				return 1;
+			break;
+#endif
 		case 'u':
 			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
@@ -475,6 +510,10 @@ int main(int argc, char *argv[])
 			break;
 		}
 		if (npd) {
+			if (profile == RIST_PROFILE_SIMPLE)
+				rist_log(logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
+			else
+				rist_log(logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled. Support for this feature is not guaranteed to be present on receivers. Please make sure the receiver supports it (librist does)\n");
 			if (rist_sender_npd_enable(callback_object[i].sender_ctx) != 0) {
 				rist_log(logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
 			}
