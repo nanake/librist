@@ -59,7 +59,7 @@ static inline void rist_log_impl(struct rist_logging_settings *log_settings, enu
 		goto out;
 	}
 	if (log_settings->log_socket)
-		udpsocket_send_async(log_settings->log_socket, logmsg, msglen);
+		udpsocket_send_nonblocking(log_settings->log_socket, logmsg, msglen);
 	if (log_settings->log_stream)
 		fputs(logmsg, log_settings->log_stream);
 

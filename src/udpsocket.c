@@ -345,7 +345,7 @@ int udpsocket_set_nonblocking(int sd)
 	return 0;
 }
 
-int udpsocket_send_async(int sd, const void *buf, size_t size)
+int udpsocket_send_nonblocking(int sd, const void *buf, size_t size)
 {
 	return (int)send(sd, buf, size, MSG_DONTWAIT);
 }
