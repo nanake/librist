@@ -10,6 +10,7 @@
 #include "rist-private.h"
 
 #define SET_BIT(value, pos) (value |= (1U<< pos))
+#define UNSET_BIT(value, pos) (value &= (1U << pos))
 
 #define RIST_GRE_PROTOCOL_TYPE_KEEPALIVE 0x88B5
 #define RIST_GRE_PROTOCOL_TYPE_REDUCED 0x88B6
@@ -26,6 +27,7 @@
 #define RIST_PAYLOAD_TYPE_RTCP_NACK         0x4
 #define RIST_PAYLOAD_TYPE_DATA_RAW          0x5
 #define RIST_PAYLOAD_TYPE_DATA_OOB          0x6 // Out-of-band data
+#define RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT  0x7
 
 // RTCP constants
 #define RTCP_FB_HEADER_SIZE 12
@@ -155,7 +157,29 @@ The RTP header is always present on data packets
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 */
 /*
+RTP header extension format (RFC 3550)
 
+0                   1                   2                   3
+0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|      defined by profile       |           length              |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|                        header extension                       |
+|                             ....                              |
+
+RIST implementation of header extension format used for null packet
+deletion and sequence number extension (VSF TR-06-02, 8.3)
+
+0                   1                   2                   3
+0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1 2 3 4 5 6 7 8 9 0 1
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|    0x52 (R)   |    0x49 (I)   |          Length=1             |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+|N|E|Size |0 0 0|T|  NPD bits   |   Sequence Number Extension   |
++-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
+*/
+
+/*
 Data Channel:
 
 [  GRE header  ]
@@ -210,6 +234,14 @@ RIST_PACKED_STRUCT(rist_rtp_hdr,{
 	uint16_t seq;
 	uint32_t ts;
 	uint32_t ssrc;
+})
+
+RIST_PACKED_STRUCT(rist_rtp_hdr_ext, {
+	uint16_t identifier; /* set to 0x5249 */
+	uint16_t length; /*shall be set to 1 */
+	uint8_t	 flags;
+	uint8_t  npd_bits;
+	uint16_t seq_ext;
 })
 
 RIST_PACKED_STRUCT(rist_protocol_hdr,{
@@ -297,6 +329,29 @@ RIST_PACKED_STRUCT(rist_rtcp_sdes_pkt,{
 	uint8_t cname;
 	uint8_t name_len;
 	char udn[1];
+})
+
+RIST_PACKED_STRUCT(rist_rtcp_xr_block_hdr, {
+	uint8_t type;
+	uint8_t reserved;
+	uint16_t length;
+})
+//Receiver reference time report block
+RIST_PACKED_STRUCT(rist_rtcp_xr_rrtrb, {
+	uint8_t block_type;
+	uint8_t reserved;
+	uint16_t length;
+	uint32_t ntp_msw;
+	uint32_t ntp_lsw;
+})
+
+RIST_PACKED_STRUCT(rist_rtcp_xr_dlrr, {
+	uint8_t block_type;
+	uint8_t reserved;
+	uint16_t length;
+	uint32_t ssrc;
+	uint32_t lrr;
+	uint32_t delay;
 })
 
 /* shared functions in udp.c */

@@ -90,6 +90,7 @@
 #define RIST_URL_PARAM_STREAM_ID "stream-id"
 #define RIST_URL_PARAM_RTP_TIMESTAMP "rtp-timestamp"
 #define RIST_URL_PARAM_RTP_SEQUENCE "rtp-sequence"
+#define RIST_URL_PARAP_RTP_OUTPUT_PTYPE "rtp-ptype"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT "virt-src-port"
 #define RIST_URL_PARAM_PROFILE "profile"
@@ -203,6 +204,7 @@ struct rist_udp_config
 	int rtp_timestamp;
 	int rtp_sequence;
 	int rtp;
+	uint8_t rtp_ptype;
 	uint16_t stream_id;
 };
 

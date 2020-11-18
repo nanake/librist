@@ -1,5 +1,5 @@
 #include "librist/librist.h"
-#include "src/rist-private.h"
+#include "rist-private.h"
 #include <stdatomic.h>
 
 #ifdef _WIN32

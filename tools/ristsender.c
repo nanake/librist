@@ -15,7 +15,7 @@
 #include <signal.h>
 #include "common/attributes.h"
 #include "risturlhelp.h"
-#include "src/rist-private.h"
+#include "rist-private.h"
 #include <stdatomic.h>
 
 #if defined(_WIN32) || defined(_WIN64)
@@ -68,6 +68,7 @@ static struct option long_options[] = {
 { "secret",          required_argument, NULL, 's' },
 { "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
+{ "null-packet-deletion",  no_argument, NULL, 'n' },
 { "tun",             required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
@@ -83,6 +84,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -s | --secret PWD                         | Default pre-shared encryption secret                     |\n"
 "       -e | --encryption-type TYPE               | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
 "       -p | --profile number                     | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
+"       -n | --null-packet-deletion               | Enable NPD, receiver needs to support this!              |\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -h | --help                               | Show this help                                           |\n"
@@ -90,7 +92,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
-"       --stats 1000              \\\n"
+"       --statsinterval 1000      \\\n"
 "       --verbose-level 6         \n";
 
 /*
@@ -334,7 +336,7 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int option_index;
-	struct rist_callback_object callback_object[MAX_INPUT_COUNT];
+	struct rist_callback_object callback_object[MAX_INPUT_COUNT] = { 0 };
 	struct evsocket_event *event[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;
@@ -345,6 +347,7 @@ int main(int argc, char *argv[])
 	int statsinterval = 1000;
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
+	bool npd = false;
 	struct rist_sender_args peer_args;
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
@@ -369,7 +372,7 @@ int main(int argc, char *argv[])
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
 			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTSENDER_VERSION);
 
-	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:h:u", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -406,6 +409,9 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
+		case 'n':
+			npd = true;
+			break;
 		case 'h':
 			/* Fall through */
 		default:
@@ -467,6 +473,11 @@ int main(int argc, char *argv[])
 		if (rist_sender_create(&callback_object[i].sender_ctx, peer_args.profile, 0, logging_settings) != 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
 			break;
+		}
+		if (npd) {
+			if (rist_sender_npd_enable(callback_object[i].sender_ctx) != 0) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
+			}
 		}
 		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
 			peer_args.token = outputtoken;

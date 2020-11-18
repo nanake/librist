@@ -2,7 +2,7 @@
 #include "log-private.h"
 #include "udp-private.h"
 #include "vcs_version.h"
-#include "crypto-private.h"
+#include "crypto/crypto-private.h"
 #include <assert.h>
 #ifdef _WIN32
 #include <processthreadsapi.h>
@@ -359,6 +359,42 @@ int rist_sender_flow_id_get(struct rist_ctx *rist_ctx, uint32_t *flow_id)
 	}
 	struct rist_sender *ctx = rist_ctx->sender_ctx;
 	*flow_id = ctx->adv_flow_id;
+	return 0;
+}
+
+int rist_sender_npd_enable(struct rist_ctx *rist_ctx)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with null context");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with ctx not set up for sending\n");
+		return -1;
+	}
+	struct rist_sender *ctx = rist_ctx->sender_ctx;
+	ctx->null_packet_suppression = true;
+	rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Enabled NULL Packet deletion\n");
+	return 0;
+}
+
+int rist_sender_npd_disable(struct rist_ctx *rist_ctx)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with null context");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with ctx not set up for sending\n");
+		return -1;
+	}
+	struct rist_sender *ctx = rist_ctx->sender_ctx;
+	ctx->null_packet_suppression = false;
+	rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Disabled NULL Packet deletion\n");
 	return 0;
 }
 

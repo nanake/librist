@@ -25,11 +25,7 @@
 #include "librist.h"
 #include "udpsocket.h"
 #include "aes.h"
-#ifdef USE_MBEDTLS
-#include "mbedtls/aes.h"
-#elif defined(LINUX_CRYPTO)
-#include "linux-crypto.h"
-#endif
+#include "crypto/psk.h"
 #include <errno.h>
 #include <stdatomic.h>
 #include "librist/logging.h"
@@ -81,16 +77,6 @@ enum rist_peer_state {
 	RIST_PEER_STATE_PING = 1,
 	RIST_PEER_STATE_CONNECT = 2
 };
-
-struct rist_key {
-	int key_size;
-	char password[128];
-	uint64_t used_times;
-	uint32_t gre_nonce;
-	uint32_t aes_key_sched[60];
-	uint32_t key_rotation;
-};
-
 struct rist_buffer {
 	void *data;
 	size_t size;
@@ -140,6 +126,8 @@ struct rist_peer_flow_stats {
 	uint32_t dupe;
 	uint32_t dropped_full;
 	uint32_t dropped_late;
+	size_t buffer_duration_count;
+	uint32_t buffer_duration[2048];
 
 	/* Inter-packet spacing */
 	uint64_t min_ips;
@@ -218,6 +206,9 @@ struct rist_flow {
 	uint64_t last_output_time;
 	uint64_t max_source_time;
 	uint64_t too_late_ctr;
+
+	size_t offset_recalc_sample_count;
+	uint64_t offset_recalc_samples[2048];
 
 	int64_t time_offset;//Current offset between our clock and RTP packets.
 	int64_t time_offset_old;//Old offset between our clock and RTP packets.
@@ -358,6 +349,7 @@ struct rist_sender {
 	/* max bitrate of all sender peers (sets the buffer size on sender queue) */
 	uint32_t recovery_maxbitrate_max;
 	uint32_t max_nacksperloop;
+	bool null_packet_suppression;
 
 	/* Sender thread variables */
 	pthread_t sender_thread;
@@ -484,14 +476,6 @@ struct rist_peer {
 	/* Encryption */
 	struct rist_key key_tx; // used for transmitted packets
 	struct rist_key key_rx; // used for received packets
-#ifdef USE_MBEDTLS
-	mbedtls_aes_context aes_tx;
-	mbedtls_aes_context aes_rx;
-#elif defined(LINUX_CRYPTO)
-	struct linux_crypto *cryptoctx_tx;
-	struct linux_crypto *cryptoctx_rx;
-#endif
-
 
 	/* compression flag (sender only) */
 	bool compression;
@@ -577,7 +561,7 @@ static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ct
 RIST_PRIV void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);
 RIST_PRIV void rist_sender_peer_statistics(struct rist_peer *peer);
 RIST_PRIV void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f);
-RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt);
+RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt);
 RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id);
 RIST_PRIV size_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);

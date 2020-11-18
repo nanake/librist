@@ -27,7 +27,7 @@ deps = []
 platform_files = []
 contrib_libs = []
 inc = []
-inc += include_directories('.', 'include/librist', 'include', 'contrib')
+inc += include_directories('src', 'include/librist', 'include', 'contrib')
 
 builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
@@ -169,7 +169,7 @@ if use_mbedtls
 				toolchainfile = '-DCMAKE_TOOLCHAIN_FILE='+meson.current_source_dir() + '/common/ci/x86_64-w64-mingw32.cmake'
 			endif
 		endif
-		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON', toolchainfile])
+		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON', '-DCMAKE_C_VISIBILITY_PRESET=hidden', toolchainfile])
 		inc += mbedtls_proj.include_directories('mbedcrypto')
 		mbedcrypto_lib = mbedtls_proj.dependency('mbedcrypto')
 	endif
@@ -179,11 +179,13 @@ endif
 subdir('include')
 
 librist = library('librist',
-	'src/crypto.c',
+	'src/crypto/crypto.c',
+	'src/crypto/psk.c',
 	'src/flow.c',
 	'src/logging.c',
 	'src/rist.c',
 	'src/rist-common.c',
+	'src/mpegts.c',
 	'src/udp.c',
 	'src/stats.c',
 	'src/udpsocket.c',

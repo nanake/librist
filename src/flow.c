@@ -8,15 +8,16 @@
 #include "log-private.h"
 #include "udp-private.h"
 
-void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t seq, uint32_t rtt)
+void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt)
 {
-	uint64_t now = timestampNTP_u64();
-
 	struct rist_missing_buffer *m = calloc(1, sizeof(*m));
+	uint64_t now = timestampNTP_u64();
+	if (nack_time > now)
+		nack_time = now;
 	m->seq = seq;
-	m->insertion_time = now;
+	m->insertion_time = nack_time;
 
-	m->next_nack = now + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
+	m->next_nack = nack_time + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
 	m->peer = peer;
 
 	f->missing_counter++;
@@ -25,7 +26,7 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 			"Datagram %" PRIu32 " is missing, inserting into the missing queue "
 			"with deadline in %" PRIu64 "ms (queue=%d), last_seq_found %"PRIu32"\n",
-		seq, (m->next_nack - now) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
+		seq, (m->next_nack - timestampNTP_u64()) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
 
 	m->next = NULL;
 	// Insert it at the end of the queue

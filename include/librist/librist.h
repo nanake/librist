@@ -89,6 +89,29 @@ RIST_API uint32_t rist_flow_id_create();
 RIST_API int rist_sender_create(struct rist_ctx **ctx, enum rist_profile profile,
 				uint32_t flow_id, struct rist_logging_settings *logging_settings);
 
+
+/**
+ * @brief Enable RIST NULL Packet deletion
+ *
+ *  Enables deletion of NULL packets, packets are modified on submission to
+ *  the libRIST library, so this only affects packets inserted after enabling
+ *  NPD.
+ * @param ctx RIST sender ctx
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_sender_npd_enable(struct rist_ctx *ctx);
+
+/**
+ * @brief Disable RIST NULL Packet deletion
+ *
+ *  Disables deletion of NULL packets, packets are modified on submission to
+ *  the libRIST library, so this only affects packets inserted after enabling
+ *  NPD.
+ * @param ctx RIST sender ctx
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_sender_npd_disable(struct rist_ctx *ctx);
+
 /**
  * @brief Retrieve the current flow_id value
  *

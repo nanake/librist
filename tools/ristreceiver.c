@@ -11,9 +11,12 @@
 #include <string.h>
 #include <sys/types.h>
 #include "getopt-shim.h"
+#include "pthread-shim.h"
 #include <stdbool.h>
 #include <signal.h>
 #include "risturlhelp.h"
+#define __STDC_FORMAT_MACROS
+#include <inttypes.h>
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s
@@ -57,7 +60,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --profile 1               \\\n"
-"       --stats 1000              \\\n"
+"       --statsinterval 1000      \\\n"
 "       --verbose-level 6         \n";
 
 static void usage(char *cmd)
@@ -121,7 +124,10 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 					// Set RTP header (mpegts)
 					uint16_t i_seqnum = udp_config->rtp_sequence ? (uint16_t)b->seq : callback_object->i_seqnum[i]++;
 					uint32_t i_timestamp = risttools_convertNTPtoRTP(b->ts_ntp);
-					risttools_rtp_set_hdr(payload, 0x21, i_seqnum, i_timestamp, b->flow_id);
+					uint8_t ptype = 0x21;
+					if (udp_config->rtp_ptype != 0)
+						ptype = udp_config->rtp_ptype;
+					risttools_rtp_set_hdr(payload, ptype, i_seqnum, i_timestamp, b->flow_id);
 				}
 				else {
 					payload = (uint8_t *)b->payload;
@@ -184,9 +190,41 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	return 0;
 }
 
+struct ristreceiver_flow_cumulative_stats {
+	uint32_t flow_id;
+	uint64_t received;
+	uint64_t recovered;
+	uint64_t lost;
+	struct ristreceiver_flow_cumulative_stats *next;
+};
+
+struct ristreceiver_flow_cumulative_stats *stats_list;
+
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n",  stats_container->stats_json);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
+	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
+	{
+		struct ristreceiver_flow_cumulative_stats *stats = stats_list;
+		struct ristreceiver_flow_cumulative_stats **prev = &stats_list;
+		while (stats && stats->flow_id != stats_container->stats.receiver_flow.flow_id)
+		{
+			prev = &stats->next;
+			stats = stats->next;
+		}
+		if (!stats) {
+			stats = calloc(sizeof(*stats), 1);
+			stats->flow_id = stats_container->stats.receiver_flow.flow_id;
+			*prev = stats;
+		}
+		stats->received += stats_container->stats.receiver_flow.received;
+		stats->lost += stats_container->stats.receiver_flow.lost;
+		stats->recovered += stats_container->stats.receiver_flow.recovered;
+		//Bit ugly, but linking in cJSON seems a bit excessive for this 4 variable JSON string
+		rist_log(logging_settings, RIST_LOG_INFO,
+				 "{\"flow_cumulative_stats\":{\"flow_id\":%"PRIu32",\"received\":%"PRIu64",\"recovered\":%"PRIu64",\"lost\":%"PRIu64"}}\n",
+				 stats->flow_id, stats->received, stats->recovered, stats->lost);
+	}
 	rist_stats_free(stats_container);
 	return 0;
 }
@@ -340,7 +378,7 @@ int main(int argc, char *argv[])
 
 		/* Print config */
 		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
-			peer_config->recovery_maxbitrate, peer_config->recovery_length_min, peer_config->recovery_length_max, 
+			peer_config->recovery_maxbitrate, peer_config->recovery_length_min, peer_config->recovery_length_max,
 			peer_config->recovery_reorder_buffer, peer_config->recovery_rtt_min,peer_config->recovery_rtt_max,
 			peer_config->congestion_control_mode, peer_config->min_retries, peer_config->max_retries);
 
@@ -429,6 +467,15 @@ next:
 #endif
 	}
 	else {
+#ifndef _WIN32
+		int prio_max = sched_get_priority_max(SCHED_RR);
+		struct sched_param param = { 0 };
+		param.sched_priority = prio_max;
+		if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0)
+			rist_log(logging_settings, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
+#else
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+#endif
 		// Master loop
 		while (!signalReceived)
 		{
@@ -463,5 +510,13 @@ next:
 		free(shared_secret);
 	free(logging_settings);
 
+	struct ristreceiver_flow_cumulative_stats *stats, *next;
+	stats = stats_list;
+	while (stats)
+	{
+		next = stats->next;
+		free(stats);
+		stats = next;
+	}
 	return 0;
 }

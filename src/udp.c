@@ -6,25 +6,17 @@
 
 #include "udp-private.h"
 #include "rist-private.h"
-#include "aes.h"
-#include "fastpbkdf2.h"
-#include "crypto-private.h"
 #include "log-private.h"
 #include "socket-shim.h"
 #include "endian-shim.h"
 #include "lz4.h"
+#include "crypto/psk.h"
+#include "mpegts.h"
 #include <stdlib.h>
 #include <stddef.h>
 #include <errno.h>
 #include <stdint.h>
 #include <assert.h>
-#ifdef USE_MBEDTLS
-#include "mbedtls/md.h"
-#include "mbedtls/pkcs5.h"
-#endif
-#ifdef LINUX_CRYPTO
-#include <linux-crypto.h>
-#endif
 
 uint64_t timestampNTP_u64(void)
 {
@@ -166,92 +158,6 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 }
 
-static void _ensure_key_is_valid(struct rist_key *key, struct rist_peer *peer)
-{
-	RIST_MARK_UNUSED(peer);
-
-	bool new_nonce = false;
-
-	if (!key->gre_nonce) {
-		// Generate new nonce as we do not have any
-		new_nonce = true;
-	} else if (key->used_times > RIST_AES_KEY_REUSE_TIMES) {
-		// Key can only be used upto certain times
-		new_nonce = true;
-	} else if (key->key_rotation > 0 && key->used_times >= key->key_rotation) {
-		// custom rotation
-		new_nonce = true;
-	}
-
-	if (new_nonce) {
-		do {
-			key->gre_nonce = prand_u32();
-		} while (!key->gre_nonce);
-
-		key->used_times = 0;
-
-		// The nonce MUST be fed to the function in network byte order
-		uint8_t aes_key[256 / 8];
-#ifndef USE_MBEDTLS
-		fastpbkdf2_hmac_sha256(
-			(const void *) key->password, strlen(key->password),
-			(const void *) &key->gre_nonce, sizeof(key->gre_nonce),
-			RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
-			aes_key, key->key_size / 8);
-#else
-		mbedtls_md_context_t sha_ctx;
-		const mbedtls_md_info_t *info_sha;
-		int ret = -1;
-		/* Setup the hash/HMAC function, for the PBKDF2 function. */
-		mbedtls_md_init(&sha_ctx);
-		info_sha = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-		if (info_sha == NULL)
-		{
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS hash info\n");
-		}
-
-		ret = mbedtls_md_setup(&sha_ctx, info_sha, 1);
-		if (ret != 0)
-		{
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS MD ctx");
-		}
-
-		ret = mbedtls_pkcs5_pbkdf2_hmac(&sha_ctx,
-										(const unsigned char *)key->password, strlen(key->password),
-										(const uint8_t *)&key->gre_nonce, sizeof(key->gre_nonce),
-										RIST_PBKDF2_HMAC_SHA256_ITERATIONS, key->key_size /8, aes_key);
-		if (ret != 0)
-		{
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Mbed TLS pbkdf2 function failed\n");
-		}
-
-		mbedtls_md_free(&sha_ctx);
-#endif
-/*
-		int i=0;
-		fprintf(stderr, "KEY: nonce %"PRIu32", size %d, pwd=%s : ", key->gre_nonce,
-		key->key_size, key->password);
-		while (i < key->key_size/8)
-		{
-			fprintf(stderr, "%02X ",(int)aes_key[i]);
-			i++;
-		}
-		fprintf(stderr, "\n");
-*/
-#ifdef USE_MBEDTLS
-		mbedtls_aes_setkey_enc(&peer->aes_tx, aes_key, key->key_size);
-		mbedtls_aes_setkey_dec(&peer->aes_tx, aes_key, key->key_size);
-#elif defined(LINUX_CRYPTO)
-		if (peer->cryptoctx_tx)
-			linux_crypto_set_key(aes_key, key->key_size/8, peer->cryptoctx_tx);
-		else
-			aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
-#else
-		aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
-#endif
-	}
-}
-
 size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_common_ctx *ctx = get_cctx(p);
@@ -269,7 +175,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	bool retry = false;
 
 	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
-							&& payload_type == RIST_PAYLOAD_TYPE_DATA_RAW
+							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
 							&& (k->key_size || p->compression));
 
 	assert(payload != NULL);
@@ -317,6 +223,8 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 			hdr_len = sizeof(*hdr);
 			// RTP header for data packets
 			hdr->rtp.flags = RTP_MPEGTS_FLAGS;
+			if (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
+				SET_BIT(hdr->rtp.flags, 4);
 			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
 			hdr->rtp.seq = htobe16(seq_rtp);
 			if ((seq + 1) != ctx->seq)
@@ -370,8 +278,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 		}
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
-			_ensure_key_is_valid(k, p);
-
 			// Prepare GRE header
 			struct rist_gre_key_seq *gre_key_seq = (void *) header_buf;
 			SET_BIT(gre_key_seq->flags1, 7); // set checksum bit
@@ -402,42 +308,10 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 
 			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
-			gre_key_seq->nonce = k->gre_nonce;
 			gre_key_seq->seq = htobe32(seq);
 
-			/* Prepare AES IV */
-			uint8_t IV[AES_BLOCK_SIZE];
-			// The byte array needs to be zeroes and then the seq in network byte order
-			uint32_t seq_be = gre_key_seq->seq;
-			memset(IV, 0, 12);
-			memcpy(IV + 12, &seq_be, sizeof(seq_be));
-
-			// Encrypt everything other than GRE
-			k->used_times++;
-	/*
-			int i=0;
-			fprintf(stderr, "IV: seq %"PRIu32"(%d): ", seq,  k->key_size);
-			while (i < sizeof(IV))
-			{
-				fprintf(stderr, "%02X ",(int)IV[i]);
-				i++;
-			}
-			fprintf(stderr, "\n");
-	*/
-#ifdef USE_MBEDTLS
-			size_t aes_offset = 0;
-			unsigned char buf[16];
-			mbedtls_aes_crypt_ctr(&p->aes_tx, (hdr_len + payload_len), &aes_offset, IV, buf, (const unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len));
-#elif defined(LINUX_CRYPTO)
-			if (p->cryptoctx_tx)
-				linux_crypto_encrypt((void *) (_payload - hdr_len), (int)(hdr_len + payload_len), IV, p->cryptoctx_tx);
-			else
-				aes_encrypt_ctr((const void *) (_payload - hdr_len), hdr_len + payload_len,
-					(void *) (_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
-#else
-			aes_encrypt_ctr((const void *)(_payload - hdr_len), hdr_len + payload_len,
-							(void *)(_payload - hdr_len), k->aes_key_sched, k->key_size, IV);
-#endif
+			_librist_crypto_psk_encrypt(&p->key_tx, gre_key_seq->seq, (unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len), (hdr_len + payload_len));
+			gre_key_seq->nonce = k->gre_nonce;
 		} else {
 			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
 			SET_BIT(gre_seq->flags1, 7); // set checksum bit
@@ -513,7 +387,7 @@ out:
 int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_gre, uint32_t seq_rtp)
 {
 	// This can only and will most likely be zero for data packets. RTCP should always have a value.
-	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
+	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
 	if (dst_port == 0)
 		dst_port = p->config.virt_dst_port;
 	if (src_port == 0)
@@ -841,6 +715,25 @@ static inline void rist_rtcp_write_echoresp(uint8_t *buf,int *offset, const uint
 	echo->delay = 0;
 }
 
+static inline void rist_rtcp_write_xr_echoreq(uint8_t *buf, int *offset,struct rist_peer *peer, const uint32_t flow_id)
+{
+	struct rist_rtcp_hdr *xr_hdr = (struct rist_rtcp_hdr *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(*xr_hdr);
+	xr_hdr->flags =  0x80;//v=2;p=0;
+	xr_hdr->ptype = PTYPE_XR;
+	xr_hdr->ssrc = htobe32(flow_id);
+	struct rist_rtcp_xr_rrtrb *block = (struct rist_rtcp_xr_rrtrb *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
+	*offset += sizeof(*block);
+	block->block_type = 4;
+	block->length = htobe16(2);
+	block->reserved = 0;
+	uint64_t now = timestampNTP_u64();
+	peer->last_sender_report_ts = now;
+	block->ntp_msw = htobe32((uint32_t)(now >> 32));
+	block->ntp_lsw = htobe32((uint32_t)(now & 0x000000000FFFFFFFF));
+	xr_hdr->len = htobe16(1 + sizeof(*block)/4);
+}
+
 int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
@@ -848,6 +741,8 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	int payload_len = 0;
 	rist_rtcp_write_rr(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	if (peer->echo_enabled == false)
+		rist_rtcp_write_xr_echoreq(rtcp_buf, &payload_len, peer, peer->adv_flow_id);
 	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
 	struct rist_common_ctx *cctx = get_cctx(peer);
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
@@ -1060,18 +955,34 @@ void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
 int rist_sender_enqueue(struct rist_sender *ctx, const void *data, size_t len, uint64_t datagram_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
 {
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_DATA_RAW;
-
+	const void * payload = data;
 	if (ctx->common.PEERS == NULL) {
 		// Do not cache data if the lib user has not added peers
 		return -1;
 	}
 
 	ctx->last_datagram_time = datagram_time;
+	uint8_t tmp_buf[6 * 204 + 4];//Max size needed with at least 1 pkt suppressed
+	if (ctx->null_packet_suppression && len <= 7 * 204)
+	{
+
+		struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)&tmp_buf;
+		memset(tmp_buf, 0, sizeof(*hdr_ext));//hdr_ext
+		int ret = 0;
+		if ((ret = suppress_null_packets(data, &tmp_buf[sizeof(*hdr_ext)], &len, hdr_ext)) > 0)
+		{
+			memcpy(&hdr_ext->identifier, "RI", 2);
+			hdr_ext->length = htobe16(1);
+			len += sizeof(*hdr_ext);
+			payload = tmp_buf;
+			payload_type = RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT;
+		}
+	}
 
 	/* insert into sender fifo queue */
 	pthread_mutex_lock(&ctx->queue_lock);
 	size_t sender_write_index = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire);
-	ctx->sender_queue[sender_write_index] = rist_new_buffer(&ctx->common, data, len, payload_type, 0, datagram_time, src_port, dst_port);
+	ctx->sender_queue[sender_write_index] = rist_new_buffer(&ctx->common, payload, len, payload_type, 0, datagram_time, src_port, dst_port);
 	if (RIST_UNLIKELY(!ctx->sender_queue[sender_write_index])) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
 		pthread_mutex_unlock(&ctx->queue_lock);
@@ -1303,7 +1214,10 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
 	}
 	else {
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, retry->peer->local_port, retry->peer->remote_port);
+		uint16_t src_port = buffer->src_port;
+		if (src_port == 0)
+			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port);
 	}
 
 	// update bandwidh value

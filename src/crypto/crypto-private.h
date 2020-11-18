@@ -7,7 +7,6 @@
 #define RIST_CRYPTO_PRIVATE_H
 
 #include "common/attributes.h"
-
 #include <stdint.h>
 
 RIST_PRIV uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase);

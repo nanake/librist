@@ -347,7 +347,7 @@ int udpsocket_set_nonblocking(int sd)
 
 int udpsocket_send(int sd, const void *buf, size_t size)
 {
-	return (int)send(sd, buf, size, MSG_DONTWAIT);
+	return (int)send(sd, buf, size, 0);
 }
 
 int udpsocket_sendto(int sd, const void *buf, size_t size, const char *host, uint16_t port)

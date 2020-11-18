@@ -201,11 +201,11 @@ int linux_crypto_set_key(const uint8_t *key, int keylen, struct linux_crypto *ct
 	return ret;
 }
 
-int linux_crypto_decrypt(uint8_t buf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
-	return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 0, iv, 0);
+int linux_crypto_decrypt(uint8_t inbuf[], uint8_t outbuf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
+	return _linux_crypto_process(ctx, inbuf, buflen, outbuf, buflen, 0, iv, 0);
 }
-int linux_crypto_encrypt(uint8_t buf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
-	return _linux_crypto_process(ctx, buf, buflen, buf, buflen, 1, iv, 0);
+int linux_crypto_encrypt(uint8_t inbuf[], uint8_t outbuf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {
+	return _linux_crypto_process(ctx, inbuf, buflen, outbuf, buflen, 1, iv, 0);
 }
 
 #endif

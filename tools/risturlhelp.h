@@ -35,6 +35,7 @@ const char help_urlstr[] = "\nUsage: append to end of individual rist:// url(s) 
 "  param stream-id=#  ID number (arbitrary) for multiplex/demultiplexing steam in peer connector\n"
 "  param rtp-timestamp=#  carry over the timestamp to/from the rtp header into/from rist (0 or 1)\n"
 "  param rtp-sequence=#  carry over the sequence number to/from the rtp header into/from rist (0 or 1)\n"
+"  param rtp-ptype=# override the default RTP PTYPE to this value\n"
 "\n";
 
 #endif

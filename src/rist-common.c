@@ -6,26 +6,17 @@
  */
 
 #include "rist-private.h"
-#include "aes.h"
-#include "fastpbkdf2.h"
-#include "crypto-private.h"
 #include "log-private.h"
+#include "crypto/psk.h"
 #include "udp-private.h"
 #include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
 #include "lz4.h"
+#include "mpegts.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
-#ifdef USE_MBEDTLS
-#include "mbedtls/aes.h"
-#include "mbedtls/md.h"
-#include "mbedtls/pkcs5.h"
-#elif defined(LINUX_CRYPTO)
-#include "linux-crypto.h"
-#endif
-
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
@@ -90,6 +81,10 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_udp_config->rtp_sequence = (uint16_t)temp;
+			} else if (strcmp( url_params[i].key, RIST_URL_PARAP_RTP_OUTPUT_PTYPE) == 0) {
+				int temp = atoi( val );
+				if (temp >= 0)
+					output_udp_config->rtp_ptype = (uint8_t)temp;
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
@@ -369,7 +364,7 @@ void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 	RIST_MARK_UNUSED(ctx);
 	free(b->data);
 	free(b);
-	
+
 }
 
 static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry, uint8_t payload_type)
@@ -391,6 +386,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 			else
 				f->time_offset += ((uint64_t)UINT32_MAX << 32) / RTP_PTYPE_MPEGTS_CLOCKHZ;
 			rist_log_priv(get_cctx(f->peer_lst[0]), RIST_LOG_INFO, "Clock wrapped, old offset: %" PRId64 " new offset %" PRId64 "\n", f->time_offset / RIST_CLOCK, f->time_offset_old / RIST_CLOCK);
+			f->offset_recalc_sample_count = 0;
 			f->max_source_time = 0;
 			f->time_offset_changed_ts = now;
 		}
@@ -429,13 +425,23 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 
 static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t current_seq, uint32_t rtt) {
 	uint32_t counter = 1;
+	uint64_t packet_time_last = 0;
+	if (RIST_UNLIKELY(!f->receiver_queue[f->last_seq_found]))
+		packet_time_last = timestampNTP_u64();
+	else
+		packet_time_last = f->receiver_queue[f->last_seq_found]->packet_time;
+	uint64_t packet_time_now = f->receiver_queue[current_seq]->packet_time;
+	uint32_t missing_count = (current_seq - f->last_seq_found) & UINT16_MAX;
+	uint64_t interpacket_time = (packet_time_now - packet_time_last) / (missing_count +1);
 	uint32_t missing_seq = (f->last_seq_found + counter);
 
 	if (f->short_seq)
 		missing_seq = (uint16_t)missing_seq;
 
+	uint64_t nack_time = packet_time_last;
 	while (missing_seq != current_seq)
 	{
+		nack_time += interpacket_time;
 		if (RIST_UNLIKELY(peer->buffer_bloat_active || f->missing_counter > peer->missing_counter_max))
 		{
 			if (f->missing_counter > peer->missing_counter_max)
@@ -448,7 +454,7 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 					"Link has collapsed. Not queuing new retries until it recovers.\n");
 			break;
 		}
-		rist_receiver_missing(f, peer, missing_seq, rtt);
+		rist_receiver_missing(f, peer, nack_time, missing_seq, rtt);
 		if (RIST_UNLIKELY(counter == f->receiver_queue_max))
 			break;
 		counter++;
@@ -458,13 +464,45 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 	}
 }
 
+int compare(const void *a, const void *b)
+{
+	return ( *(uint64_t*)a < *(uint64_t*)b);
+}
+
+static void recalculate_clock_offset(struct rist_flow *flow)
+{
+	//arbitrarily chosen minimal sample count
+	if (flow->offset_recalc_sample_count < 100)
+		return;
+
+	/* to counter clock drift we are recalculating our offset every 2048 inserted
+	   packets. Every "correctly" (in-order, no-discontinuities) packet's clock offset
+	   is inserted into an array. Of which we will take the median. */
+	qsort(flow->offset_recalc_samples, flow->offset_recalc_sample_count, sizeof(uint64_t), compare);
+	size_t middle = (flow->offset_recalc_sample_count +1)/2 +1;
+	uint64_t median_offset = flow->offset_recalc_samples[middle];
+	flow->offset_recalc_sample_count = 0;
+	uint64_t diff = 0;
+	uint64_t negative = (median_offset < (uint64_t)flow->time_offset);
+	if (negative)
+		diff = flow->time_offset - median_offset;
+	else
+		diff = median_offset - flow->time_offset;
+	rist_log_priv(get_cctx(flow->peer_lst[0]), RIST_LOG_DEBUG, "Recalculated clock offset, old offset: %lu, new offset: %lu difference: %c%lu usec\n",
+							flow->time_offset, median_offset, negative? '-': '+', (diff * 1000 / RIST_CLOCK));
+	flow->time_offset = median_offset;
+}
+
+
 static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
 {
 	struct rist_flow *f = peer->flow;
 
 	//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 	//	seq, source_time);
+
 	uint64_t now = timestampNTP_u64();
+	//fprintf(stderr, "Offset would've been: %llu\n", now - source_time);
 	if (RIST_UNLIKELY(!f->receiver_queue_has_items && retry))
 		return -1;
 	if (RIST_UNLIKELY(!f->receiver_queue_has_items)) {
@@ -538,7 +576,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 	}
 	reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
-	if (RIST_UNLIKELY(idx == reader_idx -1))
+	if (RIST_UNLIKELY(idx == ((reader_idx -1) &(f->receiver_queue_max -1))))
 	{
 		//Buffer full!
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
@@ -584,6 +622,14 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (!out_of_order && missing_seq != f->last_seq_found)
 		{
 			receiver_mark_missing(f, peer, seq, rtt);
+		} else
+		{
+			//packet received in order, use it's offset as a sample in calculation to
+			//correct clock drift
+			f->offset_recalc_samples[f->offset_recalc_sample_count] = (int64_t)now - (int64_t)source_time;
+			f->offset_recalc_sample_count++;
+			if (f->offset_recalc_sample_count == 2048)
+				recalculate_clock_offset(f);
 		}
 		//If we stopped due to bloat or missing count max this will be incorrect.
 		f->last_seq_found = seq;
@@ -741,7 +787,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							"Packet %"PRIu32" (%zu bytes) is too old %"PRIu64"/%"PRIu64" ms, deadline = %"PRIu64", offset = %"PRId64" ms, releasing data\n",
 							b->seq, b->size, delay_rtc / RIST_CLOCK, delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK);
 							//Reset the flow if we keep hitting packets that are too late, likely our time offset is wrong.
-							f->too_late_ctr++;	
+							f->too_late_ctr++;
 							if (f->too_late_ctr > 100) {
 								f->receiver_queue_has_items = false;
 								return;
@@ -788,6 +834,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					f->dataout_fifo_queue_bytesize += b->size;
 					atomic_fetch_add_explicit(&f->dataout_fifo_queue_counter, 1, memory_order_release);
 					// Wake up the fifo read thread (poll)
+					if (f->stats_instant.buffer_duration_count < 2048)
+					{
+						f->stats_instant.buffer_duration[f->stats_instant.buffer_duration_count] = (uint32_t)(delay_rtc / RIST_CLOCK);
+						f->stats_instant.buffer_duration_count++;
+					}
 					if (pthread_cond_signal(&(ctx->condition)))
 						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 				}
@@ -969,7 +1020,7 @@ nack_loop_continue:
 
 static int rist_set_manual_sockdata(struct rist_peer *peer, const struct rist_peer_config *config)
 {
-	peer->address_family = (uint16_t)config->address_family;//TODO: should it not just be a uint16_t then? 
+	peer->address_family = (uint16_t)config->address_family;//TODO: should it not just be a uint16_t then?
 	peer->listening = !config->initiate_conn;
 	const char *hostname = config->address;
 	int ret;
@@ -1043,20 +1094,8 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 	}
 
 	if (config->key_size) {
-		p->key_rx.key_size = config->key_size;
-		strncpy(&p->key_rx.password[0], config->secret, RIST_MAX_STRING_SHORT);
-		p->key_rx.key_rotation = config->key_rotation;
-		memcpy(&p->key_tx, &p->key_rx, sizeof(p->key_rx));
-#ifdef USE_MBEDTLS
-		mbedtls_aes_init(&p->aes_tx);
-		mbedtls_aes_init(&p->aes_rx);
-#elif defined(LINUX_CRYPTO)
-		linux_crypto_init(&p->cryptoctx_rx);
-		if (p->cryptoctx_rx) {
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
-			linux_crypto_init(&p->cryptoctx_tx);
-		}
-#endif
+		_librist_crypto_psk_rist_key_init(&p->key_tx, config->key_size, config->key_rotation, config->secret);
+		_librist_crypto_psk_rist_key_clone(&p->key_tx, &p->key_rx);
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -1174,13 +1213,9 @@ void rist_shutdown_peer(struct rist_peer *peer)
 	}
 #ifndef USE_MBEDTLS
 #ifdef LINUX_CRYPTO
-	if (!peer->parent && peer->cryptoctx_tx) {
-		free(peer->cryptoctx_tx);
-		peer->cryptoctx_tx = NULL;
-	}
-	if (!peer->parent && peer->cryptoctx_rx) {
-		free(peer->cryptoctx_rx);
-		peer->cryptoctx_rx = NULL;
+	if (!peer->parent) {
+		_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
+		_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
 	}
 #endif
 #endif
@@ -1636,11 +1671,17 @@ static void rist_rtcp_handle_echo_request(struct rist_peer *peer, struct rist_rt
 }
 
 static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_rtcp_echoext *echoreq) {
+	peer->echo_enabled = true;
 	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
 	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
 	peer->last_mrtt = (uint32_t)rtt / RIST_CLOCK;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
 	peer->eight_times_rtt += peer->last_mrtt;
+	if (peer->peer_data && peer->peer_data != peer)
+	{
+		peer->peer_data->last_mrtt = peer->last_mrtt;
+		peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
+	}
 }
 
 static void rist_handle_sr_pkt(struct rist_peer *peer, struct rist_rtcp_sr_pkt *sr) {
@@ -1654,14 +1695,69 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 		return;
 	uint64_t lsr_tmp = (peer->last_sender_report_time >> 16) & 0xFFFFFFFF;
 	uint64_t lsr_ntp = be32toh(rr->lsr);
+	uint64_t rtt;
 	if (lsr_ntp == lsr_tmp) {
 		uint64_t now = timestampNTP_u64();
-		uint64_t rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
-		peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
-		peer->eight_times_rtt -= peer->eight_times_rtt / 8;
-		peer->eight_times_rtt += peer->last_mrtt;
-	}
+		rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
 
+	} else {
+		//Slightly less accurate, needed when RTT is bigger than our RTCP interval.
+		uint64_t now = timestampNTP_u64();
+		lsr_ntp = lsr_ntp << 16;
+		lsr_ntp |= (now & 0xFFFF000000000000);
+		rtt  = now - lsr_ntp  - ((uint64_t)be32toh(rr->dlsr) << 16);
+	}
+	peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
+	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
+	peer->eight_times_rtt += peer->last_mrtt;
+	if (peer->peer_data && peer->peer_data != peer)
+	{
+		peer->peer_data->last_mrtt = peer->last_mrtt;
+		peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
+	}
+}
+
+static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
+{
+	size_t offset = 0;
+	struct rist_rtcp_hdr *hdr = (struct rist_rtcp_hdr *)&xr_pkt[offset];
+	size_t payload_len = (be16toh(hdr->len) +1) * 4;
+	ssize_t bytes_remaining = payload_len - sizeof(struct rist_rtcp_hdr);
+	offset += sizeof(struct rist_rtcp_hdr);
+	while (bytes_remaining > 0)
+	{
+		struct rist_rtcp_xr_block_hdr *block = (struct rist_rtcp_xr_block_hdr *)&xr_pkt[offset];
+		uint8_t block_type = block->type;
+		uint16_t block_length = (be16toh(block->length)+1) * 4;
+		if (block_type == 5)
+		{
+			struct rist_rtcp_xr_dlrr *dlrr = (struct rist_rtcp_xr_dlrr *)&xr_pkt[offset];
+			uint64_t lrr_tmp = (peer->last_sender_report_ts >> 16) & 0xFFFFFFFF;
+			uint64_t lrr = be32toh(dlrr->lrr);
+			uint64_t rtt;
+			if (lrr == lrr_tmp)
+			{
+				rtt = timestampNTP_u64() - peer->last_sender_report_ts - ((uint64_t)be32toh(dlrr->delay) << 16);
+
+			} else {
+				//Slightly less accurate, needed when RTT is bigger than our RTCP interval.
+				uint64_t now = timestampNTP_u64();
+				lrr = lrr << 16;
+				lrr |= (now & 0xFFFF000000000000);
+				rtt  = now - lrr  - ((uint64_t)be32toh(dlrr->delay) << 16);
+			}
+			peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
+			peer->eight_times_rtt -= peer->eight_times_rtt /8;
+			peer->eight_times_rtt += peer->last_mrtt;
+			if (peer->peer_data && peer->peer_data != peer)
+			{
+				peer->peer_data->last_mrtt = peer->last_mrtt;
+				peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
+			}
+		}
+		offset += block_length;
+		bytes_remaining -= block_length;
+	}
 }
 
 static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
@@ -1785,7 +1881,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 				rist_handle_sr_pkt(peer, sr);
 				break;
 			case PTYPE_XR:
-				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "RTCP XR not supported\n");
+				rist_handle_xr_pkt(peer, pkt);
 				break;
 			default:
 				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Unrecognized RTCP packet with PTYPE=%02x!!\n", ptype);
@@ -1876,16 +1972,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 	static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 	{
-		peer->key_rx.key_size = peer_src->key_rx.key_size;
-		peer->key_rx.key_rotation = peer_src->key_rx.key_rotation;
-#ifndef USE_MBEDTLS
-#ifdef LINUX_CRYPTO
-		peer->cryptoctx_rx = peer_src->cryptoctx_rx;
-		peer->cryptoctx_tx = peer_src->cryptoctx_tx;
-#endif
-#endif
-		strncpy(&peer->key_rx.password[0], &peer_src->key_rx.password[0], RIST_MAX_STRING_SHORT);
-		memcpy(&peer->key_tx, &peer->key_rx, sizeof(peer->key_rx));
+		_librist_crypto_psk_rist_key_clone(&peer_src->key_rx, &peer->key_rx);
+		_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx);
 
 		strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 		strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
@@ -2076,101 +2164,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					nonce = gre_key_seq->checksum_reserved1;
 					gre_size -= 4;
 				}
-
-				if (!nonce) {
-					// there is no nonce provided (all zeroes), this means unencrypted
-					// Ignore it!
-					return;
-				}
-
-				// Regenerate AES key if nonce do not match
-				if (k->gre_nonce != nonce) {
-					// What if the peer sends a dummy packet with nonce every time?
-					// How to prevent from this abuse?
-					k->used_times = 0;
-					k->gre_nonce = nonce;
-					// The nonce MUST be fed to the function in network byte order
-					uint8_t aes_key[256 / 8];
-#ifndef USE_MBEDTLS
-					fastpbkdf2_hmac_sha256(
-							(const void *) k->password, strlen(k->password),
-							(const void *) &k->gre_nonce, sizeof(k->gre_nonce),
-							RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
-							aes_key, k->key_size / 8);
-#else
-					mbedtls_md_context_t sha_ctx;
-					const mbedtls_md_info_t *info_sha;
-					int ret = -1;
-					/* Setup the hash/HMAC function, for the PBKDF2 function. */
-					mbedtls_md_init(&sha_ctx);
-					info_sha = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
-					if (info_sha == NULL)
-					{
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS hash info\n");
-					}
-
-					ret = mbedtls_md_setup(&sha_ctx, info_sha, 1);
-					if (ret != 0)
-					{
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Failed to setup Mbed TLS MD ctx");
-					}
-
-					ret = mbedtls_pkcs5_pbkdf2_hmac(&sha_ctx,
-													(const unsigned char *)k->password, strlen(k->password),
-													(const uint8_t *)&k->gre_nonce, sizeof(k->gre_nonce),
-													RIST_PBKDF2_HMAC_SHA256_ITERATIONS, k->key_size /8, aes_key);
-					if (ret != 0)
-					{
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Mbed TLS pbkdf2 function failed\n");
-					}
-
-					mbedtls_md_free(&sha_ctx);
-#endif
-#ifdef USE_MBEDTLS
-					mbedtls_aes_setkey_enc(&peer->aes_rx, aes_key, k->key_size);
-					mbedtls_aes_setkey_dec(&peer->aes_rx, aes_key, k->key_size);
-#elif defined(LINUX_CRYPTO)
-					if (peer->cryptoctx_rx)
-						linux_crypto_set_key(aes_key, k->key_size / 8, peer->cryptoctx_rx);
-					else
-						aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
-#else
-					aes_key_setup(aes_key, k->aes_key_sched, k->key_size);
-#endif
-
-				}
-
-				if (k->used_times > RIST_AES_KEY_REUSE_TIMES) {
-					// Peer is reusing nonce for more than specified times
-					// This is breach of security measure. Ignore!
-					// This will prevent incorrect implementation from being designed.
-					return;
-				}
-
-				/* Prepare AES IV */
-				uint8_t IV[AES_BLOCK_SIZE];
-				// The byte array needs to be zeroes and then the seq in network byte order
-				uint32_t seq_be = htobe32(seq);
-				memset(IV, 0, 12);
-				memcpy(IV + 12, &seq_be, sizeof(seq_be));
-
-				// Decrypt everything
-				k->used_times++;
-#ifdef USE_MBEDTLS
-				size_t aes_offset = 0;
-				unsigned char buf[16];
-				mbedtls_aes_crypt_ctr(&peer->aes_rx, (recv_bufsize - gre_size), &aes_offset, IV, buf, (const unsigned char *)(recv_buf + gre_size), (unsigned char *)(recv_buf + gre_size));
-#elif defined(LINUX_CRYPTO)
-				if (peer->cryptoctx_rx)
-					linux_crypto_decrypt((void *)(recv_buf + gre_size), (int)(recv_bufsize - gre_size), IV, peer->cryptoctx_rx);
-				else
-					aes_decrypt_ctr((const void *) (recv_buf + gre_size), recv_bufsize - gre_size, (void *) (recv_buf + gre_size),
-							k->aes_key_sched, k->key_size, IV);
-#else
-				aes_decrypt_ctr((const void *)(recv_buf + gre_size), recv_bufsize - gre_size, (void *)(recv_buf + gre_size),
-								k->aes_key_sched, k->key_size, IV);
-#endif
-
+				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), (unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
 			} else if (has_seq) {
 				// Key bit is not set, that means the other side does not want to send
 				//  encrypted data
@@ -2178,6 +2172,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				// make sure we do not have a key
 				// (ie also interested in unencrypted communication)
 				if (k->key_size) {
+					fprintf(stderr, "Has seq %hhu has key %hhu\n", has_seq, has_seq);
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
 					return;
@@ -2264,8 +2259,20 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				flow_id ^= 1UL;
 				retry = 1;
 			}
+			uint8_t *data_payload = (recv_buf + gre_size + sizeof(*proto_hdr));
 			payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
-			payload.data = (void *)(recv_buf + gre_size + sizeof(*proto_hdr));
+			if (CHECK_BIT(proto_hdr->rtp.flags, 4)) {
+				//RTP extension header
+				struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(recv_buf + gre_size + sizeof(*proto_hdr));
+				if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
+				{
+					payload.size -= 8;
+					data_payload += sizeof(*hdr_ext);
+					if (CHECK_BIT(hdr_ext->flags, 7))
+						expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+				}
+			}
+			payload.data = (void *)data_payload;
 			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 		} else {
 			// remap the rtp payload to the correct rtcp header
@@ -2288,11 +2295,6 @@ protocol_bypass:
 		// We need this protocol bypass to manage keepalives of any kind,
 		// they need to trigger peering at the bottom of this function
 
-		/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
-		if (RIST_UNLIKELY(payload.type == RIST_PAYLOAD_TYPE_RTCP && peer->receiver_ctx && peer->remote_port != payload.src_port)) {
-			peer->remote_port = payload.src_port;
-			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
-		}
 
 		pthread_rwlock_rdlock(peerlist_lock);
 		bool inchild = false;
@@ -2316,6 +2318,12 @@ protocol_bypass:
 						break;
 					case RIST_PAYLOAD_TYPE_RTCP:
 					case RIST_PAYLOAD_TYPE_RTCP_NACK:
+					/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
+						if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
+							rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
+							p->local_port = payload.dst_port;
+							p->remote_port = payload.src_port;
+						}
 						rist_recv_rtcp(p, seq, flow_id, &payload);
 						break;
 					case RIST_PAYLOAD_TYPE_DATA_RAW:
@@ -2326,11 +2334,7 @@ protocol_bypass:
 							source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
 						if (!advanced)
 						{
-							// Get the sequence from the rtp header for queue management
 							seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
-							// TODO: add support for null packet suppresion
-							// We will not use seq number extension value at all ...
-							// If you want 32 bit seq, use the advanced profile
 						}
 						if (RIST_UNLIKELY(!p->receiver_mode))
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
@@ -2656,6 +2660,16 @@ protocol_bypass:
 	{
 		struct rist_flow *flow = (struct rist_flow *)arg;
 		struct rist_receiver *receiver_ctx = (void *)flow->receiver_id;
+
+#ifndef _WIN32
+		int prio_max = sched_get_priority_max(SCHED_RR);
+		struct sched_param param = { 0 };
+		param.sched_priority = prio_max;
+		if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0)
+			rist_log_priv(&receiver_ctx->common, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
+#else
+		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+#endif
 		// Default max jitter is 5ms
 		int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
 		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
@@ -3034,20 +3048,8 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	}
 
 	if (config->key_size) {
-		newpeer->key_rx.key_size = config->key_size;
-		strncpy(&newpeer->key_rx.password[0], config->secret, RIST_MAX_STRING_SHORT);
-		newpeer->key_rx.key_rotation = config->key_rotation;
-		memcpy(&newpeer->key_tx, &newpeer->key_rx, sizeof(newpeer->key_rx));
-#ifdef USE_MBEDTLS
-		mbedtls_aes_init(&newpeer->aes_tx);
-		mbedtls_aes_init(&newpeer->aes_rx);
-#elif defined(LINUX_CRYPTO)
-		linux_crypto_init(&newpeer->cryptoctx_rx);
-		if (newpeer->cryptoctx_rx) {
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Crypto AES-NI found and activated\n");
-			linux_crypto_init(&newpeer->cryptoctx_tx);
-		}
-#endif
+		_librist_crypto_psk_rist_key_init(&newpeer->key_tx, config->key_size, config->key_rotation, config->secret);
+		_librist_crypto_psk_rist_key_clone(&newpeer->key_tx, &newpeer->key_rx);
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -3233,7 +3235,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						if (f->dead != 1) {
 							f->dead = 1;
 							rist_log_priv(&ctx->common, RIST_LOG_WARN,
-								"Flow with id %"PRIu32" is dead, age is %"PRIu64"ms\n", 
+								"Flow with id %"PRIu32" is dead, age is %"PRIu64"ms\n",
 									f->flow_id, flow_age / RIST_CLOCK);
 						}
 					}
@@ -3324,7 +3326,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	for (;;) {
 		if (!peer)
 			break;
-		next = peer->next;	
+		next = peer->next;
 		rist_shutdown_peer(peer);
 		free(peer);
 		peer = next;

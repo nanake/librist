@@ -3,12 +3,11 @@
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
-#include "librist.h"
-#include "rist-private.h"
-#include "log-private.h"
 #include "crypto-private.h"
 #include "udp-private.h"
 #include "sha256.h"
+#include <string.h>
+#include <stdlib.h>
 
 // This is intended for verifying that the peer has the same passphrase
 // Usecase: "reply attack protection"
@@ -51,5 +50,17 @@ uint32_t prand_u32() {
 	for (size_t i = 0; i < sizeof(u32); i++) {
 		u8[i] = rand() % 256;//Use the lowest byte of rand()
 	}
+	return u32;
+}
+
+uint32_t rand_u32(void)
+{
+	uint32_t u32;
+	uint8_t *u8 = (void *) &u32;
+
+	for (size_t i = 0; i < sizeof(u32); i++) {
+		u8[i] = rand() % 256;
+	}
+
 	return u32;
 }

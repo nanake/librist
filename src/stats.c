@@ -302,6 +302,17 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		rist_flush_missing_flow_queue(flow);
 	}
 
+	uint64_t avg_buffer_duration = 0;
+	if (flow->stats_instant.buffer_duration_count > 0)
+	{
+
+		for (size_t i = 0; i < flow->stats_instant.buffer_duration_count; i++)
+		{
+			avg_buffer_duration += flow->stats_instant.buffer_duration[i];
+		}
+		avg_buffer_duration /= flow->stats_instant.buffer_duration_count;
+		flow->stats_instant.buffer_duration_count = 0;
+	}
 	cJSON_AddNumberToObject(json_stats, "quality", Q);
 	cJSON_AddNumberToObject(json_stats, "received", (double)flow_recv_instant);
 	cJSON_AddNumberToObject(json_stats, "dropped_late", (double)flow->stats_instant.dropped_late);
@@ -316,13 +327,14 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(json_stats, "recovered_four_nacks", (double)flow_recovered_3nack_instant);
 	cJSON_AddNumberToObject(json_stats, "recovered_more_nacks", (double)flow_recovered_morenack_instant);
 	cJSON_AddNumberToObject(json_stats, "lost", (double)flow->stats_instant.lost);
+	cJSON_AddNumberToObject(json_stats, "avg_buffer_time", (double)avg_buffer_duration);
 	cJSON_AddNumberToObject(json_stats, "duplicates", (double)flow->stats_instant.dupe);
 	cJSON_AddNumberToObject(json_stats, "missing_queue", (double)flow->missing_counter);
 	cJSON_AddNumberToObject(json_stats, "missing_queue_max", (double)flow->missing_counter_max);
 	cJSON_AddNumberToObject(json_stats, "min_inter_packet_spacing", (double)flow->stats_instant.min_ips);
 	cJSON_AddNumberToObject(json_stats, "cur_inter_packet_spacing", (double)flow->stats_instant.cur_ips);
 	cJSON_AddNumberToObject(json_stats, "max_inter_packet_spacing", (double)flow->stats_instant.max_ips);
-	
+
 	char *stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
 
