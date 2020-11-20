@@ -316,6 +316,12 @@ RIST_API int rist_stats_free(const struct rist_stats *stats_container);
  */
 RIST_API const char *librist_version(void);
 
+/**
+ * @brief Get the API version of libRIST
+ */
+RIST_API const char *librist_api_version(void);
+
+
 #ifdef __cplusplus
 }
 #endif

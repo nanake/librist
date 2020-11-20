@@ -83,4 +83,7 @@ typedef signed int ssize_t;
 #endif
 #endif
 
+#define STR_HELPER(x) #x
+#define STR(x) STR_HELPER(x)
+
 #endif

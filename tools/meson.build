@@ -18,7 +18,7 @@ endif
 
 
 executable('ristsender',
-	['ristsender.c',srp_shared, tools_deps],
+	['ristsender.c',srp_shared, tools_deps, rev_target],
 	link_with : [librist],
 	dependencies: [
 		threads,
@@ -29,7 +29,7 @@ executable('ristsender',
 	install: true)
 
 executable('ristreceiver',
-	['ristreceiver.c', srp_shared, tools_deps],
+	['ristreceiver.c', srp_shared, tools_deps, rev_target],
 	link_with : [librist],
 	dependencies: [tools_dependencies],
 	include_directories: inc,

@@ -9,6 +9,7 @@
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
 #endif
+#include "vcs_version.h"
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -77,8 +78,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s%s version %d.%d.%d.%s\n", help_str, cmd, LIBRIST_API_VERSION_MAJOR,
-		LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -283,8 +283,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %d.%d.%d.%s\n", LIBRIST_API_VERSION_MAJOR,
-			LIBRIST_API_VERSION_MINOR, LIBRIST_API_VERSION_PATCH, RISTRECEIVER_VERSION);
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
 	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
 		switch (c) {

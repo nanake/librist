@@ -2,6 +2,7 @@
 #include "log-private.h"
 #include "udp-private.h"
 #include "vcs_version.h"
+#include <librist/version.h>
 #include "crypto/crypto-private.h"
 #include <assert.h>
 #ifdef _WIN32
@@ -599,6 +600,11 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 const char *librist_version(void)
 {
 	return LIBRIST_VERSION;
+}
+
+const char *librist_api_version(void)
+{
+	return STR(LIBRIST_API_VERSION_MAJOR)"."STR(LIBRIST_API_VERSION_MINOR)"."STR(LIBRIST_API_VERSION_PATCH);
 }
 
 int rist_parse_udp_address(const char *url, const struct rist_udp_config **udp_config)
