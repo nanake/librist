@@ -305,7 +305,7 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 			memset(&outpkt[offset], 0, 2);
 			offset += 2;
 		} else {
-			struct mbedtls_mpi tmp;
+			mbedtls_mpi tmp;
 			mbedtls_mpi_init(&tmp);
 			mbedtls_mpi_read_string(&tmp, 16, ascii_g);
 			tmp_swap = (uint16_t *)&outpkt[offset];
