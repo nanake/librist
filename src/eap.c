@@ -496,7 +496,7 @@ int eap_start(struct eapsrp_ctx *ctx)
 	struct eapol_hdr *eapol = (struct eapol_hdr *)&outpkt[sizeof(*gre)];
 	eapol->eapversion = 2;
 	eapol->eaptype = EAPOL_TYPE_START;
-	sendto(ctx->peer->sd, outpkt, (sizeof(*gre) + sizeof(*eapol)), 0, &ctx->peer->u.address, ctx->peer->address_len);
+	sendto(ctx->peer->sd, (const char *)outpkt, (sizeof(*gre) + sizeof(*eapol)), 0, &ctx->peer->u.address, ctx->peer->address_len);
 	//CHECK
 	return 0;
 }
@@ -591,7 +591,7 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 	{
 		if (ctx->last_pkt)
 		{
-			sendto(ctx->peer->sd, ctx->last_pkt, ctx->last_pkt_size, 0, &ctx->peer->u.address, ctx->peer->address_len);
+			sendto(ctx->peer->sd, (const char *)ctx->last_pkt, ctx->last_pkt_size, 0, &ctx->peer->u.address, ctx->peer->address_len);
 			//check
 			ctx->timeout_retries++;
 			ctx->last_timestamp = now;
