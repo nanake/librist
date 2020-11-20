@@ -1,4 +1,4 @@
-build/
+build*
 librist.cbp
 librist.a
 cmake-build-debug/
