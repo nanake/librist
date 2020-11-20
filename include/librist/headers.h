@@ -98,6 +98,14 @@
 #define RIST_URL_PARAM_PROFILE "profile"
 #define RIST_URL_PARAM_VERBOSE_LEVEL "verbose-level"
 
+/* Error Codes */
+#define RIST_ERR_MALLOC -1
+#define RIST_ERR_NULL_PEER -2
+#define RIST_ERR_INVALID_STRING_LENGTH -3
+#define RIST_ERR_INVALID_PROFILE -4
+#define RIST_ERR_MISSING_CALLBACK_FUNCTION -5
+#define RIST_ERR_NULL_CREDENTIALS -6
+
 enum rist_nack_type
 {
 	RIST_NACK_RANGE = 0,

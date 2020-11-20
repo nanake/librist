@@ -605,17 +605,17 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_t lookup_func, void *userdata)
 {
 	if (!peer)
-		return -1;
+		return RIST_ERR_NULL_PEER;
 	struct rist_common_ctx *cctx = get_cctx(peer);
 	if (cctx->profile == RIST_PROFILE_SIMPLE)
-		return -2;
+		return RIST_ERR_INVALID_PROFILE;
 	if (peer->listening)
 	{
 		if (lookup_func == NULL)
-			return -3;
+			return RIST_ERR_MISSING_CALLBACK_FUNCTION;
 		struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
 		if (ctx == NULL)
-			return -4;
+			return RIST_ERR_MALLOC;
 		ctx->lookup_func = lookup_func;
 		ctx->lookup_func_userdata = userdata;
 		ctx->role = EAP_ROLE_AUTHENTICATOR;
@@ -631,14 +631,14 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 		return 0;
 	}
 	if (username == NULL || password == NULL)
-		return -5;
+		return RIST_ERR_NULL_CREDENTIALS;
 	size_t u_len = strlen(username);
 	size_t p_len = strlen(password);
 	if (u_len == 0 || u_len > 255 || p_len == 0 || p_len > 255)
-		return -6;
+		return RIST_ERR_INVALID_STRING_LENGTH;
 	struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
 	if (ctx == NULL)
-		return -7;
+		return RIST_ERR_MALLOC;
 	ctx->peer = peer;
 	ctx->logging_settings = get_cctx(peer)->logging_settings;
 	ctx->role = EAP_ROLE_AUTHENTICATEE;
