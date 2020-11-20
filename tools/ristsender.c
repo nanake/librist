@@ -581,7 +581,7 @@ next:
 		goto shutdown;
 	}
 
-	pthread_t thread_main_loop[MAX_INPUT_COUNT+1];
+	pthread_t thread_main_loop[MAX_INPUT_COUNT+1] = { 0 };
 
 	if (evctx && pthread_create(&thread_main_loop[0], NULL, input_loop, (void *)callback_object) != 0)
 	{
