@@ -924,8 +924,8 @@ static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
 
 	if (outputpeer) {
 		if (get_cctx(peer)->debug)
-			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Sending %d nacks starting with %"PRIu32", %"PRIu32", %"PRIu32", %"PRIu32"\n",
-			peer->nacks.counter, peer->nacks.array[0],peer->nacks.array[1],peer->nacks.array[2],peer->nacks.array[3]);
+			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Sending %d nacks starting with %"PRIu32"\n",
+			peer->nacks.counter, peer->nacks.array[0]);
 		if (rist_receiver_send_nacks(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
 			peer->nacks.counter = 0;
 		else
