@@ -608,14 +608,14 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 		return -1;
 	struct rist_common_ctx *cctx = get_cctx(peer);
 	if (cctx->profile == RIST_PROFILE_SIMPLE)
-		return -1;
+		return -2;
 	if (peer->listening)
 	{
 		if (lookup_func == NULL)
-			return -1;
+			return -3;
 		struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
 		if (ctx == NULL)
-			return -1;
+			return -4;
 		ctx->lookup_func = lookup_func;
 		ctx->lookup_func_userdata = userdata;
 		ctx->role = EAP_ROLE_AUTHENTICATOR;
@@ -631,14 +631,14 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 		return 0;
 	}
 	if (username == NULL || password == NULL)
-		return -1;
+		return -5;
 	size_t u_len = strlen(username);
 	size_t p_len = strlen(password);
 	if (u_len == 0 || u_len > 255 || p_len == 0 || p_len > 255)
-		return -1;
+		return -6;
 	struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
 	if (ctx == NULL)
-		return -1;
+		return -7;
 	ctx->peer = peer;
 	ctx->logging_settings = get_cctx(peer)->logging_settings;
 	ctx->role = EAP_ROLE_AUTHENTICATEE;

@@ -315,14 +315,23 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	}
 
 #ifdef USE_MBEDTLS
+	int srp_error = 0;
+	if (setup->profile != RIST_PROFILE_SIMPLE) {
 		if (strlen(peer_config_link->srp_username) > 0 && strlen(peer_config_link->srp_password) > 0)
 		{
-			rist_enable_eap_srp(peer, peer_config_link->srp_username, peer_config_link->srp_password, NULL, NULL);
+			srp_error = rist_enable_eap_srp(peer, peer_config_link->srp_username, peer_config_link->srp_password, NULL, NULL);
+			if (srp_error)
+				rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
 		}
 		if (srpfile)
 		{
-			rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+			srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+			if (srp_error)
+				rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
 		}
+	}
+	else
+		rist_log(logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
 	free((void *)peer_config_link);
