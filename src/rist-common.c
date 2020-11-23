@@ -2794,7 +2794,7 @@ protocol_bypass:
 					if (!peer->dead)
 					{
 						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout &&
-								peer->last_rtcp_received > 0)
+								peer->last_rtcp_received > 0 && peer->parent)
 						{
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
@@ -3299,7 +3299,8 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						pthread_rwlock_wrlock(peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
 							struct rist_peer *peer = f->peer_lst[i];
-							rist_shutdown_peer(peer);
+							if (peer->parent)
+								rist_shutdown_peer(peer);
 						}
 						rist_delete_flow(ctx, f);
 						pthread_rwlock_unlock(peerlist_lock);
