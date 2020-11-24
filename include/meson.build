@@ -2,7 +2,7 @@
 librist_git_dir = join_paths(librist_src_root, '.git')
 rev_target = vcs_tag(command: [
         'git', '--git-dir', librist_git_dir,
-        'describe', '--tags', '--long',
+        'describe', '--tags', '--dirty',
         '--match', '?.*', '--always'
     ],
     input: 'vcs_version.h.in',
