@@ -5,6 +5,7 @@ SipRadius LLC for funding this project.
 
 ## Companies
 * VideoLabs SAS
+* In2ip B.V. / ODMedia B.V.
 
 ## Projects
 * VideoLAN
@@ -15,4 +16,4 @@ SipRadius LLC for funding this project.
 
 And all the librist Authors (git shortlog -sn), including:
 
-Sergio Ammirata, Kuldeep Singh Dhaka, Daniele Lacamera, Antonio Cardace.
+Sergio Ammirata, Kuldeep Singh Dhaka, Daniele Lacamera, Antonio Cardace, Gijs Peskens.
