@@ -93,6 +93,10 @@ The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this pr
 6. The compiled library and the tools will be in the build and build/tools folders respectively
 7. Alternatively, open librist.sln and build the applications manually if you prefer to use the VS IDE
 
+# Build with Docker
+
+1. Simply do a `docker build` on the Dockerfile in the 'common' subdirectory
+
 # Support
 
 This project is partially funded by SipRadius LLC.
