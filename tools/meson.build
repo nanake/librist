@@ -36,10 +36,12 @@ executable('ristreceiver',
 	install: true)
 
 executable('rist2rist',
-        ['rist2rist.c', tools_deps, rev_target],
-        link_with : [librist],
-		include_directories: inc,
-        install: true)
+	['rist2rist.c', srp_shared, tools_deps, rev_target],
+	link_with : [librist],
+	dependencies: [tools_dependencies],
+	include_directories: inc,
+	install: true)
+
 if use_mbedtls
 	executable('ristsrppasswd',
 			['ristsrppasswd.c', '../contrib/srp.c', tools_deps],

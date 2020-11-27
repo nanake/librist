@@ -446,9 +446,11 @@ int main(int argc, char *argv[])
 #ifdef USE_MBEDTLS
 		case 'F':
 			srpfile = fopen(optarg, "r");
-			if (!srpfile)
+			if (!srpfile) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
 				return 1;
-			break;
+			}
+		break;
 #endif
 		case 'u':
 			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);

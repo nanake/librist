@@ -1,11 +1,16 @@
-/**
+/* librist. Copyright 2020 SipRadius LLC. All right reserved.
  * rist2rist receive simple profile rist and expose it as main profile
- * author: Gijs Peskens
+ * Author: Gijs Peskens
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  */
 
 #include <librist/librist.h>
 #include "librist/version.h"
 #include "risturlhelp.h"
+#ifdef USE_MBEDTLS
+#include "librist/librist_srp.h"
+#include "srp_shared.h"
+#endif
 #include "vcs_version.h"
 #include <stdio.h>
 #include <string.h>
@@ -46,6 +51,9 @@ static struct option long_options[] = {
 { "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
+#ifdef USE_MBEDTLS
+{ "srpfile",         required_argument, NULL, 'F' },
+#endif
 { "help",            no_argument,       NULL, 'h' },
 { 0, 0, 0, 0 },
 };
@@ -59,12 +67,21 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -N | --cname identifier                   | Manually configured identifier                           |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
+#ifdef USE_MBEDTLS
+"       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
+"                                                 | of usernames and passwords to validate against. Use the  |\n"
+"                                                 | ristsrppasswd tool to create the line entries.           |\n"
+#endif
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
 "Default values: %s \n"
 "       --statsinterval 1000      \\\n"
 "       --verbose-level 6         \n";
+
+#ifdef USE_MBEDTLS
+	FILE *srpfile = NULL;
+#endif
 
 static void usage(char *cmd)
 {
@@ -181,6 +198,22 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
+#ifdef USE_MBEDTLS
+	int srp_error = 0;
+	if (strlen(peer_config->srp_username) > 0 && strlen(peer_config->srp_password) > 0)
+	{
+		srp_error = rist_enable_eap_srp(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
+		if (srp_error)
+			rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
+	}
+	if (srpfile)
+	{
+		srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+		if (srp_error)
+			rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
+	}
+#endif
+
 	/* Setting rist timeouts (in ms)*/
 	//rist_sender_set_retry_timeout(ctx, 10000);
 	//rist_sender_keepalive_timeout_set(ctx, 5000);
@@ -275,6 +308,15 @@ int main (int argc, char **argv) {
 		case 'r':
 			remote_log_address = strdup(optarg);
 		break;
+#ifdef USE_MBEDTLS
+		case 'F':
+			srpfile = fopen(optarg, "r");
+			if (!srpfile) {
+				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
+				return 1;
+			}
+		break;
+#endif
 		case 'S':
 			statsinterval = atoi(optarg);
 			break;
