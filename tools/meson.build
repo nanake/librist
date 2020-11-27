@@ -36,7 +36,7 @@ executable('ristreceiver',
 	install: true)
 
 executable('rist2rist',
-        ['rist2rist.c', tools_deps],
+        ['rist2rist.c', tools_deps, rev_target],
         link_with : [librist],
 		include_directories: inc,
         install: true)
