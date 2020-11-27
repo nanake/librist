@@ -137,14 +137,14 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 			udpsocket_close(settings->log_socket);
 			settings->log_socket = 0;
 		}
-		char url[200];
+		char host[200];
 		uint16_t port;
 		int local;
-		if (udpsocket_parse_url(url, address, 200, &port, &local) != 0 || local == 1) {
+		if (udpsocket_parse_url(address, host, 200, &port, &local) != 0 || local == 1) {
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to parse logsocket address\n");
 			return -1;
 		}
-		settings->log_socket = udpsocket_open_connect(url, port, NULL);
+		settings->log_socket = udpsocket_open_connect(host, port, NULL);
 		if (settings->log_socket <= 0) {
 			settings->log_socket = 0;
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to open logsocket\n");

@@ -77,6 +77,7 @@ static struct option long_options[] = {
 { "tun",             required_argument, NULL, 't' },
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
+{ "remote-logging",  required_argument, NULL, 'r' },
 #ifdef USE_MBEDTLS
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
@@ -95,6 +96,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -n | --null-packet-deletion               | Enable NPD, receiver needs to support this!              |\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+"       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
 #ifdef USE_MBEDTLS
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
@@ -196,7 +198,7 @@ static void input_udp_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -385,7 +387,7 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	bool npd = false;
 	struct rist_sender_args peer_args;
-
+	char *remote_log_address = NULL;
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
@@ -401,14 +403,15 @@ int main(int argc, char *argv[])
 	sigaction(SIGINT, &act, NULL);
 #endif
 
+	// Default log settings
 	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr,"Failed to setup logging!\n");
+		fprintf(stderr,"Failed to setup default logging!\n");
 		exit(1);
 	}
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = (char)getopt_long(argc, argv, "i:o:b:s:e:t:p:S:F:v:hun", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -436,10 +439,9 @@ int main(int argc, char *argv[])
 		break;
 		case 'v':
 			loglevel = atoi(optarg);
-			if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
-				fprintf(stderr,"Failed to setup logging!\n");
-				exit(1);
-			}
+		break;
+		case 'r':
+			remote_log_address = strdup(optarg);
 		break;
 #ifdef USE_MBEDTLS
 		case 'F':
@@ -469,6 +471,12 @@ int main(int argc, char *argv[])
 
 	if (argc < 2) {
 		usage(argv[0]);
+	}
+
+	// Update log settings with custom loglevel and remote address if necessary
+	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
+		fprintf(stderr,"Failed to setup logging\n");
+		exit(1);
 	}
 
 	peer_args.loglevel = loglevel;

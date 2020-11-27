@@ -4,6 +4,9 @@
  */
 
 #include <librist/librist.h>
+#include "librist/version.h"
+#include "risturlhelp.h"
+#include "vcs_version.h"
 #include <stdio.h>
 #include <string.h>
 #include "getopt-shim.h"
@@ -40,26 +43,32 @@ static struct option long_options[] = {
 { "secret",          required_argument, NULL, 's' },
 { "encryption-type", required_argument, NULL, 'e' },
 { "cname",           required_argument, NULL, 'N' },
-{ "stats",           required_argument, NULL, 'S' },
+{ "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
+{ "remote-logging",  required_argument, NULL, 'r' },
 { "help",            no_argument,       NULL, 'h' },
 { 0, 0, 0, 0 },
 };
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
-"       -i | --inurl ADDRESS:PORT             * | Input IP address and port                                |\n"
-"       -o | --outurl ADDRESS:PORT            * | Output IP address and port                               |\n"
-"       -s | --secret PWD                       | Pre-shared encryption secret                             |\n"
-"       -e | --encryption-type TYPE             | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)     |\n"
-"       -S | --stats value (ms)                 | Interval at which stats get printed, 0 to disable        |\n"
-"       -N | --cname identifier                 | Manually configured identifier                           |\n"
-"       -v | --verbose-level value              | To disable logging: -1, log levels match syslog levels   |\n"
-"       -h | --help                             | Show this help                                           |\n"
-;
+"       -i | --inputurl ADDRESS:PORT            * | Input IP address and port                                |\n"
+"       -o | --outputurl ADDRESS:PORT           * | Output IP address and port                               |\n"
+"       -s | --secret PWD                         | Pre-shared encryption secret                             |\n"
+"       -e | --encryption-type TYPE               | Encryption type (0 = none, 1 = AES-128, 2 = AES-256)     |\n"
+"       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
+"       -N | --cname identifier                   | Manually configured identifier                           |\n"
+"       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
+"       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
+"       -h | --help                               | Show this help                                           |\n"
+"       -u | --help-url                           | Show all the possible url options                        |\n"
+"   * == mandatory value \n"
+"Default values: %s \n"
+"       --statsinterval 1000      \\\n"
+"       --verbose-level 6         \n";
 
 static void usage(char *cmd)
 {
-	fprintf(stderr, "%s%s", help_str, cmd);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -97,7 +106,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	fprintf(stderr, "%s\n\n", stats_container->stats_json);
+	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }
@@ -219,6 +228,8 @@ int main (int argc, char **argv) {
 	client_args.flow_id = 0;
 	int statsinterval = 1000;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
+	char *remote_log_address = NULL;
+
 #ifdef _WIN32
 #define STDERR_FILENO 2
 	signal(SIGINT, intHandler);
@@ -231,9 +242,17 @@ int main (int argc, char **argv) {
 	sigaction(SIGINT, &act, NULL);
 #endif
 
+	// Default log settings
+	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+		fprintf(stderr,"Failed to setup default logging!\n");
+		exit(1);
+	}
+
+	rist_log(logging_settings, RIST_LOG_INFO, "Starting rist2rist version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+
 	int option_index;
 	int c;
-	while ((c = (char)getopt_long(argc, argv, "i:o:s:e:N:v:S:h", long_options, &option_index)) != -1) {
+	while ((c = (char)getopt_long(argc, argv, "r:i:o:s:e:N:v:S:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg); 
@@ -253,9 +272,15 @@ int main (int argc, char **argv) {
 		case 'v':
 			loglevel = (enum rist_log_level) atoi(optarg);
 			break;
+		case 'r':
+			remote_log_address = strdup(optarg);
+		break;
 		case 'S':
 			statsinterval = atoi(optarg);
 			break;
+		case 'u':
+			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
+			exit(1);
 		case 'h':
 			//
 		default:
@@ -268,12 +293,20 @@ int main (int argc, char **argv) {
 	client_args.outputurl = outputurl;
 	client_args.statsinterval = statsinterval;
 
-	struct rist_ctx *receiver_ctx;
+	if (inputurl == NULL || outputurl == NULL) {
+		usage(argv[0]);
+	}
 
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+	if (argc < 2) {
+		usage(argv[0]);
+	}
+
+	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
 		fprintf(stderr, "Failed to setup logging!\n");
 		exit(1);
 	}
+
+	struct rist_ctx *receiver_ctx;
 
 	if (rist_receiver_create(&receiver_ctx, RIST_PROFILE_SIMPLE, logging_settings) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
