@@ -438,6 +438,9 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 		packet_time_last = f->receiver_queue[f->last_seq_found]->packet_time;
 	uint64_t packet_time_now = f->receiver_queue[current_seq]->packet_time;
 	uint32_t missing_count = (current_seq - f->last_seq_found) & UINT16_MAX;
+	//arbitrary large number to prevent incorrectly marking packets as missing when wrap-around occurs & we did not correctly detect as out of order
+	if (missing_count > 32768)
+		return;
 	uint64_t interpacket_time = (packet_time_now - packet_time_last) / (missing_count +1);
 	uint32_t missing_seq = (f->last_seq_found + counter);
 
@@ -673,6 +676,10 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 				rtt = peer->config.recovery_rtt_min;
 			} else if (rtt > peer->config.recovery_rtt_max) {
 				rtt = peer->config.recovery_rtt_max;
+			}
+			if (b->nack_count == 0) {
+				f->missing_counter++;
+				b->peer->stats_receiver_instant.missing++;
 			}
 
 			// TODO: make this 10% overhead configurable?
@@ -915,7 +922,8 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 			if (f->receiver_queue[idx]->seq == mb->seq) {
 				// We filled in the hole already ... packet has been recovered
 				remove_from_queue_reason = 3;
-				peer->stats_receiver_instant.recovered++;
+				if (mb->nack_count > 0)
+					peer->stats_receiver_instant.recovered++;
 				switch(mb->nack_count) {
 					case 0:
 						peer->stats_receiver_instant.reordered++;
@@ -1007,9 +1015,10 @@ nack_loop_continue:
 			if (!next)
 				f->missing_tail = previous;
 			*prev = next;
+			if (mb->nack_count != 0)
+				f->missing_counter--;
 			free(mb);
 			mb = next;
-			f->missing_counter--;
 		} else {
 			/* Move it to the end of the queue */
 			// TODO: I think this is wrong and we loose nacks when we get here

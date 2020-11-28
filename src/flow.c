@@ -20,13 +20,11 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t 
 	m->next_nack = nack_time + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
 	m->peer = peer;
 
-	f->missing_counter++;
-	peer->stats_receiver_instant.missing++;
 	if (get_cctx(peer)->debug)
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 			"Datagram %" PRIu32 " is missing, inserting into the missing queue "
 			"with deadline in %" PRIu64 "ms (queue=%d), last_seq_found %"PRIu32"\n",
-		seq, (m->next_nack - timestampNTP_u64()) / RIST_CLOCK, f->missing_counter, f->last_seq_found);
+		seq, m->next_nack > now? (m->next_nack - now)/ RIST_CLOCK: 0, f->missing_counter, f->last_seq_found);
 
 	m->next = NULL;
 	// Insert it at the end of the queue
