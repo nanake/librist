@@ -893,7 +893,7 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 	pthread_rwlock_wrlock(peerlist_lock);
 	struct rist_peer *peer = NULL;
 	uint64_t last_rtt = UINT64_MAX;
-	for (int i = 0; i < f->peer_lst_len; i++)
+	for (size_t i = 0; i < f->peer_lst_len; i++)
 	{
 		struct rist_peer *check = f->peer_lst[i];
 		if (!check->dead && check->last_mrtt < last_rtt)
