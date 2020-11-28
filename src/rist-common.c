@@ -698,8 +698,8 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 					peer->recovery_buffer_ticks / RIST_CLOCK);
 
 			// update peer information
-			peer->nacks.array[peer->nacks.counter] = b->seq;
-			peer->nacks.counter ++;
+			f->nacks.array[f->nacks.counter] = b->seq;
+			f->nacks.counter++;
 			peer->stats_receiver_instant.retries++;
 		}
 	}
@@ -886,12 +886,25 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 }
 
-static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f, struct rist_peer *peer)
+static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	// Now actually send all the nack IP packets for this flow (the above routing will process/group them)
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 	pthread_rwlock_wrlock(peerlist_lock);
-	rist_send_nacks(f, peer);
+	struct rist_peer *peer = NULL;
+	uint64_t last_rtt = UINT64_MAX;
+	for (int i = 0; i < f->peer_lst_len; i++)
+	{
+		struct rist_peer *check = f->peer_lst[i];
+		if (!check->dead && check->last_mrtt < last_rtt)
+		{
+			peer = check;
+			last_rtt = peer->last_mrtt;
+		}
+	}
+	if (peer != NULL)
+		if (rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter) == 0)
+			f->nacks.counter = 0;
 	pthread_rwlock_unlock(peerlist_lock);
 	// TODO: this lock should be by flow ... not global!
 }
@@ -985,22 +998,22 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				if (ctx->common.debug)
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 							"seq-msb changed from %"PRIu32" to %"PRIu32" (%"PRIu32", %zu, %"PRIu32")\n",
-							seq_msb, mb->seq >> 16, mb->seq, mb->peer->nacks.counter,
+							seq_msb, mb->seq >> 16, mb->seq, f->nacks.counter,
 							f->missing_counter);
-				send_nack_group(ctx, f, NULL);
+				send_nack_group(ctx, f);
 			}
-			else if (mb->peer->nacks.counter == (maxcounter - 1)) {
+			else if (f->nacks.counter == (maxcounter - 1)) {
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"nack max counter per packet (%d) exceeded. Skipping the rest\n",
 						maxcounter);
-				send_nack_group(ctx, f, mb->peer);
+				send_nack_group(ctx, f);
 			}
-			else if (mb->peer->nacks.counter >= maxcounter) {
+			else if (f->nacks.counter >= maxcounter) {
 				rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 						"nack max counter per packet (%zu) exceeded. Something is very wrong and"
 						" there is a strong chance memory is corrupt because we wrote past the end"
-						"of the nacks.array max size!!!\n", mb->peer->nacks.counter );
-				mb->peer->nacks.counter = 0;
+						"of the nacks.array max size!!!\n", f->nacks.counter );
+				f->nacks.counter = 0;
 				//TODO: maybe assert is more appropriate here?
 			}
 			remove_from_queue_reason = rist_process_nack(f, mb);
@@ -1029,7 +1042,7 @@ nack_loop_continue:
 	}
 
 	// Empty all peer nack queues, i.e. send them
-	send_nack_group(ctx, f, NULL);
+	send_nack_group(ctx, f);
 
 }
 
@@ -1914,6 +1927,10 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	if (!peer || peer->shutdown) {
 		return;
 	}
+
+	if (peer->dead && peer->parent != NULL)
+		return;//Don't send to peers that connect to us and have dropped silent
+
 	else { //if (ctx->profile <= RIST_PROFILE_MAIN) {
 		if (peer->receiver_mode) {
 			rist_receiver_periodic_rtcp(peer);
@@ -2802,7 +2819,7 @@ protocol_bypass:
 					// TODO: print warning if the peer is dead?, i.e. no stats
 					if (!peer->dead)
 					{
-						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout &&
+						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > 200 * RIST_CLOCK &&
 								peer->last_rtcp_received > 0 && peer->parent)
 						{
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
@@ -3259,13 +3276,13 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *) arg;
-	uint64_t now;
+	uint64_t now = timestampNTP_u64();
 	int max_oobperloop = 100;
 
 	uint64_t rist_nack_interval = (uint64_t)ctx->common.rist_max_jitter;
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 	ctx->common.nacks_next_time = timestampNTP_u64();
-
+	uint64_t checks_next_time = now;
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting receiver protocol loop with %d ms timer\n", max_jitter_ms);
 
 	while (!ctx->common.shutdown) {
@@ -3349,7 +3366,34 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				f = f->next;
 			}
 		}
-
+		/* marks peer as dead, run every second */
+		if (now > checks_next_time)
+		{
+			checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
+			pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
+			pthread_rwlock_wrlock(peerlist_lock);
+			struct rist_peer *peer = ctx->common.PEERS;
+			while (peer)
+			{
+				// TODO: print warning if the peer is dead?, i.e. no stats
+				if (!peer->dead)
+				{
+					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > 200 * RIST_CLOCK &&
+							peer->last_rtcp_received > 0 && peer->parent)
+					{
+						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+								"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
+						bool current_state = peer->dead;
+						peer->dead = true;
+						peer->peer_data->dead = true;
+						if (current_state != peer->peer_data->dead && peer->peer_data->parent)
+							--peer->peer_data->parent->child_alive_count;
+					}
+				}
+				peer = peer->next;
+			}
+			pthread_rwlock_unlock(peerlist_lock);
+		}
 		// Send oob data
 		if (ctx->common.oob_queue_bytesize > 0)
 			rist_oob_dequeue(&ctx->common, max_oobperloop);

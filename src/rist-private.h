@@ -164,6 +164,11 @@ struct rist_peer_receiver_stats {
 	uint32_t recovered_slope_inverted;
 };
 
+struct nacks {
+	uint32_t array[RIST_MAX_NACKS];
+	size_t counter;
+};
+
 struct rist_flow {
 	volatile int shutdown;
 	int max_output_jitter;
@@ -236,6 +241,9 @@ struct rist_flow {
 	atomic_ulong dataout_fifo_queue_counter;
 	atomic_ulong dataout_fifo_queue_read_index;
 	atomic_ulong dataout_fifo_queue_write_index;
+
+	/* Temporary buffer for grouping and sending nacks */
+	struct nacks nacks;
 };
 
 struct rist_retry {
@@ -413,11 +421,6 @@ struct rist_ctx {
 	struct rist_receiver *receiver_ctx;
 };
 
-struct nacks {
-	uint32_t array[RIST_MAX_NACKS];
-	size_t counter;
-};
-
 struct rist_peer {
 	/* linked list */
 	struct rist_peer *next;
@@ -528,9 +531,6 @@ struct rist_peer {
 	/* bw estimation */
 	struct rist_bandwidth_estimation bw;
 	struct rist_bandwidth_estimation retry_bw;
-
-	/* Temporary buffer for grouping and sending nacks */
-	struct nacks nacks;
 
 	/* shutting down flag */
 	volatile bool shutdown;

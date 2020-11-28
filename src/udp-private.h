@@ -364,6 +364,7 @@ RIST_PACKED_STRUCT(rist_rtcp_xr_dlrr, {
 
 /* shared functions in udp.c */
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
+RIST_PRIV int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len);
 RIST_PRIV int rist_receiver_periodic_rtcp(struct rist_peer *peer);
 RIST_PRIV void rist_sender_periodic_rtcp(struct rist_peer *peer);
 RIST_PRIV int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time);

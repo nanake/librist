@@ -242,12 +242,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				hdr->rtp.ts = htobe32(timestampRTP_u32(1, source_time));
 			} else {
 				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
-				if (!ctx->birthtime_rtp_offset) {
-					// Force a 32bit timestamp wrap-around 60 seconds after startup. It will break
-					// crappy implementations and/or will guarantee 13 hours of clean stream.
-					ctx->birthtime_rtp_offset = UINT32_MAX - timestampRTP_u32(0, source_time) - (90000*60);
-				}
-				hdr->rtp.ts = htobe32(ctx->birthtime_rtp_offset + timestampRTP_u32(0, source_time));
+				hdr->rtp.ts = htobe32(timestampRTP_u32(0, source_time));
 			}
 		}
 		// copy the rtp header data (needed for encryption)
@@ -753,6 +748,9 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 
 int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len)
 {
+	if (get_cctx(peer)->debug)
+		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Sending %d nacks starting with %"PRIu32"\n",
+		array_len, seq_array[0]);
 	uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
 
@@ -910,48 +908,6 @@ int rist_request_echo(struct rist_peer *peer) {
 		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
 		rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 		return 0;
-	}
-}
-
-static void rist_send_peer_nacks(struct rist_flow *f, struct rist_peer *peer)
-{
-	struct rist_peer *outputpeer = peer;
-	if (outputpeer->dead)
-	{
-		// original peer source is dead, use with the peer with the best rtt within this flow instead
-		outputpeer = f->peer_lst[rist_best_rtt_index(f)];
-	}
-
-	if (outputpeer) {
-		if (get_cctx(peer)->debug)
-			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Sending %d nacks starting with %"PRIu32"\n",
-			peer->nacks.counter, peer->nacks.array[0]);
-		if (rist_receiver_send_nacks(outputpeer->peer_rtcp, peer->nacks.array, peer->nacks.counter) == 0)
-			peer->nacks.counter = 0;
-		else
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tCould not send nacks, will try again\n");
-	} else {
-		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tCannot send nack, all peers are dead\n");
-	}
-}
-
-void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer)
-{
-	if (peer)
-	{
-		// Only a single peer was requested
-		rist_send_peer_nacks(f, peer);
-		return;
-	}
-
-	// Loop through all peers for the flow and empty the queues
-	for (size_t j = 0; j < f->peer_lst_len; j++) {
-		struct rist_peer *outputpeer = f->peer_lst[j];
-		if (!outputpeer->is_data)
-			outputpeer = outputpeer->peer_data;
-		if (outputpeer->nacks.counter > 0) {
-			rist_send_peer_nacks(f, outputpeer);
-		}
 	}
 }
 
