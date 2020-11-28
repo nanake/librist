@@ -511,7 +511,9 @@ int main(int argc, char *argv[])
 
 		// Setup the output rist objects (a brand new instance per receiver)
 		char *saveptroutput;
-		char *outputtoken = strtok_r(outputurl, ",", &saveptroutput);
+		char *tmpoutputurl = malloc(strlen(outputurl) +1);
+		strcpy(tmpoutputurl, outputurl);
+		char *outputtoken = strtok_r(tmpoutputurl, ",", &saveptroutput);
 		// All output peers should be on the same context per receiver
 		if (rist_sender_create(&callback_object[i].sender_ctx, peer_args.profile, 0, logging_settings) != 0) {
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
@@ -537,6 +539,7 @@ int main(int argc, char *argv[])
 			outputtoken = strtok_r(NULL, ",", &saveptroutput);
 			if (!outputtoken)
 				break;
+			free(tmpoutputurl);
 		}
 
 		if (strcmp(udp_config->prefix, "rist") == 0) {
