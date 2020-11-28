@@ -870,6 +870,9 @@ void srp_user_delete( struct SRPUser * usr )
       mbedtls_mpi_free( usr->a );
       mbedtls_mpi_free( usr->A );
       mbedtls_mpi_free( usr->S );
+      free(usr->a);
+      free(usr->A);
+      free(usr->S);
 
       //delete_ng( usr->ng );
 
