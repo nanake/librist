@@ -106,7 +106,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
         }
         send_counter++;
 #ifdef _WIN32
-		Sleep(5);
+		Sleep(1);
 #else
         usleep(500);
 #endif
