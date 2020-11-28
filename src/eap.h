@@ -93,6 +93,13 @@ struct eapsrp_ctx
 	struct rist_peer *peer;
 	char ip_string[46];
 	struct rist_logging_settings *logging_settings;
+
+	// authenticator data (single user mode)
+	char authenticator_username[256];
+	size_t authenticator_len_verifier;
+	char *authenticator_bytes_verifier;
+	size_t authenticator_len_salt;
+	char *authenticator_bytes_salt;
 };
 
 #define EAP_LENERR -1

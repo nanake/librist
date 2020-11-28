@@ -22,6 +22,11 @@
 
 void eap_reset_data(struct eapsrp_ctx *ctx)
 {
+	if (ctx->role == EAP_ROLE_AUTHENTICATOR)
+	{
+		free(ctx->authenticator_bytes_salt);
+		free(ctx->authenticator_bytes_verifier);
+	}
 	free(ctx->ascii_g);
 	free(ctx->ascii_n);
 	free(ctx->last_pkt);
@@ -42,7 +47,10 @@ void eap_reset_data(struct eapsrp_ctx *ctx)
 	ctx->srp_user = NULL;
 	ctx->srp_session = NULL;
 	ctx->srp_verifier = NULL;
+	ctx->authenticator_bytes_salt = NULL;
+	ctx->authenticator_bytes_verifier = NULL;
 }
+
 static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eapcode, uint8_t identifier, size_t payload_len, uint8_t buf[])
 {
 	size_t offset = 0;
@@ -522,8 +530,15 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 	ctx->logging_settings = in->logging_settings;
 	if (ctx->role == EAP_ROLE_AUTHENTICATOR)
 	{
+		ctx->authenticator_bytes_salt = malloc(1024);
+		ctx->authenticator_bytes_verifier = malloc(1024);
 		ctx->lookup_func = in->lookup_func;
 		ctx->lookup_func_userdata = in->lookup_func_userdata;
+		strncpy(ctx->authenticator_username, in->authenticator_username, 255);
+		memcpy(ctx->authenticator_bytes_verifier, in->authenticator_bytes_verifier, in->authenticator_len_verifier);
+		memcpy(ctx->authenticator_bytes_salt, in->authenticator_bytes_salt, in->authenticator_len_salt);
+		ctx->authenticator_len_salt = in->authenticator_len_salt;
+		ctx->authenticator_len_verifier = in->authenticator_len_verifier;
 		if (!ctx->last_pkt)
 			eap_request_identity(ctx);//immediately request identity
 		return 0;
@@ -531,6 +546,7 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 	//I don't think we will ever hit this bit of code, since we will only be cloning when we are listening = authenticator
 	strcpy(ctx->username, in->username);
 	strcpy(ctx->password, in->password);
+
 	return 0;
 }
 
@@ -601,6 +617,46 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 
 }
 
+static void internal_user_verifier_lookup(char * username,
+							size_t *verifier_len, char **verifier,
+							size_t *salt_len, char **salt,
+							bool *use_default_2048_bit_n_modulus,
+							char **n_modulus_ascii,
+							char **generator_ascii,
+							void *user_data)
+{
+	(void)n_modulus_ascii;
+	(void)generator_ascii;
+	if (user_data == NULL)
+		return;
+
+	struct eapsrp_ctx *ctx = (struct eapsrp_ctx *)user_data;
+
+	char *decoded_verifier = malloc(1024);
+	char *decoded_salt = malloc(1024);
+
+	if (strcmp(username, ctx->authenticator_username) != 0)
+		goto fail_decode;
+
+	memcpy(decoded_verifier, ctx->authenticator_bytes_verifier, ctx->authenticator_len_verifier);
+	memcpy(decoded_salt, ctx->authenticator_bytes_salt, ctx->authenticator_len_salt);
+
+	*verifier = decoded_verifier;
+	*verifier_len = ctx->authenticator_len_verifier;
+	*salt = decoded_salt;
+	*salt_len = ctx->authenticator_len_salt;
+	*use_default_2048_bit_n_modulus = true;
+	goto out;
+
+fail_decode:
+	*verifier_len = 0;
+	*salt_len = 0;
+	free(decoded_verifier);
+	free(decoded_salt);
+out:
+	return;
+}
+
 //PUBLIC
 int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_t lookup_func, void *userdata)
 {
@@ -611,16 +667,40 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 		return RIST_ERR_INVALID_PROFILE;
 	if (peer->listening)
 	{
-		if (lookup_func == NULL)
-			return RIST_ERR_MISSING_CALLBACK_FUNCTION;
 		struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
+		ctx->logging_settings = get_cctx(peer)->logging_settings;
 		if (ctx == NULL)
 			return RIST_ERR_MALLOC;
+
+		if (lookup_func == NULL && username != NULL && password != NULL)
+		{
+			size_t u_len = strlen(username);
+			size_t p_len = strlen(password);
+			if (u_len == 0 || u_len > 255 || p_len == 0 || p_len > 255) {
+				free(ctx);
+				return RIST_ERR_INVALID_STRING_LENGTH;
+			}
+			lookup_func = internal_user_verifier_lookup;
+			struct SRPSession * session = srp_session_new(SRP_SHA256, SRP_NG_2048, NULL, NULL);
+			strncpy(ctx->authenticator_username, username, u_len);
+			srp_create_salted_verification_key(session, username,
+									   (const unsigned char *)password, strlen(password),
+									   (const unsigned char **)&ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt,
+									   (const unsigned char **)&ctx->authenticator_bytes_verifier, &ctx->authenticator_len_verifier);
+			srp_session_delete(session);
+			userdata = (void *)ctx;
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticator, single user\n");
+		}
+		else if (lookup_func == NULL) {
+			free(ctx);
+			return RIST_ERR_MISSING_CALLBACK_FUNCTION;
+		}
+		else
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticator, srp file\n");
 		ctx->lookup_func = lookup_func;
 		ctx->lookup_func_userdata = userdata;
 		ctx->role = EAP_ROLE_AUTHENTICATOR;
 		peer->eap_ctx = ctx;
-		ctx->logging_settings = get_cctx(peer)->logging_settings;
 		struct rist_peer *child = peer->child;
 		ctx->peer = peer;
 		while (child != NULL)
@@ -645,6 +725,7 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 	strcpy(ctx->username, username);
 	strcpy(ctx->password, password);
 	peer->eap_ctx = ctx;
+	rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticatee\n");
 	eap_start(ctx);
 	return 0;
 }
