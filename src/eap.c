@@ -702,6 +702,7 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 		ctx->role = EAP_ROLE_AUTHENTICATOR;
 		peer->eap_ctx = ctx;
 		struct rist_peer *child = peer->child;
+		peer->eap_authentication_state = 1;
 		ctx->peer = peer;
 		while (child != NULL)
 		{

@@ -1904,7 +1904,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 				{
 					peer->stats_sender_instant.received++;
 					peer->last_rtcp_received = timestampNTP_u64();
-					if (peer->dead) {
+					if (peer->eap_authentication_state != 1 && peer->dead) {
 						peer->dead = false;
 						if (peer->peer_data)
 							peer->peer_data->dead = false;
@@ -2090,6 +2090,16 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		return s;
 	}
 
+	static void kill_peer(struct rist_peer *peer)
+	{
+		bool current_state = peer->dead;
+		peer->dead = true;
+		if (peer->peer_data)
+			peer->peer_data->dead = true;
+		if (current_state != peer->peer_data->dead && peer->peer_data->parent)
+			--peer->peer_data->parent->child_alive_count;
+	}
+
 	static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 	{
 		RIST_MARK_UNUSED(evctx);
@@ -2242,7 +2252,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				// make sure we do not have a key
 				// (ie also interested in unencrypted communication)
 				if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
-					fprintf(stderr, "Has seq %hhu has key %hhu\n", has_seq, has_seq);
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
 					return;
@@ -2373,6 +2382,7 @@ protocol_bypass:
 
 		pthread_rwlock_rdlock(peerlist_lock);
 		bool inchild = false;
+		bool failed_eap = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
 
@@ -2384,9 +2394,11 @@ protocol_bypass:
 				}
 				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
 #ifdef USE_MBEDTLS
-				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && !eap_is_authenticated(p->eap_ctx))
+				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state != 1)
 				{
 					pthread_rwlock_unlock(peerlist_lock);
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
+					// Do not process non EAP packets until the peer has been authenticated!
 					return;
 				}
 #endif
@@ -2425,17 +2437,40 @@ protocol_bypass:
 						else
 							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
 						break;
-#ifdef USE_MBEDTLS
 					case RIST_PAYLOAD_TYPE_EAPOL:
-						if (peer->eap_ctx == NULL)
-							return;
-						int eapret = 0;
-						if ((eapret = eap_process_eapol(p->eap_ctx,
-														(void *)(recv_buf + gre_size),
-														(recv_bufsize - gre_size))) < 0)
-							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
-						break;
+#ifdef USE_MBEDTLS
+						if (p->eap_ctx == NULL) {
+							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
+							failed_eap = true;
+						}
+						else {
+							int eapret = 0;
+							if ((eapret = eap_process_eapol(p->eap_ctx,
+															(void *)(recv_buf + gre_size),
+															(recv_bufsize - gre_size))) < 0) {
+								rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
+								failed_eap = true;
+							}
+							else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
+								rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+									"Peer %d EAP Authentication suceeded\n", peer->adv_peer_id);
+								peer->eap_authentication_state = 2;
+							}
+						}
+#else
+						if (peer->eap_ctx == NULL) {
+							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but EAP support not available!\n");
+							failed_eap = true;
+						}
 #endif
+						if (failed_eap) {
+							peer->eap_authentication_state = 1;
+							kill_peer(p);
+						}
+						// Never create new peers using EAP packets (exit loop here)
+						pthread_rwlock_unlock(peerlist_lock);
+						return;
+						break;
 					default:
 						rist_recv_rtcp(p, seq, flow_id, &payload);
 						break;
@@ -2863,12 +2898,7 @@ protocol_bypass:
 						{
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
-							bool current_state = peer->dead;
-							peer->dead = true;
-							if (peer->peer_data)
-								peer->peer_data->dead = true;
-							if (current_state != peer->peer_data->dead && peer->peer_data->parent)
-								--peer->peer_data->parent->child_alive_count;
+							kill_peer(peer);
 						}
 					}
 				}
