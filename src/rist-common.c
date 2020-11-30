@@ -2858,14 +2858,15 @@ protocol_bypass:
 					// TODO: print warning if the peer is dead?, i.e. no stats
 					if (!peer->dead)
 					{
-						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > 200 * RIST_CLOCK &&
+						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
 								peer->last_rtcp_received > 0 && peer->parent)
 						{
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
 							bool current_state = peer->dead;
 							peer->dead = true;
-							peer->peer_data->dead = true;
+							if (peer->peer_data)
+								peer->peer_data->dead = true;
 							if (current_state != peer->peer_data->dead && peer->peer_data->parent)
 								--peer->peer_data->parent->child_alive_count;
 						}
@@ -3163,7 +3164,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		newpeer->session_timeout = config->session_timeout * RIST_CLOCK;
 	}
 	else {
-		newpeer->session_timeout = config->recovery_length_max * RIST_CLOCK;
+		newpeer->session_timeout = 250 * RIST_CLOCK;//default to 250ms, which is 2,5 RTCP periods
 	}
 
 	/* Initialize socket */
@@ -3417,14 +3418,15 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 				// TODO: print warning if the peer is dead?, i.e. no stats
 				if (!peer->dead)
 				{
-					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > 200 * RIST_CLOCK &&
+					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
 							peer->last_rtcp_received > 0 && peer->parent)
 					{
 						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 								"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
 						bool current_state = peer->dead;
 						peer->dead = true;
-						peer->peer_data->dead = true;
+						if (peer->peer_data)
+							peer->peer_data->dead = true;
 						if (current_state != peer->peer_data->dead && peer->peer_data->parent)
 							--peer->peer_data->parent->child_alive_count;
 					}
