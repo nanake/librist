@@ -373,9 +373,8 @@ void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b)
 
 }
 
-static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, bool retry, uint8_t payload_type)
+static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64_t source_time, uint64_t now, bool retry, uint8_t payload_type)
 {
-	uint64_t now = timestampNTP_u64();
 	//Check and correct timing
 	uint64_t packet_time = source_time + f->time_offset;
 	if (RIST_UNLIKELY(!retry && source_time < f->max_source_time && ((f->max_source_time - source_time) > (UINT32_MAX /2)) && (now - f->time_offset_changed_ts) > 3 * f->recovery_buffer_ticks))
@@ -433,7 +432,10 @@ static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *
 	uint32_t counter = 1;
 	uint64_t packet_time_last = 0;
 	if (RIST_UNLIKELY(!f->receiver_queue[f->last_seq_found]))
-		packet_time_last = timestampNTP_u64();
+		if (RIST_LIKELY(!f->rtc_timing_mode))
+			packet_time_last = timestampNTP_u64();
+		else
+			packet_time_last = timestampNTP_RTC_u64();
 	else
 		packet_time_last = f->receiver_queue[f->last_seq_found]->packet_time;
 	uint64_t packet_time_now = f->receiver_queue[current_seq]->packet_time;
@@ -509,10 +511,14 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 	//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 	//	seq, source_time);
-
-	uint64_t now = timestampNTP_u64();
+	uint64_t now;
+	uint64_t now_monotonic = timestampNTP_u64();
+	if (RIST_LIKELY(!f->rtc_timing_mode))
+		now = now_monotonic;
+	else
+		now = timestampNTP_RTC_u64();
 	//fprintf(stderr, "Offset would've been: %llu\n", now - source_time);
-	if (RIST_UNLIKELY(!f->receiver_queue_has_items && retry))
+	if (RIST_UNLIKELY(!f->receiver_queue_has_items && retry || (f->rtc_timing_mode && f->time_offset == 0)))
 		return -1;
 	if (RIST_UNLIKELY(!f->receiver_queue_has_items)) {
 		/* we just received our first packet for this flow */
@@ -527,10 +533,11 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 		rist_flush_missing_flow_queue(f);
 		/* Initialize flow session timeout and stats timers */
-		f->last_recv_ts = now;
-		f->checks_next_time = now;
+		f->last_recv_ts = now_monotonic;
+		f->checks_next_time = now_monotonic;
 		/* Calculate and store clock offset with respect to source */
-		f->time_offset = (int64_t)now - (int64_t)source_time;
+		if (!f->rtc_timing_mode)
+			f->time_offset = (int64_t)now_monotonic - (int64_t)source_time;
 		/* This ensures the next packet does not trigger nacks */
 		f->last_seq_output = seq - 1;
 		f->last_seq_found = seq;
@@ -551,8 +558,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		return 0; // not a dupe
 	}
 
-	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, retry, payload_type);
-	f->last_recv_ts = now;
+	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, now, retry, payload_type);
+	f->last_recv_ts = now_monotonic;
 
 	// Now, get the new position and check what is there
 	/* We need to check if the reader queue has progressed passed this packet, if
@@ -631,7 +638,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (!out_of_order && missing_seq != f->last_seq_found)
 		{
 			receiver_mark_missing(f, peer, seq, rtt);
-		} else
+		} else if (RIST_LIKELY(!f->rtc_timing_mode))
 		{
 			//packet received in order, use it's offset as a sample in calculation to
 			//correct clock drift
@@ -648,7 +655,11 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 
 static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 {
-	uint64_t now = timestampNTP_u64();
+	uint64_t now;
+	if (RIST_LIKELY(!f->rtc_timing_mode))
+		now = timestampNTP_u64();
+	else
+		now = timestampNTP_RTC_u64();
 	struct rist_peer *peer = b->peer;
 
 	if (b->nack_count >= peer->config.max_retries) {
@@ -741,7 +752,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 {
 
 	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
-	uint64_t now = timestampNTP_u64();
+	uint64_t now;
+	if (RIST_LIKELY(!f->rtc_timing_mode))
+		now = timestampNTP_u64();
+	else
+		now = timestampNTP_RTC_u64();
 	size_t output_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
 		// Find the first non-null packet in the queuecounter loop
@@ -1731,6 +1746,14 @@ static void rist_handle_sr_pkt(struct rist_peer *peer, struct rist_rtcp_sr_pkt *
 	uint64_t ntp_time = ((uint64_t)be32toh(sr->ntp_msw) << 32) | be32toh(sr->ntp_lsw);
 	peer->last_sender_report_time = ntp_time;
 	peer->last_sender_report_ts = timestampNTP_u64();
+	if (peer->config.timing_mode == RIST_TIMING_MODE_RTC)
+	{
+		if (peer->flow && peer->flow->time_offset == 0)
+		{
+			uint64_t packet_timestamp = convertRTPtoNTP(RTP_PTYPE_MPEGTS, 0, be32toh(sr->rtp_ts));
+			peer->flow->time_offset = ntp_time - packet_timestamp;
+		}
+	}
 }
 
 static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *rr) {

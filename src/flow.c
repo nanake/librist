@@ -244,6 +244,8 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		if (!f) {
 			return -1;
 		}
+		if (p->config.timing_mode == RIST_TIMING_MODE_RTC)
+			f->rtc_timing_mode = true;
 
 		if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
 			f->short_seq = true;
