@@ -63,7 +63,7 @@ char *oob_process_api_message(int buffer_len, char *buffer, int *message_len)
 	int header_size = sizeof(struct ipheader);
 
 	// Check reported length vs buffer length
-	if (buffer_len != be16toh(ip->iph_len)) {
+	if (htons(buffer_len) != ip->iph_len) {
 		*message_len = RIST_OOB_ERROR_INVALID_LENGTH;
 		return NULL;
 	}
