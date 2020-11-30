@@ -518,7 +518,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	else
 		now = timestampNTP_RTC_u64();
 	//fprintf(stderr, "Offset would've been: %llu\n", now - source_time);
-	if (RIST_UNLIKELY(!f->receiver_queue_has_items && retry || (f->rtc_timing_mode && f->time_offset == 0)))
+	if (RIST_UNLIKELY((!f->receiver_queue_has_items && retry) || (f->rtc_timing_mode && f->time_offset == 0)))
 		return -1;
 	if (RIST_UNLIKELY(!f->receiver_queue_has_items)) {
 		/* we just received our first packet for this flow */
