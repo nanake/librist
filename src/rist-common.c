@@ -889,6 +889,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	// Now actually send all the nack IP packets for this flow (the above routing will process/group them)
+	if (f->nacks.counter == 0)
+		return;
 	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
 	pthread_rwlock_wrlock(peerlist_lock);
 	struct rist_peer *peer = NULL;
@@ -903,8 +905,22 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		}
 	}
 	if (peer != NULL)
-		if (rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter) == 0)
-			f->nacks.counter = 0;
+		rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter);
+	else
+	{
+		for (size_t i = 0; i < f->peer_lst_len; i++)
+		{
+			struct rist_peer *check = f->peer_lst[i];
+			if (check->last_mrtt < last_rtt)
+			{
+				peer = check;
+				last_rtt = peer->last_mrtt;
+			}
+			if (peer != NULL)
+				rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter);
+		}
+	}
+	f->nacks.counter = 0;
 	pthread_rwlock_unlock(peerlist_lock);
 	// TODO: this lock should be by flow ... not global!
 }
