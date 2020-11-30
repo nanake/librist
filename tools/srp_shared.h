@@ -1,3 +1,8 @@
+/* librist. Copyright 2020 SipRadius LLC. All right reserved.
+ * Author: Gijs Peskens
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ */
+
 #include <stddef.h>
 #include <stdbool.h>
 

@@ -20,6 +20,7 @@
 #ifdef __unix
 #include <unistd.h>
 #endif
+#include "oob_shared.h"
 
 struct rist_sender_args {
 	char* cname;
@@ -92,12 +93,15 @@ static void usage(char *cmd)
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_ctx *receiver_ctx = (struct rist_ctx *)arg;
-	char message[500];
-	int ret = snprintf(message, 500, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
-	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending auth message: %s\n", message);
+	char buffer[500];
+	char message[200];
+	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
+	// To be compliant with the spec, the message must have an ipv4 header
+	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
+	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
-	oob_block.payload = message;
+	oob_block.payload = buffer;
 	oob_block.payload_len = ret;
 	rist_oob_write(receiver_ctx, &oob_block);
 	return 0;
@@ -115,8 +119,10 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
-	if (oob_block->payload_len > 4 && strncmp((const char*) oob_block->payload, "auth,", 5) == 0) {
-		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band data received: %.*s\n", (int)oob_block->payload_len, (char *)oob_block->payload);
+	int message_len = 0;
+	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
+	if (message) {
+		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
 	}
 	return 0;
 }
