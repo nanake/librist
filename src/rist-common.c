@@ -3453,12 +3453,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					{
 						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 								"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
-						bool current_state = peer->dead;
-						peer->dead = true;
-						if (peer->peer_data)
-							peer->peer_data->dead = true;
-						if (current_state != peer->peer_data->dead && peer->peer_data->parent)
-							--peer->peer_data->parent->child_alive_count;
+						kill_peer(peer);
 					}
 				}
 				peer = peer->next;
