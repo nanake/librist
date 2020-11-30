@@ -1,14 +1,14 @@
 
-
+tools_dependencies = []
 tools_deps = []
 if host_machine.system() == 'windows'
 	tools_deps += ['../contrib/getopt-shim.c']
+	tools_dependencies += [ cc.find_library('ws2_32') ]
 endif
 
 tools_deps += [	'../contrib/pthread-shim.c']
 
 srp_shared = []
-tools_dependencies = []
 if use_mbedtls
 	srp_shared += 'srp_shared.c'
 	tools_dependencies += mbedcrypto_lib

@@ -534,7 +534,7 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 		ctx->authenticator_bytes_verifier = malloc(1024);
 		ctx->lookup_func = in->lookup_func;
 		ctx->lookup_func_userdata = in->lookup_func_userdata;
-		strncpy(ctx->authenticator_username, in->authenticator_username, 255);
+		strcpy(ctx->authenticator_username, in->authenticator_username);
 		memcpy(ctx->authenticator_bytes_verifier, in->authenticator_bytes_verifier, in->authenticator_len_verifier);
 		memcpy(ctx->authenticator_bytes_salt, in->authenticator_bytes_salt, in->authenticator_len_salt);
 		ctx->authenticator_len_salt = in->authenticator_len_salt;
@@ -682,7 +682,7 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 			}
 			lookup_func = internal_user_verifier_lookup;
 			struct SRPSession * session = srp_session_new(SRP_SHA256, SRP_NG_2048, NULL, NULL);
-			strncpy(ctx->authenticator_username, username, u_len);
+			strcpy(ctx->authenticator_username, username);
 			srp_create_salted_verification_key(session, username,
 									   (const unsigned char *)password, strlen(password),
 									   (const unsigned char **)&ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt,
