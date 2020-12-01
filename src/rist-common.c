@@ -926,10 +926,11 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		for (size_t i = 0; i < f->peer_lst_len; i++)
 		{
 			struct rist_peer *check = f->peer_lst[i];
-			if (check->last_mrtt < last_rtt)
+			uint64_t dead_since = 0;
+			if (check->dead_since > dead_since)
 			{
 				peer = check;
-				last_rtt = peer->last_mrtt;
+				dead_since = check->dead_since;
 			}
 			if (peer != NULL)
 				rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter);
@@ -937,7 +938,6 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 	}
 	f->nacks.counter = 0;
 	pthread_rwlock_unlock(peerlist_lock);
-	// TODO: this lock should be by flow ... not global!
 }
 
 void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
@@ -1240,50 +1240,6 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 		rist_request_echo(peer);
 		rist_request_echo(peer);
 	}
-}
-
-void rist_shutdown_peer(struct rist_peer *peer)
-{
-	struct rist_common_ctx *ctx = get_cctx(peer);
-
-	rist_log_priv(ctx, RIST_LOG_INFO, "Shutting down peer #%d\n", peer->adv_peer_id);
-
-	peer->shutdown = true;
-	peer->adv_flow_id = 0;
-	peer->flow = NULL;
-
-	/* data receive event (only for listening peers, others have the pointer but are not listening) */
-	if (!peer->parent && peer->event_recv) {
-		rist_log_priv(ctx, RIST_LOG_INFO, "Removing peer data received event\n");
-		evsocket_delevent(ctx->evctx, peer->event_recv);
-		peer->event_recv = NULL;
-	}
-
-	/* rtcp timer */
-	if (peer->send_keepalive) {
-		rist_log_priv(ctx, RIST_LOG_INFO, "Removing peer handshake/ping timer\n");
-		peer->send_keepalive = false;
-	}
-
-	if (!peer->parent && peer->sd > -1) {
-		rist_log_priv(ctx, RIST_LOG_INFO, "Closing peer socket on port %d\n", peer->local_port);
-		udpsocket_close(peer->sd);
-		peer->sd = -1;
-	}
-	if (!peer->parent) {
-		_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
-		_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
-	}
-#ifdef USE_MBEDTLS
-	eap_delete_ctx(&peer->eap_ctx);
-#endif
-	if (peer->url) {
-		free(peer->url);
-		peer->url = NULL;
-	}
-
-	peer->authenticated = false;
-
 }
 
 void rist_peer_authenticate(struct rist_peer *peer)
@@ -1903,18 +1859,6 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 			case PTYPE_SDES:
 				{
 					peer->stats_sender_instant.received++;
-					peer->last_rtcp_received = timestampNTP_u64();
-					if (peer->eap_authentication_state != 1 && peer->dead) {
-						peer->dead = false;
-						if (peer->peer_data)
-							peer->peer_data->dead = false;
-						if (peer->parent)
-							++peer->parent->child_alive_count;
-						rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-								"Peer %d was dead and it is now alive again\n", peer->adv_peer_id);
-					}
-					//if (p_sys->b_ismulticast == false)
-					//{
 					uint8_t name_length = pkt[9];
 					if (name_length > bytes_left)
 					{
@@ -2026,7 +1970,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSocket error!\n");
 
-		rist_shutdown_peer(peer);
+		rist_peer_remove(get_cctx(peer), peer, NULL);
 	}
 
 	void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
@@ -2098,6 +2042,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			peer->peer_data->dead = true;
 		if (current_state != peer->peer_data->dead && peer->peer_data->parent)
 			--peer->peer_data->parent->child_alive_count;
+		peer->dead_since = timestampNTP_u64();
 	}
 
 	static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
@@ -2385,7 +2330,14 @@ protocol_bypass:
 		bool failed_eap = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
-
+				peer->last_rtcp_received = timestampNTP_u64();
+				if (peer->dead) {
+					peer->dead = false;
+					//Only used on main profile
+					++peer->parent->child_alive_count;
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+							"Peer %d was dead and it is now alive again\n", peer->adv_peer_id);
+				}
 				payload.peer = p;
 				if (cctx->profile == RIST_PROFILE_SIMPLE)
 				{
@@ -2449,7 +2401,8 @@ protocol_bypass:
 															(void *)(recv_buf + gre_size),
 															(recv_bufsize - gre_size))) < 0) {
 								rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
-								failed_eap = true;
+								if (eapret == 255)//permanent failure, we allow a few retries
+									failed_eap = true;
 							}
 							else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
 								rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
@@ -2893,12 +2846,18 @@ protocol_bypass:
 					// TODO: print warning if the peer is dead?, i.e. no stats
 					if (!peer->dead)
 					{
-						if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
-								peer->last_rtcp_received > 0 && peer->parent)
+						if (peer->parent && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
+								peer->last_rtcp_received > 0)
 						{
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-									"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
+									"Peer %u timed-out, stopping output stream\n", peer->adv_peer_id);
 							kill_peer(peer);
+						}
+						else if (peer->parent && (now -peer->dead_since) > RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK)
+						{
+							rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
+							rist_peer_remove(&ctx->common, peer, NULL);
+							j--;//our index just got removed, so we move one back to make sure we don't skip anything
 						}
 					}
 				}
@@ -3024,7 +2983,6 @@ static inline void peer_remove_linked_list(struct rist_peer *peer) {
 
 int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct rist_peer **next)
 {
-	//For now do not delete listening peers, we should implement that properly as well
 	if (peer == NULL) {
 		return -1;
 		if (next)
@@ -3426,8 +3384,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						pthread_rwlock_wrlock(peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
 							struct rist_peer *peer = f->peer_lst[i];
-							if (peer->parent)
-								rist_shutdown_peer(peer);
+							peer->flow = NULL;
 						}
 						rist_delete_flow(ctx, f);
 						pthread_rwlock_unlock(peerlist_lock);
@@ -3477,17 +3434,22 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 			while (peer)
 			{
 				// TODO: print warning if the peer is dead?, i.e. no stats
+				struct rist_peer *next = peer->next;
 				if (!peer->dead)
 				{
-					if (peer->is_rtcp == true && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
-							peer->last_rtcp_received > 0 && peer->parent)
+					if (peer->parent && (now - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
+							peer->last_rtcp_received > 0)
 					{
 						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-								"Peer with id %zu is dead, stopping stream ...\n", peer->adv_peer_id);
+								"Peer %u timed out\n", peer->adv_peer_id);
 						kill_peer(peer);
 					}
+				} else if (peer->parent && (now -peer->dead_since) > RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK)
+				{
+					rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
+					rist_peer_remove(&ctx->common, peer, NULL);
 				}
-				peer = peer->next;
+				peer = next;
 			}
 			pthread_rwlock_unlock(peerlist_lock);
 		}

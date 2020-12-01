@@ -527,6 +527,7 @@ struct rist_peer {
 	struct rist_peer_receiver_stats stats_receiver_total;
 
 	int dead;
+	uint64_t dead_since;
 	uint64_t birthtime_peer;
 	uint64_t birthtime_local;
 
