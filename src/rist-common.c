@@ -2331,7 +2331,7 @@ protocol_bypass:
 		while (p) {
 			if (equal_address(family, addr, p)) {
 				peer->last_rtcp_received = timestampNTP_u64();
-				if (peer->dead) {
+				if (peer->eap_authentication_state != 1 && peer->dead) {
 					peer->dead = false;
 					//Only used on main profile
 					++peer->parent->child_alive_count;
@@ -3067,7 +3067,9 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
 	_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
+#ifdef USE_MBEDTLS
 	eap_delete_ctx(&peer->eap_ctx);
+#endif
 	if (peer->url)
 		free(peer->url);
 	
