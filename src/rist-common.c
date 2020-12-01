@@ -2971,8 +2971,6 @@ static inline void peer_remove_linked_list(struct rist_peer *peer) {
 	struct rist_common_ctx *ctx = get_cctx(peer);
 	if (!peer->prev) {
 		ctx->PEERS = peer->next;
-		if (peer->next)
-			peer->next->prev = NULL;
 	} else {
 		peer->prev->next = peer->next;
 	}
