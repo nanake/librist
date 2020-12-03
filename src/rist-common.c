@@ -1167,7 +1167,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		p->session_timeout = config->session_timeout * RIST_CLOCK;
 	}
 	else {
-		p->session_timeout = config->recovery_length_max * RIST_CLOCK;
+		p->session_timeout = 250 * RIST_CLOCK;
 	}
 
 	/* Initialize socket */
@@ -2028,11 +2028,9 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
 	{
 		/* Add a reference to ctx->peer_lst */
-		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		ctx->peer_lst = realloc(ctx->peer_lst, (ctx->peer_lst_len + 1) * sizeof(*ctx->peer_lst));
 		ctx->peer_lst[ctx->peer_lst_len] = peer;
 		ctx->peer_lst_len++;
-		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 	}
 
 	static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
@@ -2889,7 +2887,6 @@ void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
 		ctx->checks_next_time = now;
 		uint64_t nacks_next_time = now;
 		while(!ctx->common.shutdown) {
-
 			// Conditional 5ms sleep that is woken by data coming in
 			pthread_mutex_lock(&(ctx->mutex));
 			int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
