@@ -227,6 +227,14 @@ RIST_PACKED_STRUCT(rist_gre_seq,{
 	uint32_t seq;
 })
 
+RIST_PACKED_STRUCT(rist_gre_key_seq_real,{
+	uint8_t flags1;
+	uint8_t flags2;
+	uint16_t prot_type;
+	uint32_t nonce;
+	uint32_t seq;
+})
+
 RIST_PACKED_STRUCT(rist_gre_key_seq,{
 	uint8_t flags1;
 	uint8_t flags2;

@@ -172,8 +172,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	   malloc and mempcy, to ensure our source stays clean. We only do this with RAW data as these buffers are the only
 	   assumed to be reused by retransmits */
 	uint8_t *_payload = NULL;
-	bool compressed = false;
-	bool retry = false;
 
 	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
 							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
@@ -202,9 +200,9 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	// TODO: write directly on the payload to make it faster
 	uint8_t header_buf[RIST_MAX_HEADER_SIZE] = {0};
 	if (k->key_size) {
-		gre_len = sizeof(struct rist_gre_key_seq);
+		gre_len = sizeof(struct rist_gre_key_seq_real);
 	} else {
-		gre_len = sizeof(struct rist_gre_seq);
+		gre_len = sizeof(struct rist_gre_hdr);
 	}
 
 	uint16_t proto_type;
@@ -235,104 +233,30 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
 				//hdr->rtp.ssrc |= (1 << 31);
 				hdr->rtp.ssrc = htobe32(p->adv_flow_id | 0x01);
-				retry = true;
 			}
-			if (ctx->profile == RIST_PROFILE_ADVANCED) {
-				hdr->rtp.payload_type = RTP_PTYPE_RIST;
-				hdr->rtp.ts = htobe32(timestampRTP_u32(1, source_time));
-			} else {
-				hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
-				hdr->rtp.ts = htobe32(timestampRTP_u32(0, source_time));
-			}
+			hdr->rtp.payload_type = RTP_PTYPE_MPEGTS;
+			hdr->rtp.ts = htobe32(timestampRTP_u32(0, source_time));
 		}
 		// copy the rtp header data (needed for encryption)
 		memcpy(_payload - hdr_len, hdr, hdr_len);
 	}
 
 	if (ctx->profile > RIST_PROFILE_SIMPLE) {
-
-		/* Compress the data packets */
-		if (p->compression) {
-			int clen;
-			void *cbuf = ctx->buf.dec;
-			clen = LZ4_compress_default((const char *)_payload, cbuf, (int)payload_len, RIST_MAX_PACKET_SIZE);
-			if (clen < 0) {
-				rist_log_priv(ctx, RIST_LOG_ERROR,
-					"Compression failed (%d), not sending\n", clen);
-			}
-			else {
-				if ((size_t)clen < payload_len) {
-					payload_len = clen;
-					_payload = cbuf;
-					compressed = true;
-				} else {
-					//msg(receiver_id, ctx->id, DEBUG,
-					//    "compressed %d to %lu\n", len, compressed_len);
-					// Use origin data AS IS becauce compression bloated it
-				}
-			}
-		}
 		/* Encrypt everything except GRE */
 		if (k->key_size) {
 			// Prepare GRE header
-			struct rist_gre_key_seq *gre_key_seq = (void *) header_buf;
-			SET_BIT(gre_key_seq->flags1, 7); // set checksum bit
+			struct rist_gre_key_seq_real *gre_key_seq = (void *) header_buf;
 			SET_BIT(gre_key_seq->flags1, 5); // set key flag
 			SET_BIT(gre_key_seq->flags1, 4); // set seq bit
 
-			if (ctx->profile == RIST_PROFILE_ADVANCED) {
-				SET_BIT(gre_key_seq->flags2, 0); // set advanced protocol identifier
-				if (compressed)
-					SET_BIT(gre_key_seq->flags1, 3); // set compression bit
-				if (retry)
-					SET_BIT(gre_key_seq->flags1, 2); // set retry bit
-				// TODO: implement fragmentation and fill in this data
-				// (fragmentation to be done at API data entry point)
-				uint8_t fragment_final = 0;
-				uint8_t fragment_number = 0;
-				if (CHECK_BIT(fragment_final, 0)) SET_BIT(gre_key_seq->flags1, 1);
-				// fragment_number (max is 64)
-				if (CHECK_BIT(fragment_number, 0)) SET_BIT(gre_key_seq->flags1, 0);
-				if (CHECK_BIT(fragment_number, 1)) SET_BIT(gre_key_seq->flags2, 7);
-				if (CHECK_BIT(fragment_number, 2)) SET_BIT(gre_key_seq->flags2, 6);
-				if (CHECK_BIT(fragment_number, 3)) SET_BIT(gre_key_seq->flags2, 5);
-				if (CHECK_BIT(fragment_number, 4)) SET_BIT(gre_key_seq->flags2, 4);
-				if (CHECK_BIT(fragment_number, 5)) SET_BIT(gre_key_seq->flags2, 3);
-				//SET_BIT(gre_key_seq->flags2, 2) is free for future use (version)
-				//SET_BIT(gre_key_seq->flags2, 1) is free for future use (version)
-			}
-
 			gre_key_seq->prot_type = htobe16(proto_type);
-			gre_key_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
 			gre_key_seq->seq = htobe32(seq);
 
 			_librist_crypto_psk_encrypt(&p->key_tx, gre_key_seq->seq, (unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len), (hdr_len + payload_len));
 			gre_key_seq->nonce = k->gre_nonce;
 		} else {
-			struct rist_gre_seq *gre_seq = (struct rist_gre_seq *) header_buf;
-			SET_BIT(gre_seq->flags1, 7); // set checksum bit
-			SET_BIT(gre_seq->flags1, 4); // set seq bit
-
-			if (ctx->profile == RIST_PROFILE_ADVANCED) {
-				SET_BIT(gre_seq->flags2, 0); // set advanced protocol identifier
-				if (compressed)
-					SET_BIT(gre_seq->flags1, 3); // set compression bit
-				if (retry)
-					SET_BIT(gre_seq->flags1, 2); // set retry bit
-				uint8_t fragment_final = 0;
-				uint8_t fragment_number = 0;
-				if (CHECK_BIT(fragment_final, 0)) SET_BIT(gre_seq->flags1, 1);
-				if (CHECK_BIT(fragment_number, 0)) SET_BIT(gre_seq->flags1, 0);
-				if (CHECK_BIT(fragment_number, 1)) SET_BIT(gre_seq->flags2, 7);
-				if (CHECK_BIT(fragment_number, 2)) SET_BIT(gre_seq->flags2, 6);
-				if (CHECK_BIT(fragment_number, 3)) SET_BIT(gre_seq->flags2, 5);
-				if (CHECK_BIT(fragment_number, 4)) SET_BIT(gre_seq->flags2, 4);
-				if (CHECK_BIT(fragment_number, 5)) SET_BIT(gre_seq->flags2, 3);
-			}
-
+			struct rist_gre_hdr *gre_seq = (struct rist_gre_hdr *) header_buf;
 			gre_seq->prot_type = htobe16(proto_type);
-			gre_seq->checksum_reserved1 = htobe32((uint32_t)(source_time >> 32));
-			gre_seq->seq = htobe32(seq);
 		}
 
 		// now copy the GRE header data
@@ -660,9 +584,7 @@ static inline void rist_rtcp_write_sr(uint8_t *buf, int *offset, struct rist_pee
 	uint32_t ntp_msw = now_rtc >> 32;
 	sr->ntp_msw = htobe32(ntp_msw);
 	sr->ntp_lsw = htobe32(ntp_lsw);
-	struct rist_common_ctx *ctx = get_cctx(peer);
-	int advanced = ctx->profile == RIST_PROFILE_ADVANCED ? 1 : 0;
-	sr->rtp_ts = htobe32(timestampRTP_u32(advanced, now));
+	sr->rtp_ts = htobe32(timestampRTP_u32(0, now));
 	sr->sender_pkts = 0;  //htonl(f->packets_count);
 	sr->sender_bytes = 0; //htonl(f->bytes_count);
 }
@@ -842,23 +764,6 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 
 static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct rist_peer *peer) {
 	struct rist_common_ctx *cctx = get_cctx(peer);
-	if (cctx->profile == RIST_PROFILE_ADVANCED) {
-		struct rist_sender *ctx = peer->sender_ctx;
-		pthread_mutex_lock(&ctx->queue_lock);
-		size_t sender_write_index = atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire);
-		ctx->sender_queue[sender_write_index] = rist_new_buffer(cctx, rtcp_buf, payload_len, RIST_PAYLOAD_TYPE_RTCP, 0, 0, peer->local_port, peer->remote_port);
-		if (RIST_UNLIKELY(!ctx->sender_queue[sender_write_index]))
-		{
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "\t Could not create packet buffer inside sender buffer, OOM, decrease max bitrate or buffer time length\n");
-			pthread_mutex_unlock(&ctx->queue_lock);
-			return;
-		}
-		ctx->sender_queue[sender_write_index]->peer = peer;
-		ctx->sender_queue_bytesize += payload_len;
-		atomic_store_explicit(&ctx->sender_queue_write_index, (sender_write_index + 1) & (ctx->sender_queue_max - 1), memory_order_release);
-		pthread_mutex_unlock(&ctx->queue_lock);
-		return;
-	}
 	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, rtcp_buf, payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
 }
 
@@ -869,7 +774,6 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	rist_rtcp_write_sr(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
-	// Enqueue it to not misalign the buffer and to resend lost handshakes in the case of advanced mode
 	rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 	return;
 }
@@ -905,7 +809,6 @@ int rist_request_echo(struct rist_peer *peer) {
 	}
 	else
 	{
-		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
 		rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 		return 0;
 	}
@@ -1066,13 +969,7 @@ peer_select:
 
 static size_t rist_sender_index_get(struct rist_sender *ctx, uint32_t seq)
 {
-	// This is by design in advanced mode, that is why we push all output data and handshakes
-	// through the sender_queue, so we can keep the seq and idx in sync
-	size_t idx = (seq + 1)& (ctx->sender_queue_max -1);
-	if (ctx->common.profile < RIST_PROFILE_ADVANCED) {
-		// For simple profile and main profile without extended seq numbers, we use a conversion table
-		idx = ctx->seq_index[(uint16_t)seq];
-	}
+	size_t idx = ctx->seq_index[(uint16_t)seq];
 	return idx;
 }
 
@@ -1114,17 +1011,9 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
-	} else if (ctx->common.profile == RIST_PROFILE_ADVANCED && ctx->sender_queue[idx]->seq != retry->seq) {
+	} else if ((uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-			" Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), something is very wrong!\n",
-			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
-			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq, ctx->sender_queue_max);
-		retry->peer->stats_sender_instant.retrans_skip++;
-		return -1;
-	}
-	else if (ctx->common.profile < RIST_PROFILE_ADVANCED && (uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
-		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-			" Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), bitrate is too high, use advanced profile instead\n",
+			" Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), bitrate is too high\n",
 			(uint16_t)retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx), ctx->sender_queue[idx]->seq_rtp, ctx->sender_queue_max);
 		retry->peer->stats_sender_instant.retrans_skip++;

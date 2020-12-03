@@ -1708,35 +1708,6 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	}
 }
 
-static void rist_receiver_recv_rtcp(struct rist_peer *peer, uint32_t seq,
-		uint32_t flow_id, uint16_t src_port, uint16_t dst_port)
-{
-	RIST_MARK_UNUSED(flow_id);
-	RIST_MARK_UNUSED(src_port);
-	RIST_MARK_UNUSED(dst_port);
-
-	assert(peer->receiver_ctx != NULL);
-	struct rist_receiver *ctx = peer->receiver_ctx;
-
-	if (peer->flow && ctx->common.profile == RIST_PROFILE_ADVANCED) {
-		// We must insert a placeholder into the queue to prevent counting it as a hole during missing packet search
-		size_t idx = seq& (peer->flow->receiver_queue_max -1);
-		struct rist_buffer *b = peer->flow->receiver_queue[idx];
-		if (b)
-		{
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "RTCP buffer placeholder had data!!! seq=%"PRIu32", buf_seq=%"PRIu32"\n",
-					seq, b->seq);
-			free_rist_buffer(get_cctx(peer), b);
-			peer->flow->receiver_queue[idx] = NULL;
-		}
-		peer->flow->receiver_queue[idx] = rist_new_buffer(get_cctx(peer), NULL, 0, RIST_PAYLOAD_TYPE_RTCP, seq, 0, 0, 0);
-		if (RIST_UNLIKELY(!peer->flow->receiver_queue[idx])) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create packet buffer inside receiver buffer, OOM, decrease max bitrate or buffer time length\n");
-			return;
-		}
-	}
-}
-
 static void rist_recv_oob_data(struct rist_peer *peer, struct rist_buffer *payload)
 {
 	// TODO: if the calling app locks the thread for long, the protocol management thread will suffer
@@ -1951,8 +1922,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					}
 					//}
 					if (peer->receiver_mode) {
-						if (rist_receiver_rtcp_authenticate(peer, seq, flow_id))
-							rist_receiver_recv_rtcp(peer, seq, flow_id, payload->src_port, payload->dst_port);
+						rist_receiver_rtcp_authenticate(peer, seq, flow_id);
 					} else if (peer->sender_ctx && peer->listening) {
 						// TODO: create rist_sender_recv_rtcp
 						if (!peer->authenticated) {
@@ -2173,7 +2143,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		struct rist_protocol_hdr *proto_hdr = NULL;
 		uint8_t compression = 0;
 		uint8_t retry = 0;
-		uint8_t advanced = 0;
 		struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 		size_t gre_size = 0;
 		uint32_t flow_id = 0;
@@ -2208,23 +2177,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-
-			advanced = CHECK_BIT(gre->flags2, 0); // GRE version
-			if (advanced) {
-				compression = CHECK_BIT(gre->flags1, 3);
-				retry = CHECK_BIT(gre->flags1, 2);
-				payload.fragment_final = CHECK_BIT(gre->flags1, 1);
-				// fragment_number (max is 64)
-				if (CHECK_BIT(gre->flags1, 0)) SET_BIT(payload.fragment_number, 0);
-				if (CHECK_BIT(gre->flags2, 7)) SET_BIT(payload.fragment_number, 1);
-				if (CHECK_BIT(gre->flags2, 6)) SET_BIT(payload.fragment_number, 2);
-				if (CHECK_BIT(gre->flags2, 5)) SET_BIT(payload.fragment_number, 3);
-				if (CHECK_BIT(gre->flags2, 4)) SET_BIT(payload.fragment_number, 4);
-				if (CHECK_BIT(gre->flags2, 3)) SET_BIT(payload.fragment_number, 5);
-				// CHECK_BIT(gre->flags2, 2) is free for future use (version)
-				// CHECK_BIT(gre->flags2, 1) is free for future use (version)
-				time_extension = be32toh(gre->checksum_reserved1);
-			}
 
 			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 				// Key bit is set, that means the other side want to send
@@ -2447,10 +2399,7 @@ protocol_bypass:
 							source_time = timestampNTP_u64();
 						else
 							source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
-						if (!advanced)
-						{
-							seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
-						}
+						seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
 						if (RIST_UNLIKELY(!p->receiver_mode))
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
