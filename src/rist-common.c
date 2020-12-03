@@ -1579,7 +1579,6 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			{
 				/* find correct data */
 				struct rist_peer *tmp = peer->parent->peer_data->child;
-				assert(tmp != NULL);
 				peer->is_data = false;
 				peer->peer_data = NULL;
 				peer->is_rtcp = true;
