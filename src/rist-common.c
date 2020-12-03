@@ -671,7 +671,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 				b->nack_count,
 				peer->config.max_retries,
 				peer->config.congestion_control_mode,
-				peer->stats_receiver_total.recovered_average);
+				f->stats_total.recovered_average);
 		return 8;
 	} else {
 		if ((uint64_t)(now - b->insertion_time) > peer->recovery_buffer_ticks) {
@@ -690,7 +690,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			}
 			if (b->nack_count == 0) {
 				f->missing_counter++;
-				b->peer->stats_receiver_instant.missing++;
+				f->stats_instant.missing++;
 			}
 
 			// TODO: make this 10% overhead configurable?
@@ -711,7 +711,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			// update peer information
 			f->nacks.array[f->nacks.counter] = b->seq;
 			f->nacks.counter++;
-			peer->stats_receiver_instant.retries++;
+			f->stats_instant.retries++;
 		}
 	}
 
@@ -969,28 +969,28 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				// We filled in the hole already ... packet has been recovered
 				remove_from_queue_reason = 3;
 				if (mb->nack_count > 0)
-					peer->stats_receiver_instant.recovered++;
+					f->stats_instant.recovered++;
 				switch(mb->nack_count) {
 					case 0:
-						peer->stats_receiver_instant.reordered++;
+						f->stats_instant.reordered++;
 						break;
 					case 1:
-						peer->stats_receiver_instant.recovered_0nack++;
+						f->stats_instant.recovered_0nack++;
 						break;
 					case 2:
-						peer->stats_receiver_instant.recovered_1nack++;
+						f->stats_instant.recovered_1nack++;
 						break;
 					case 3:
-						peer->stats_receiver_instant.recovered_2nack++;
+						f->stats_instant.recovered_2nack++;
 						break;
 					case 4:
-						peer->stats_receiver_instant.recovered_3nack++;
+						f->stats_instant.recovered_3nack++;
 						break;
 					default:
-						peer->stats_receiver_instant.recovered_morenack++;
+						f->stats_instant.recovered_morenack++;
 						break;
 				}
-				peer->stats_receiver_instant.recovered_sum += mb->nack_count;
+				f->stats_instant.recovered_sum += mb->nack_count;
 			}
 			else {
 				// Message with wrong seq!!!
@@ -998,7 +998,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 						"Retry queue has the wrong seq %"PRIu32" != %"PRIu32", removing ...\n",
 						f->receiver_queue[idx]->seq, mb->seq);
 				remove_from_queue_reason = 4;
-				peer->stats_receiver_instant.missing--;
+				f->stats_instant.missing--;
 				goto nack_loop_continue;
 			}
 		} else if (peer->buffer_bloat_active) {
@@ -1006,7 +1006,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 				if (empty == 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Retry queue is too large, %d, collapsed link (%u), flushing all nacks ...\n", f->missing_counter,
-							peer->stats_receiver_total.recovered_average/8);
+							f->stats_total.recovered_average/8);
 				}
 				remove_from_queue_reason = 5;
 				empty = 1;
@@ -1015,7 +1015,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 					if (empty == 0) {
 						rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 								"Retry queue is too large, %d, collapsed link (%u), flushing old nacks (%u > %u) ...\n",
-								f->missing_counter, peer->stats_receiver_total.recovered_average/8, mb->nack_count, 4);
+								f->missing_counter, f->stats_total.recovered_average/8, mb->nack_count, 4);
 					}
 					remove_from_queue_reason = 6;
 					empty = 1;
@@ -1252,7 +1252,33 @@ void rist_peer_authenticate(struct rist_peer *peer)
 			"Successfully Authenticated peer %"PRIu32"\n", peer->adv_peer_id);
 }
 
-void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw)
+static void rist_calculate_bitrate2(struct rist_bandwidth_estimation *bw, size_t len)
+{
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	uint64_t now = tv.tv_sec * 1000000;
+	now += tv.tv_usec;
+	uint64_t time = now - bw->last_bitrate_calctime;
+
+	if (!bw->last_bitrate_calctime) {
+		bw->last_bitrate_calctime = now;
+		bw->eight_times_bitrate = 0;
+		bw->bytes = 0;
+		return;
+	}
+	if (time < 1000000 /* 1 second */) {
+		bw->bytes += len;
+		return;
+	}
+
+	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
+	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
+	bw->last_bitrate_calctime = now;
+
+	bw->bytes = 0;
+}
+
+static void rist_calculate_bitrate(struct rist_flow *flow, size_t len, struct rist_bandwidth_estimation *bw)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -1267,29 +1293,27 @@ void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_band
 		return;
 	}
 
-	if (peer->flow) {
-		struct rist_flow *f = peer->flow;
-		if (f->last_ipstats_time == 0ULL) {
-			// Initial values
-			f->stats_instant.cur_ips = 0ULL;
-			f->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
-			f->stats_instant.max_ips = 0ULL;
-			f->stats_instant.avg_count = 0UL;
-		} else {
-			f->stats_instant.cur_ips = now - f->last_ipstats_time;
-			/* Set new min */
-			if (f->stats_instant.cur_ips < f->stats_instant.min_ips)
-				f->stats_instant.min_ips = f->stats_instant.cur_ips;
-			/* Set new max */
-			if (f->stats_instant.cur_ips > f->stats_instant.max_ips)
-				f->stats_instant.max_ips = f->stats_instant.cur_ips;
 
-			/* Avg calculation */
-			f->stats_instant.total_ips += f->stats_instant.cur_ips;
-			f->stats_instant.avg_count++;
-		}
-		f->last_ipstats_time = now;
+	if (flow->last_ipstats_time == 0ULL) {
+		// Initial values
+		flow->stats_instant.cur_ips = 0ULL;
+		flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
+		flow->stats_instant.max_ips = 0ULL;
+		flow->stats_instant.avg_count = 0UL;
+	} else {
+		flow->stats_instant.cur_ips = now - flow->last_ipstats_time;
+		/* Set new min */
+		if (flow->stats_instant.cur_ips < flow->stats_instant.min_ips)
+			flow->stats_instant.min_ips = flow->stats_instant.cur_ips;
+		/* Set new max */
+		if (flow->stats_instant.cur_ips > flow->stats_instant.max_ips)
+			flow->stats_instant.max_ips = flow->stats_instant.cur_ips;
+
+		/* Avg calculation */
+		flow->stats_instant.total_ips += flow->stats_instant.cur_ips;
+		flow->stats_instant.avg_count++;
 	}
+	flow->last_ipstats_time = now;
 
 	if (time < 1000000 /* 1 second */) {
 		bw->bytes += len;
@@ -1659,7 +1683,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	/** Heuristics for receiver  * * * * * */
 	/* * * * * * * * * * * * * * * * * * * */
 	/**************** WIP *****************/
-	peer->stats_receiver_instant.recv++;
+	peer->stats_receiver_instant.received++;
 
 	uint32_t rtt;
 	rtt = peer->eight_times_rtt / 8;
@@ -1681,7 +1705,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
 	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
-		rist_calculate_bitrate(peer, payload->size, &peer->bw); // update bitrate only if not a dupe
+		rist_calculate_bitrate(peer->flow, payload->size, &peer->flow->bw); // update bitrate only if not a dupe
 	}
 }
 
@@ -1843,6 +1867,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	uint16_t records;
 	uint8_t subtype;
 	uint32_t nack_seq_msb = 0;
+	peer->stats_receiver_instant.received_rtcp++;
 
 	while (processed_bytes < payload->size) {
 		pkt = (uint8_t*)payload->data + processed_bytes;
@@ -2430,8 +2455,10 @@ protocol_bypass:
 						if (RIST_UNLIKELY(!p->receiver_mode))
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
-						else
+						else {
+							rist_calculate_bitrate2(&p->bw, (recv_bufsize - gre_size - sizeof(*proto_hdr)));//use the unexpanded size to show real BW
 							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
+						}
 						break;
 					case RIST_PAYLOAD_TYPE_EAPOL:
 #ifdef USE_MBEDTLS

@@ -369,7 +369,7 @@ out:
 	} else {
 		rist_calculate_bitrate_sender(len, &p->bw);
 		p->stats_sender_instant.sent++;
-		p->stats_receiver_instant.sent++;
+		p->stats_receiver_instant.sent_rtcp++;
 	}
 
 	if (modifyingbuffer) {

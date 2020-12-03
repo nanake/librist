@@ -129,6 +129,21 @@ struct rist_peer_flow_stats {
 	size_t buffer_duration_count;
 	uint32_t buffer_duration[2048];
 
+	uint32_t missing;
+	uint32_t retries;
+	uint32_t recovered;
+	uint32_t reordered;
+	uint32_t dups;
+	uint32_t recovered_0nack;
+	uint32_t recovered_1nack;
+	uint32_t recovered_2nack;
+	uint32_t recovered_3nack;
+	uint32_t recovered_morenack;
+	uint32_t recovered_sum;
+	uint32_t recovered_average;
+	int32_t  recovered_slope;
+	uint32_t recovered_slope_inverted;
+
 	/* Inter-packet spacing */
 	uint64_t min_ips;
 	uint64_t max_ips;
@@ -146,22 +161,9 @@ struct rist_peer_sender_stats {
 };
 
 struct rist_peer_receiver_stats {
-	uint32_t sent;
-	uint64_t recv;
-	uint32_t missing;
-	uint32_t retries;
-	uint32_t recovered;
-	uint32_t reordered;
-	uint32_t dups;
-	uint32_t recovered_0nack;
-	uint32_t recovered_1nack;
-	uint32_t recovered_2nack;
-	uint32_t recovered_3nack;
-	uint32_t recovered_morenack;
-	uint32_t recovered_sum;
-	uint32_t recovered_average;
-	int32_t recovered_slope;
-	uint32_t recovered_slope_inverted;
+	uint32_t sent_rtcp;
+	uint32_t received_rtcp;
+	uint64_t received;
 };
 
 struct nacks {
@@ -191,6 +193,7 @@ struct rist_flow {
 
 	struct rist_peer_flow_stats stats_instant;
 	struct rist_peer_flow_stats stats_total;
+	struct rist_bandwidth_estimation bw;
 	uint64_t stats_next_time;
 	uint64_t checks_next_time;
 
@@ -571,7 +574,6 @@ RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id
 RIST_PRIV size_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
 RIST_PRIV void free_rist_buffer(struct rist_common_ctx *ctx, struct rist_buffer *b);
-RIST_PRIV void rist_calculate_bitrate(struct rist_peer *peer, size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw);
 RIST_PRIV void empty_receiver_queue(struct rist_flow *f, struct rist_common_ctx *ctx);
 RIST_PRIV void rist_flush_missing_flow_queue(struct rist_flow *flow);
