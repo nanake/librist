@@ -245,6 +245,7 @@ struct rist_flow {
 
 	/* Temporary buffer for grouping and sending nacks */
 	struct nacks nacks;
+	struct rist_logging_settings *logging_settings;
 };
 
 struct rist_retry {
@@ -274,7 +275,7 @@ struct rist_common_ctx {
 
 	/* Peer list sync - RW locks */
 	struct rist_peer *PEERS;
-	pthread_rwlock_t peerlist_lock;
+	pthread_mutex_t peerlist_lock;
 
 	/* buffers */
 	/* these are pre-allocated buffers, not pre-allocated aligned stack */
@@ -609,14 +610,12 @@ RIST_PRIV struct rist_common_ctx *get_cctx(struct rist_peer *peer);
 /*static inline in header file */
 static inline void peer_append(struct rist_peer *p)
 {
-	struct rist_peer **PEERS = &get_cctx(p)->PEERS;
-	pthread_rwlock_t *peerlist_lock = &get_cctx(p)->peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
+	struct rist_common_ctx *cctx = get_cctx(p);
+	struct rist_peer **PEERS = &cctx->PEERS;
 	struct rist_peer *plist = *PEERS;
 	if (!plist)
 	{
 		*PEERS = p;
-		pthread_rwlock_unlock(peerlist_lock);
 		return;
 	}
 	if (p->parent)
@@ -646,12 +645,10 @@ static inline void peer_append(struct rist_peer *p)
 		{
 			p->prev = plist;
 			plist->next = p;
-			pthread_rwlock_unlock(peerlist_lock);
 			return;
 		}
 		plist = plist->next;
 	}
-	pthread_rwlock_unlock(peerlist_lock);
 }
 
 #endif

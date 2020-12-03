@@ -208,6 +208,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 
 	/* Append flow to list */
 	rist_flow_append(&ctx->common.FLOWS, f);
+	f->logging_settings = ctx->common.logging_settings;
 
 	return f;
 }

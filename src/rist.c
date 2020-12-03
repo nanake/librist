@@ -801,9 +801,9 @@ int rist_peer_destroy(struct rist_ctx *ctx, struct rist_peer *peer) {
 	else
 		return -1;
 	assert(cctx != NULL);
-	pthread_rwlock_wrlock(&cctx->peerlist_lock);
+	pthread_mutex_lock(&cctx->peerlist_lock);
 	int ret = rist_peer_remove(cctx, peer, NULL);
-	pthread_rwlock_unlock(&cctx->peerlist_lock);
+	pthread_mutex_unlock(&cctx->peerlist_lock);
 	return ret;
 }
 

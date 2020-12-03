@@ -499,7 +499,7 @@ static void recalculate_clock_offset(struct rist_flow *flow)
 		diff = flow->time_offset - median_offset;
 	else
 		diff = median_offset - flow->time_offset;
-	rist_log_priv(get_cctx(flow->peer_lst[0]), RIST_LOG_DEBUG, "Recalculated clock offset, old offset: %lu, new offset: %lu difference: %c%lu usec\n",
+	rist_log_priv2(flow->logging_settings, RIST_LOG_DEBUG, "Recalculated clock offset, old offset: %lu, new offset: %lu difference: %c%lu usec\n",
 							flow->time_offset, median_offset, negative? '-': '+', (diff * 1000 / RIST_CLOCK));
 	flow->time_offset = median_offset;
 }
@@ -906,14 +906,15 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 	// Now actually send all the nack IP packets for this flow (the above routing will process/group them)
 	if (f->nacks.counter == 0)
 		return;
-	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
 	struct rist_peer *peer = NULL;
 	uint64_t last_rtt = UINT64_MAX;
+	if (f->peer_lst_len == 0 || f->peer_lst == NULL)
+		goto out;
 	for (size_t i = 0; i < f->peer_lst_len; i++)
 	{
 		struct rist_peer *check = f->peer_lst[i];
-		if (!check->dead && check->last_mrtt < last_rtt)
+		if (check->is_rtcp && !check->dead && check->last_mrtt < last_rtt)
 		{
 			peer = check;
 			last_rtt = peer->last_mrtt;
@@ -927,7 +928,7 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		{
 			struct rist_peer *check = f->peer_lst[i];
 			uint64_t dead_since = 0;
-			if (check->dead_since > dead_since)
+			if (check->is_rtcp && check->dead_since > dead_since)
 			{
 				peer = check;
 				dead_since = check->dead_since;
@@ -937,7 +938,8 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 		}
 	}
 	f->nacks.counter = 0;
-	pthread_rwlock_unlock(peerlist_lock);
+out:
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
 }
 
 void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
@@ -1491,7 +1493,8 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 				"Flow %"PRIu32" has not yet been authenticated by an RTCP peer, %"PRIu32"!\n", flow_id);
 		return false;
 	}
-
+	if (peer->parent && ctx->common.profile == RIST_PROFILE_SIMPLE)
+		peer->parent->authenticated = true;
 	return true;
 }
 
@@ -1547,6 +1550,55 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			if (rist_receiver_associate_flow(peer, flow_id) != 1) {
 				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created/associate peer to flow.\n");
 				return false;
+			}
+			if (ctx->common.profile == RIST_PROFILE_SIMPLE && peer->parent->peer_data->authenticated)
+			{
+				/* find correct data */
+				struct rist_peer *tmp = peer->parent->peer_data->child;
+				assert(tmp != NULL);
+				peer->is_data = false;
+				peer->peer_data = NULL;
+				peer->is_rtcp = true;
+				uint16_t data_port = peer->local_port -1;
+				while (tmp) {
+					if (tmp->is_data) {
+						if (tmp->local_port == data_port && peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
+							peer->peer_data = tmp;
+							tmp->peer_rtcp = peer;
+							break;
+						}
+					}
+					tmp = tmp->sibling_next;
+				}
+				if (!peer->peer_data) {
+					tmp = peer->parent->peer_data->child;
+					while (tmp) {
+						if (tmp->is_data) {
+							if (tmp->local_port == data_port && address_compare(&peer->u.address, &tmp->u.address)) {
+								peer->peer_data = tmp;
+								tmp->peer_rtcp = peer;
+								break;
+							}
+						}
+						tmp = tmp->sibling_next;
+					}
+				}
+				//randomly associate with first data peer without rtcp peer (ignores IP matching requirement)
+				if (!peer->peer_data) {
+					tmp = peer->parent->peer_data->child;
+					while (tmp) {
+						if (tmp->is_data) {
+							if (tmp->local_port == data_port && tmp->peer_rtcp == NULL) {
+								peer->peer_data = tmp;
+								tmp->peer_rtcp = peer;
+								break;
+							}
+						}
+						tmp = tmp->sibling_next;
+					}
+				}
+				peer->authenticated = true;
+				return true;
 			}
 		}
 
@@ -1907,7 +1959,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	struct rist_peer *peer = (struct rist_peer *)arg;
 	//struct rist_common_ctx *ctx = get_cctx(peer);
 
-	if (!peer || peer->shutdown) {
+	if (!peer || peer->shutdown || !peer->is_rtcp) {
 		return;
 	}
 
@@ -1976,12 +2028,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
 	{
 		/* Add a reference to ctx->peer_lst */
-		pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-		pthread_rwlock_wrlock(peerlist_lock);
+		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		ctx->peer_lst = realloc(ctx->peer_lst, (ctx->peer_lst_len + 1) * sizeof(*ctx->peer_lst));
 		ctx->peer_lst[ctx->peer_lst_len] = peer;
 		ctx->peer_lst_len++;
-		pthread_rwlock_unlock(peerlist_lock);
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 	}
 
 	static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
@@ -2038,8 +2089,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	{
 		bool current_state = peer->dead;
 		peer->dead = true;
-		if (peer->peer_data)
-			peer->peer_data->dead = true;
 		if (current_state != peer->peer_data->dead && peer->peer_data->parent)
 			--peer->peer_data->parent->child_alive_count;
 		peer->dead_since = timestampNTP_u64();
@@ -2057,8 +2106,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		}
 
 		struct rist_common_ctx *cctx = get_cctx(peer);
-
-		pthread_rwlock_t *peerlist_lock = &cctx->peerlist_lock;
+	
 		socklen_t addrlen = peer->address_len;
 		ssize_t recv_bufsize = -1;
 		uint16_t family = AF_INET;
@@ -2324,19 +2372,18 @@ protocol_bypass:
 		// We need this protocol bypass to manage keepalives of any kind,
 		// they need to trigger peering at the bottom of this function
 
-
-		pthread_rwlock_rdlock(peerlist_lock);
+		;
 		bool inchild = false;
 		bool failed_eap = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
-				peer->last_rtcp_received = timestampNTP_u64();
-				if (peer->eap_authentication_state != 1 && peer->dead) {
-					peer->dead = false;
+				p->last_rtcp_received = timestampNTP_u64();
+				if (p->eap_authentication_state != 1 && p->dead) {
+					p->dead = false;
 					//Only used on main profile
-					++peer->parent->child_alive_count;
+					++p->parent->child_alive_count;
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-							"Peer %d was dead and it is now alive again\n", peer->adv_peer_id);
+							"Peer %d was dead and it is now alive again\n", p->adv_peer_id);
 				}
 				payload.peer = p;
 				if (cctx->profile == RIST_PROFILE_SIMPLE)
@@ -2348,7 +2395,6 @@ protocol_bypass:
 #ifdef USE_MBEDTLS
 				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state != 1)
 				{
-					pthread_rwlock_unlock(peerlist_lock);
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
 					// Do not process non EAP packets until the peer has been authenticated!
 					return;
@@ -2421,14 +2467,12 @@ protocol_bypass:
 							kill_peer(p);
 						}
 						// Never create new peers using EAP packets (exit loop here)
-						pthread_rwlock_unlock(peerlist_lock);
 						return;
 						break;
 					default:
 						rist_recv_rtcp(p, seq, flow_id, &payload);
 						break;
 				}
-				pthread_rwlock_unlock(peerlist_lock);
 				return;
 			}
 			if (p->listening) {
@@ -2439,7 +2483,6 @@ protocol_bypass:
 			} else
 				p = p->next;
 		}
-		pthread_rwlock_unlock(peerlist_lock);
 
 		// Peer was not found, create a new one
 		if ((peer->listening || peer->multicast) && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
@@ -2764,7 +2807,7 @@ protocol_bypass:
 
 		//uint64_t now = timestampNTP_u64();
 		while (!flow->shutdown) {
-			if (flow->peer_lst) {
+			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
 			}
 			pthread_mutex_lock(&(flow->mutex));
@@ -2782,9 +2825,7 @@ protocol_bypass:
 
 	static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
 	{
-		pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-
-		pthread_rwlock_wrlock(peerlist_lock);
+		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		for (size_t j = 0; j < ctx->peer_lst_len; j++) {
 			struct rist_peer *peer = ctx->peer_lst[j];
 			if (peer->send_keepalive) {
@@ -2799,8 +2840,36 @@ protocol_bypass:
 #endif
 		}
 
-		pthread_rwlock_unlock(peerlist_lock);
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 	}
+
+
+void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
+{
+	struct rist_peer *peer = cctx->PEERS;
+	while (peer)
+	{
+		struct rist_peer *next = peer->next;
+		if (!peer->dead && peer->parent && now > peer->last_rtcp_received && peer->last_rtcp_received > 0)
+		{
+			if (peer->parent && (now - peer->last_rtcp_received) > peer->session_timeout &&
+					peer->last_rtcp_received > 0)
+			{
+				rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN,
+						"Peer %u timed out\n", peer->adv_peer_id);
+				kill_peer(peer);
+			}
+		} else if (peer->dead && peer->parent)
+		{
+			if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
+			{
+				rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
+				rist_peer_remove(cctx, peer, NULL);
+			}
+		}
+		peer = next;
+	}
+}
 
 	PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	{
@@ -2838,38 +2907,16 @@ protocol_bypass:
 			if (now > ctx->checks_next_time)
 			{
 				ctx->checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
-				pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-				pthread_rwlock_wrlock(peerlist_lock);
-				for (size_t j = 0; j < ctx->peer_lst_len; j++)
-				{
-					struct rist_peer *peer = ctx->peer_lst[j];
-					// TODO: print warning if the peer is dead?, i.e. no stats
-					if (!peer->dead)
-					{
-						if (peer->parent && (timestampNTP_u64() - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
-								peer->last_rtcp_received > 0)
-						{
-							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-									"Peer %u timed-out, stopping output stream\n", peer->adv_peer_id);
-							kill_peer(peer);
-						}
-						else if (peer->parent && (now -peer->dead_since) > RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK)
-						{
-							rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
-							rist_peer_remove(&ctx->common, peer, NULL);
-							j--;//our index just got removed, so we move one back to make sure we don't skip anything
-						}
-					}
-				}
-				pthread_rwlock_unlock(peerlist_lock);
+				pthread_mutex_lock(&ctx->common.peerlist_lock);
+				rist_timeout_check(&ctx->common, now);
+				pthread_mutex_unlock(&ctx->common.peerlist_lock);
 			}
 
 			// stats timer
 			if (now > ctx->stats_next_time) {
 				ctx->stats_next_time += rist_stats_interval;
 
-				pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-				pthread_rwlock_wrlock(peerlist_lock);
+				pthread_mutex_lock(&ctx->common.peerlist_lock);
 				for (size_t j = 0; j < ctx->peer_lst_len; j++) {
 					struct rist_peer *peer = ctx->peer_lst[j];
 					// TODO: print warning if the peer is dead?, i.e. no stats
@@ -2877,13 +2924,15 @@ protocol_bypass:
 						rist_sender_peer_statistics(peer);
 					}
 				}
-				pthread_rwlock_unlock(peerlist_lock);
+				pthread_mutex_unlock(&ctx->common.peerlist_lock);
 				// TODO: remove dead peers after stale flow time (both sender list and peer chain)
 				// sender_peer_delete(peer->sender_ctx, peer);
 			}
 
 			// socket polls (returns as fast as possible and processes the next 100 socket events)
+			pthread_mutex_lock(&ctx->common.peerlist_lock);
 			evsocket_loop_single(ctx->common.evctx, 0, 100);
+			pthread_mutex_unlock(&ctx->common.peerlist_lock);
 
 			// keepalive timer
 			sender_peer_events(ctx, now);
@@ -2941,7 +2990,7 @@ protocol_bypass:
 		ctx->profile = profile;
 		ctx->stats_report_time = 0;
 
-		if (pthread_rwlock_init(&ctx->peerlist_lock, NULL) != 0) {
+		if (pthread_mutex_init(&ctx->peerlist_lock, NULL) != 0) {
 			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->peerlist_lock\n");
 			return -1;
 		}
@@ -3006,7 +3055,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	peer_remove_linked_list(peer);
 
-	if (peer->flow) {
+	if (peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
 		for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
 		{
 			if (peer->flow->peer_lst[i] == peer)
@@ -3018,7 +3067,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 			}
 		}
 		peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
-		peer->sender_ctx->peer_lst_len--;
+		peer->flow->peer_lst_len--;
 		if (peer->flow->peer_lst_len == 0)
 			peer->flow->peer_lst = NULL;
 	}
@@ -3234,8 +3283,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 {
-	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
 
 	for (struct rist_peer *p = ctx->common.PEERS; p != NULL; p = p->next) {
 		if (p->send_keepalive) {
@@ -3250,7 +3298,7 @@ void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 #endif
 	}
 
-	pthread_rwlock_unlock(peerlist_lock);
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
 }
 
 void rist_empty_oob_queue(struct rist_common_ctx *ctx)
@@ -3277,8 +3325,7 @@ void rist_empty_oob_queue(struct rist_common_ctx *ctx)
 void rist_receiver_destroy_local(struct rist_receiver *ctx)
 {
 
-	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
 
 	// Destroy all flows
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting Flows cleanup\n");
@@ -3302,7 +3349,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	}
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
 
-	pthread_rwlock_unlock(peerlist_lock);
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing main data buffers\n");
 	struct rist_buffer *b = ctx->common.rist_free_buffer;
@@ -3315,8 +3362,7 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	evsocket_destroy(ctx->common.evctx);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing peerlist_lock\n");
-	pthread_rwlock_destroy(&ctx->common.peerlist_lock);
-
+	pthread_mutex_destroy(&ctx->common.peerlist_lock);
 	if (ctx->common.oob_data_enabled) {
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing oob fifo queue\n");
 		rist_empty_oob_queue(&ctx->common);
@@ -3380,14 +3426,13 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
 								"\t************** Session Timeout after %" PRIu64 "s of no data, deleting flow with id %"PRIu32" ***************\n",
 								flow_age / RIST_CLOCK / 1000, f->flow_id);
-						pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-						pthread_rwlock_wrlock(peerlist_lock);
+						pthread_mutex_lock(&ctx->common.peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
 							struct rist_peer *peer = f->peer_lst[i];
 							peer->flow = NULL;
 						}
 						rist_delete_flow(ctx, f);
-						pthread_rwlock_unlock(peerlist_lock);
+						pthread_mutex_unlock(&ctx->common.peerlist_lock);
 						f = next;
 						continue;
 					}
@@ -3409,7 +3454,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		//1000	1.00
 
 		// socket polls (returns in max_jitter_ms max and processes the next 100 socket events)
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 		evsocket_loop_single(ctx->common.evctx, max_jitter_ms, 100);
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 
 		// keepalive timer
 		receiver_peer_events(ctx, now);
@@ -3427,31 +3474,10 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		/* marks peer as dead, run every second */
 		if (now > checks_next_time)
 		{
-			checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
-			pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-			pthread_rwlock_wrlock(peerlist_lock);
-			struct rist_peer *peer = ctx->common.PEERS;
-			while (peer)
-			{
-				// TODO: print warning if the peer is dead?, i.e. no stats
-				struct rist_peer *next = peer->next;
-				if (!peer->dead)
-				{
-					if (peer->parent && (now - peer->last_rtcp_received) > peer->session_timeout * RIST_CLOCK &&
-							peer->last_rtcp_received > 0)
-					{
-						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-								"Peer %u timed out\n", peer->adv_peer_id);
-						kill_peer(peer);
-					}
-				} else if (peer->parent && (now -peer->dead_since) > RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK)
-				{
-					rist_log_priv2(ctx->common.logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
-					rist_peer_remove(&ctx->common, peer, NULL);
-				}
-				peer = next;
-			}
-			pthread_rwlock_unlock(peerlist_lock);
+			checks_next_time += (uint64_t)50 * (uint64_t)RIST_CLOCK;
+			pthread_mutex_lock(&ctx->common.peerlist_lock);
+			rist_timeout_check(&ctx->common, now);
+			pthread_mutex_unlock(&ctx->common.peerlist_lock);
 		}
 		// Send oob data
 		if (ctx->common.oob_queue_bytesize > 0)
@@ -3473,9 +3499,7 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			"Starting peers cleanup, count %d\n",
 			(unsigned) ctx->peer_lst_len);
 
-	pthread_rwlock_t *peerlist_lock = &ctx->common.peerlist_lock;
-	pthread_rwlock_wrlock(peerlist_lock);
-	// Destroy all peers
+	pthread_mutex_lock(&ctx->common.peerlist_lock);	// Destroy all peers
 	struct rist_peer *peer, *next;
 	peer = ctx->common.PEERS;
 	for (;;) {
@@ -3486,8 +3510,8 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	}
 	evsocket_destroy(ctx->common.evctx);
 
-	pthread_rwlock_unlock(peerlist_lock);
-	pthread_rwlock_destroy(peerlist_lock);
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
+	pthread_mutex_destroy(&ctx->common.peerlist_lock);
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peers cleanup complete\n");
 
 	if (ctx->common.oob_data_enabled) {
