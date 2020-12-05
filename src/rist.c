@@ -780,12 +780,22 @@ int rist_peer_create(struct rist_ctx *ctx, struct rist_peer **peer, const struct
 		rist_log_priv3(RIST_LOG_ERROR, "rist_peer_create call with null ctx\n");
 		return -1;
 	}
-	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx)
-		return rist_receiver_peer_create(ctx->receiver_ctx, peer, config);
-	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx)
-		return rist_sender_peer_create(ctx->sender_ctx, peer, config);
+	int ret = 0;
+	struct rist_common_ctx *cctx = NULL;
+	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx) {
+		cctx = &ctx->receiver_ctx->common;
+		pthread_mutex_lock(&cctx->peerlist_lock);
+		ret = rist_receiver_peer_create(ctx->receiver_ctx, peer, config);
+	}
+	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx) {
+		cctx = &ctx->sender_ctx->common;
+		pthread_mutex_lock(&cctx->peerlist_lock);
+		ret  =rist_sender_peer_create(ctx->sender_ctx, peer, config);
+	}
 	else
 		return -1;
+	pthread_mutex_unlock(&cctx->peerlist_lock);
+	return ret;
 }
 
 int rist_peer_destroy(struct rist_ctx *ctx, struct rist_peer *peer) {
