@@ -2016,7 +2016,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSocket error!\n");
 
-		rist_peer_remove(get_cctx(peer), peer, NULL);
+		//rist_peer_remove(get_cctx(peer), peer, NULL);
 	}
 
 	void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
