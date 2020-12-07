@@ -555,8 +555,8 @@ int main(int argc, char *argv[])
 			outputtoken = strtok_r(NULL, ",", &saveptroutput);
 			if (!outputtoken)
 				break;
-			free(tmpoutputurl);
 		}
+		free(tmpoutputurl);
 
 		if (strcmp(udp_config->prefix, "rist") == 0) {
 			// This is a rist input (new context for each listener)
