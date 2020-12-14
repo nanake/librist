@@ -75,9 +75,12 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering data output thread termination\n");
 	f->shutdown = 1;
-	while (f->shutdown != 2) {
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
-		usleep(5000);
+	if (f->receiver_thread)
+	{
+		while (f->shutdown != 2) {
+			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
+			usleep(5000);
+		}
 	}
 	struct rist_peer *p = NULL;
 	for (size_t i = 0; i <f->peer_lst_len; i++)
