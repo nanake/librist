@@ -93,7 +93,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 		}
 		p->authenticated = false;
 		p->flow = NULL;
-		if (ctx->common.profile == RIST_PROFILE_SIMPLE && p->parent) {
+		if (ctx->common.profile == RIST_PROFILE_SIMPLE && p->parent && p->parent->flow == f) {
 			if (p->parent->peer_rtcp) {
 				p->parent->peer_rtcp->flow = NULL;
 				p->parent->peer_rtcp->authenticated = false;

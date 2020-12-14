@@ -1643,7 +1643,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
 					"Authenticated RTCP peer %d and flow %"PRIu32" for connection with cname: %s\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->receiver_name);
-			if (ctx->common.profile == RIST_PROFILE_SIMPLE) {
+			if (ctx->common.profile == RIST_PROFILE_SIMPLE && peer->parent->flow == NULL) {
 				peer->parent->flow = peer->flow;
 				peer->parent->flow->authenticated = true;
 				peer->parent->authenticated = true;
@@ -3027,7 +3027,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	peer_remove_linked_list(peer);
 
-	if (peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
+	if (!peer->parent && peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
 		for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
 		{
 			if (peer->flow->peer_lst[i] == peer)
