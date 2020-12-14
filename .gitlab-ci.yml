@@ -67,4 +67,4 @@ test-ubuntu:
     script:
         - meson build --buildtype release --werror -Dtest=true
         - ninja -C build
-        - cd build && time meson test --print-errorlogs
+        - cd build && time MESON_TESTTHREADS=4 meson test --print-errorlogs
