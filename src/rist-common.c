@@ -3027,39 +3027,42 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	peer_remove_linked_list(peer);
 
-	if (!peer->parent && peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
+	if (peer->parent && peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
+		bool found = false;
 		for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
 		{
 			if (peer->flow->peer_lst[i] == peer)
 			{
-				size_t move = sizeof(peer) * (peer->flow->peer_lst_len - i - 1);
-				if (move)
-					memmove(peer->flow->peer_lst[i], peer->flow->peer_lst[i+1], move);
+				peer->flow->peer_lst[i] = peer->flow->peer_lst[(peer->flow->peer_lst_len -1)];
+				found = true;
 				break;
 			}
 		}
-		peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
-		peer->flow->peer_lst_len--;
-		if (peer->flow->peer_lst_len == 0)
-			peer->flow->peer_lst = NULL;
-	}
-	
-	if (peer->sender_ctx) {
-		for (size_t i = 0; i < peer->sender_ctx->peer_lst_len; i++)
+		if (found)
 		{
-			if (peer->sender_ctx->peer_lst[i] == peer)
-			{
-				size_t move = sizeof(peer) * (peer->sender_ctx->peer_lst_len - i - 1);
-				if (move)
-					memmove(peer->sender_ctx->peer_lst[i], peer->sender_ctx->peer_lst[i+1], move);
-				break;
-			}
+			peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
+			peer->flow->peer_lst_len--;
+			if (peer->flow->peer_lst_len == 0)
+				peer->flow->peer_lst = NULL;
 		}
-		peer->sender_ctx->peer_lst = realloc(peer->sender_ctx->peer_lst, sizeof(peer) * (peer->sender_ctx->peer_lst_len -1));
-		peer->sender_ctx->peer_lst_len--;
-		if (peer->sender_ctx->peer_lst_len == 0)
-			peer->sender_ctx->peer_lst = NULL;
 	}
+
+	if (peer->sender_ctx && peer->sender_ctx->peer_lst_len > 0) {
+		bool found = false;
+        for (size_t i = 0; i < peer->sender_ctx->peer_lst_len; i++) {
+            if (peer->sender_ctx->peer_lst[i] == peer) {
+              peer->sender_ctx->peer_lst[i] = peer->sender_ctx->peer_lst[(peer->sender_ctx->peer_lst_len -1)];
+              found = true;
+              break;
+            }
+		}
+		if (found) {
+			peer->sender_ctx->peer_lst = realloc(peer->sender_ctx->peer_lst, sizeof(peer) * (peer->sender_ctx->peer_lst_len -1));
+			peer->sender_ctx->peer_lst_len--;
+			if (peer->sender_ctx->peer_lst_len == 0)
+				peer->sender_ctx->peer_lst = NULL;
+		}
+    }
 
 	
 	/* data receive event */
@@ -3472,6 +3475,9 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 			(unsigned) ctx->peer_lst_len);
 
 	pthread_mutex_lock(&ctx->common.peerlist_lock);	// Destroy all peers
+	while (ctx->peer_lst_len > 0) {
+		rist_peer_remove(&ctx->common, ctx->peer_lst[0], NULL);
+	}
 	struct rist_peer *peer, *next;
 	peer = ctx->common.PEERS;
 	for (;;) {
