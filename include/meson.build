@@ -2,6 +2,7 @@
 librist_git_dir = join_paths(librist_src_root, '.git')
 rev_target = vcs_tag(command: [
         'git', '--git-dir', librist_git_dir,
+		'--work-tree', meson.source_root(),
         'describe', '--tags', '--dirty',
         '--match', 'v?.*', '--always'
     ],
