@@ -570,7 +570,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	size_t idx = seq & (f->receiver_queue_max - 1);
 	size_t reader_idx;
 	bool out_of_order = false;
-	if (RIST_UNLIKELY(packet_time < f->last_packet_ts)) {
+	uint32_t expected_seq = (f->last_seq_found +1) & (UINT16_MAX -1);
+	if (RIST_UNLIKELY(packet_time < f->last_packet_ts && seq != expected_seq)) {
 		size_t highest_written_idx = f->last_seq_found & (f->receiver_queue_max -1);
 		reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
 		/* Either highest written packet is ahead of read idx, and packet should go in between, or
