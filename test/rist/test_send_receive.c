@@ -97,8 +97,15 @@ static PTHREAD_START_FUNC(send_data, arg) {
         sprintf(buffer, "DEADBEAF TEST PACKET #%i", send_counter);
         data.payload = &buffer;
         data.payload_len = 1316;
-        if (rist_sender_data_write(rist_sender, &data) != 0) {
-            fprintf(stderr, "Failed to send test packet!\n");
+        int ret = rist_sender_data_write(rist_sender, &data);
+        if (ret < 0) {
+            fprintf(stderr, "Failed to send test packet with error code %d!\n", ret);
+            atomic_store(&failed, 1);
+            atomic_store(&stop, 1);
+            break;
+        }
+        else if (ret != (int)data.payload_len) {
+            fprintf(stderr, "Failed to send test packet %d != %ld !\n", ret, data.payload_len);
             atomic_store(&failed, 1);
             atomic_store(&stop, 1);
             break;
