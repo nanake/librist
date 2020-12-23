@@ -25,6 +25,7 @@ static inline void rist_log_impl(struct rist_logging_settings *log_settings, enu
 
 	if (log_settings->log_cb) {
 		log_settings->log_cb(log_settings->log_cb_arg, level, msg);
+		free(msg);
 		return;
 	}
 	const char *prefix;
