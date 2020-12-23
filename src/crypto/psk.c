@@ -43,7 +43,7 @@ int _librist_crypto_psk_rist_key_destroy(struct rist_key *key)
 
 int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key *key_out)
 {
-    strcpy(key_in->password, key_out->password);
+    strcpy(key_out->password, key_in->password);
     key_out->key_size = key_in->key_size;
     key_out->key_rotation = key_in->key_rotation;
 #ifdef USE_MBEDTLS
