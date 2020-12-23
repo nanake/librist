@@ -28,7 +28,6 @@ int log_callback(void *arg, int level, const char *msg) {
         atomic_store(&failed, 1);
         atomic_store(&stop, 1);
     }
-	free((void *)msg);
     return 0;
 }
 
