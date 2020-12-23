@@ -462,7 +462,7 @@ int rist_sender_data_write(struct rist_ctx *rist_ctx, const struct rist_data_blo
 	if (ret < 0)
 		return ret;
 	else
-		return data_block->payload_len;
+		return (int)data_block->payload_len;
 }
 
 /* Shared OOB functions -> Tunneled IP packets within GRE */
