@@ -105,7 +105,7 @@ static PTHREAD_START_FUNC(send_data, arg) {
             break;
         }
         else if (ret != (int)data.payload_len) {
-            fprintf(stderr, "Failed to send test packet %d != %ld !\n", ret, data.payload_len);
+            fprintf(stderr, "Failed to send test packet %d != %d !\n", ret, (int)data.payload_len);
             atomic_store(&failed, 1);
             atomic_store(&stop, 1);
             break;
