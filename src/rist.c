@@ -459,7 +459,10 @@ int rist_sender_data_write(struct rist_ctx *rist_ctx, const struct rist_data_blo
 	if (pthread_cond_signal(&ctx->condition))
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
-	return ret;
+	if (ret < 0)
+		return ret;
+	else
+		return data_block->payload_len;
 }
 
 /* Shared OOB functions -> Tunneled IP packets within GRE */
