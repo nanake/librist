@@ -310,6 +310,27 @@ RIST_API int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, in
 RIST_API int rist_stats_free(const struct rist_stats *stats_container);
 
 /**
+ * @brief Free the rist_peer_config structure memory allocation
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_API int rist_peer_config_free(const struct rist_peer_config *peer_config);
+
+/**
+ * @brief Free the rist_logging_settings structure memory allocation
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_API int rist_logging_settings_free(const struct rist_logging_settings *logging_settings);
+
+/**
+ * @brief Free the rist_udp_config structure memory allocation
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_API int rist_udp_config_free(const struct rist_udp_config *udp_config);
+
+/**
  * @brief Get the version of libRIST
  *
  * @return String representing the version of libRIST
@@ -320,7 +341,6 @@ RIST_API const char *librist_version(void);
  * @brief Get the API version of libRIST
  */
 RIST_API const char *librist_api_version(void);
-
 
 #ifdef __cplusplus
 }

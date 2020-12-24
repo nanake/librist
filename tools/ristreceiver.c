@@ -448,7 +448,7 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
-		free((void *)peer_config);
+		rist_peer_config_free(peer_config);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
@@ -554,7 +554,7 @@ next:
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		// Free udp_config object
 		if ((void *)callback_object.udp_config[i])
-			free((void *)(callback_object.udp_config[i]));
+			rist_udp_config_free(callback_object.udp_config[i]);
 	}
 
 	if (inputurl)
@@ -565,7 +565,7 @@ next:
 		free(oobtun);
 	if (shared_secret)
 		free(shared_secret);
-	free(logging_settings);
+	rist_logging_settings_free(logging_settings);
 
 	struct ristreceiver_flow_cumulative_stats *stats, *next;
 	stats = stats_list;

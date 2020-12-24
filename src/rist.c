@@ -569,6 +569,27 @@ int rist_stats_free(const struct rist_stats *stats_container)
 	return 0;
 }
 
+int rist_peer_config_free(const struct rist_peer_config *peer_config)
+{
+	if (peer_config)
+		free((void *)peer_config);
+	return 0;
+}
+
+int rist_logging_settings_free(const struct rist_logging_settings *logging_settings)
+{
+	if (logging_settings)
+		free((void *)logging_settings);
+	return 0;
+}
+
+int rist_udp_config_free(const struct rist_udp_config *udp_config)
+{
+	if (udp_config)
+		free((void *)udp_config);
+	return 0;
+}
+
 int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats_cb)(void *arg, const struct rist_stats *stats_container), void *arg)
 {
 	if (RIST_UNLIKELY(!ctx))
