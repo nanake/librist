@@ -669,6 +669,29 @@ int rist_parse_udp_address(const char *url, const struct rist_udp_config **udp_c
 	return ret;
 }
 
+int rist_peer_config_defaults_set(struct rist_peer_config *peer_config)
+{
+	if (peer_config)
+	{
+		peer_config->version = RIST_PEER_CONFIG_VERSION;
+		peer_config->virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
+		peer_config->recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
+		peer_config->recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
+		peer_config->recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
+		peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
+		peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
+		peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
+		peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
+		peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
+		peer_config->congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE;
+		peer_config->min_retries = RIST_DEFAULT_MIN_RETRIES;
+		peer_config->max_retries = RIST_DEFAULT_MAX_RETRIES;
+		return 0;
+	}
+	else
+		return -1;
+}
+
 int rist_parse_address(const char *url, const struct rist_peer_config **peer_config)
 {
 
@@ -678,19 +701,7 @@ int rist_parse_address(const char *url, const struct rist_peer_config **peer_con
 	{
 		// Default options on new struct (rist url)
 		struct rist_peer_config *output_peer_config = calloc(1, sizeof(struct rist_peer_config));
-		output_peer_config->version = RIST_PEER_CONFIG_VERSION;
-		output_peer_config->virt_dst_port = RIST_DEFAULT_VIRT_DST_PORT;
-		output_peer_config->recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
-		output_peer_config->recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
-		output_peer_config->recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
-		output_peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
-		output_peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
-		output_peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
-		output_peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
-		output_peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
-		output_peer_config->congestion_control_mode = RIST_DEFAULT_CONGESTION_CONTROL_MODE;
-		output_peer_config->min_retries = RIST_DEFAULT_MIN_RETRIES;
-		output_peer_config->max_retries = RIST_DEFAULT_MAX_RETRIES;
+		rist_peer_config_defaults_set(output_peer_config);
 		ret = parse_url_options(url_local, output_peer_config);
 		*peer_config = output_peer_config;
 	}

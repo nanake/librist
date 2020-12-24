@@ -317,6 +317,13 @@ RIST_API int rist_stats_free(const struct rist_stats *stats_container);
 RIST_API int rist_peer_config_free(const struct rist_peer_config *peer_config);
 
 /**
+ * @brief Populate a preallocated peer_config structure with library default values 
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_API int rist_peer_config_defaults_set(struct rist_peer_config *peer_config);
+
+/**
  * @brief Free the rist_logging_settings structure memory allocation
  *
  * @return 0 on success or non-zero on error.
