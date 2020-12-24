@@ -536,7 +536,7 @@ next:
 		// Master loop
 		while (!signalReceived)
 		{
-			const struct rist_data_block *b;
+			const struct rist_data_block *b = NULL;
 			int queue_size = rist_receiver_data_read(ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50) {
