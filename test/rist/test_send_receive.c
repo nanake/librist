@@ -187,6 +187,7 @@ int main(int argc, char *argv[]) {
     while (receive_count < 16000) {
         if (atomic_load(&stop))
             break;
+        b = NULL;
         int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
         if (queue_length > 0) {
             if (!got_first) {
