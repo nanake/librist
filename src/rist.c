@@ -583,24 +583,30 @@ int rist_stats_free(const struct rist_stats *stats_container)
 	return 0;
 }
 
-int rist_peer_config_free(const struct rist_peer_config *peer_config)
+int rist_peer_config_free(const struct rist_peer_config **peer_config)
 {
-	if (peer_config)
-		free((void *)peer_config);
+	if (*peer_config) {
+		free((void *)*peer_config);
+		*peer_config = NULL;
+	}
 	return 0;
 }
 
-int rist_logging_settings_free(const struct rist_logging_settings *logging_settings)
+int rist_logging_settings_free(const struct rist_logging_settings **logging_settings)
 {
-	if (logging_settings)
-		free((void *)logging_settings);
+	if (*logging_settings) {
+		free((void *)*logging_settings);
+		*logging_settings = NULL;
+	}
 	return 0;
 }
 
-int rist_udp_config_free(const struct rist_udp_config *udp_config)
+int rist_udp_config_free(const struct rist_udp_config **udp_config)
 {
-	if (udp_config)
-		free((void *)udp_config);
+	if (*udp_config) {
+		free((void *)*udp_config);
+		*udp_config = NULL;
+	}
 	return 0;
 }
 

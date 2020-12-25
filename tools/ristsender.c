@@ -342,7 +342,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 		rist_log(logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
-	rist_peer_config_free(peer_config_link);
+	rist_peer_config_free(&peer_config_link);
 
 	return peer;
 }
@@ -645,7 +645,7 @@ shutdown:
 			evsocket_delevent(callback_object[i].evctx, event[i]);
 		// Free udp_config object
 		if ((void *)callback_object[i].udp_config)
-			rist_udp_config_free(callback_object[i].udp_config);
+			rist_udp_config_free(&callback_object[i].udp_config);
 		// Cleanup rist listeners
 		if (callback_object[i].receiver_ctx)
 			rist_destroy(callback_object[i].receiver_ctx);
@@ -667,7 +667,7 @@ shutdown:
 		free(oobtun);
 	if (shared_secret)
 		free(shared_secret);
-	rist_logging_settings_free(logging_settings);
+	rist_logging_settings_free((const struct rist_logging_settings **)&logging_settings);
 
 	return 0;
 }
