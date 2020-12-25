@@ -181,21 +181,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 		num = 0;
 	}
 
-	if (*data_buffer == NULL)
-		*data_buffer = data_block;
-	else
-	{
-		struct rist_data_block *data_buffer_out = (struct rist_data_block *)*data_buffer;
-		data_buffer_out->flags = data_block->flags;
-		data_buffer_out->flow_id = data_block->flow_id;
-		data_buffer_out->peer = data_block->peer;
-		data_buffer_out->seq = data_block->seq;
-		data_buffer_out->ts_ntp = data_block->ts_ntp;
-		data_buffer_out->virt_dst_port = data_block->virt_dst_port;
-		data_buffer_out->virt_src_port = data_block->virt_src_port;
-		data_buffer_out->payload_len = data_block->payload_len;
-		memcpy((void *)data_buffer_out->payload, data_block->payload, data_block->payload_len);
-	}
+	*data_buffer = data_block;
 
 	return (int)num;
 }
