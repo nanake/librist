@@ -859,6 +859,13 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 						ctx->receiver_data_callback(ctx->receiver_data_callback_argument,
 								f->dataout_fifo_queue[dataout_fifo_write_index]);
 					}
+					if (ctx->receiver_data_ready_notify_fd) {
+						// send a data ready signal by writing the index
+						if(write(ctx->receiver_data_ready_notify_fd, &dataout_fifo_write_index, sizeof(size_t)) == -1)
+						{
+							// We ignore the error condition as missing data is not harmfull here
+						}
+					}
 					atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
 					f->dataout_fifo_queue_bytesize += b->size;
 					atomic_fetch_add_explicit(&f->dataout_fifo_queue_counter, 1, memory_order_release);

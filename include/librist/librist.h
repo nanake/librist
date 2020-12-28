@@ -65,6 +65,24 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
 	void *arg);
 
 /**
+ * @brief Enable data-ready signaling channel using a file descriptor
+ *
+ * Call to enable a data-ready signaling channel that will deliver a data-ready signal
+ * using an application provided file descriptor.
+ * The data being sent is irrelevant (loop index) and it just indicates that data is
+ * ready to be read. Use the standard rist_receiver_data_read function to retrieve the data.
+ * The reading of the data is not guaranteed to be perfectly aligned in time so
+ * use the timestamp property of the rist_data_block structure if you need precise aligment.
+ * The calling application must create the file handle and pass is to the library. It is
+ * recommended that this data channel be non blocking.
+ * This function can also be used to remove the signal handler by using and fd of 0.
+ * @param ctx RIST receiver context
+ * @param file_handle The file descriptor to be written to
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_receiver_data_notify_fd_set(struct rist_ctx *ctx, int fd);
+
+/**
  * @brief Helper function used to create valid random 32 bit flow_id.
  *
  * Use this function when you want to generate a valid random flow_id.

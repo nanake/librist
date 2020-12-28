@@ -194,6 +194,23 @@ uint32_t rist_flow_id_create()
 	return u32;
 }
 
+int rist_receiver_data_notify_fd_set(struct rist_ctx *rist_ctx, int fd)
+{
+	if (RIST_UNLIKELY(!rist_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "ctx is null on rist_receiver_data_notify_fd_set call!\n");
+		return -1;
+	}
+	if (RIST_UNLIKELY(rist_ctx->mode != RIST_RECEIVER_MODE || !rist_ctx->receiver_ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_notify_fd_set call with CTX not set up for receiving\n");
+		return -1;
+	}
+	struct rist_receiver *ctx = rist_ctx->receiver_ctx;
+	ctx->receiver_data_ready_notify_fd = fd;
+	return 0;
+}
+
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
 									int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 									void *arg)

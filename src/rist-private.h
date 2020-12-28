@@ -339,6 +339,7 @@ struct rist_receiver {
 	/* Receiver data callback */
 	int (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
 	void *receiver_data_callback_argument;
+	int receiver_data_ready_notify_fd;
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;
