@@ -32,6 +32,11 @@
 
 #define MAX_INPUT_COUNT 10
 #define MAX_OUTPUT_COUNT 10
+#define ReadEnd  0
+#define WriteEnd 1
+#define DATA_READ_MODE_CALLBACK 0
+#define DATA_READ_MODE_POLL 1
+#define DATA_READ_MODE_API 2
 
 static int signalReceived = 0;
 static struct rist_logging_settings *logging_settings;
@@ -253,7 +258,7 @@ int main(int argc, char *argv[])
 {
 	int option_index;
 	int c;
-	int enable_data_callback = 1;
+	int data_read_mode = DATA_READ_MODE_CALLBACK;
 	const struct rist_peer_config *peer_input_config[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;
@@ -265,6 +270,8 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 	char *remote_log_address = NULL;
+	/* Receiver pipe handle */
+	int receiver_pipe[2];
 
 #ifdef USE_MBEDTLS
 	FILE *srpfile = NULL;
@@ -501,12 +508,34 @@ next:
 	}
 
 	// callback is best unless you are using the timestamps passed with the buffer
-	enable_data_callback = 1;
+	data_read_mode = DATA_READ_MODE_CALLBACK;
 
-	if (enable_data_callback == 1) {
+	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer\n");
+			exit(1);
+		}
+	}
+	else if (data_read_mode == DATA_READ_MODE_POLL) {
+		if (pipe(receiver_pipe))
+		{
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create pipe for file descriptor channel\n");
+			exit(1);
+		}
+		if (fcntl(receiver_pipe[WriteEnd], F_SETFL, O_NONBLOCK) < 0)
+		{
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
+ 			exit(1);
+ 		}
+		if (fcntl(receiver_pipe[ReadEnd], F_SETFL, O_NONBLOCK) < 0)
+		{
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
+ 			exit(1);
+ 		}
+		if (rist_receiver_data_notify_fd_set(ctx, receiver_pipe[WriteEnd]))
+		{
+			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set file descriptor channel\n");
 			exit(1);
 		}
 	}
@@ -516,12 +545,56 @@ next:
 		exit(1);
 	}
 	/* Start the rist protocol thread */
-	if (enable_data_callback == 1) {
+	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 #ifdef _WIN32
 		system("pause");
 #else
 		pause();
 #endif
+	}
+	else if (data_read_mode == DATA_READ_MODE_POLL) {
+		fd_set readfds;
+		struct timeval timeout;
+		timeout.tv_sec = 1;
+		timeout.tv_usec = 0;
+		while (!signalReceived) {
+			FD_ZERO(&readfds);
+			FD_SET(receiver_pipe[ReadEnd], &readfds);
+			int ret = select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
+			if (ret == -1 && errno != EINTR) {
+				fprintf(stderr, "Pipe read error %d, exiting\n", errno);
+				break;
+			}
+			else if (ret == 0) {
+				// Normal timeout (loop and wait)
+				continue;
+			}
+			/* Consume bytes from pipe (irrelevant index data) */
+			for (;;) {
+				size_t index = 0;
+				if (read(receiver_pipe[ReadEnd], &index, sizeof(size_t)) <= 0) {
+					if (errno != EAGAIN)
+						fprintf(stderr, "Error reading data from pipe: %d\n", errno);
+					break;
+				}
+			}
+			/* Consume data from library */
+			const struct rist_data_block *b = NULL;
+			int queue_size = 0;
+			for (;;) {
+				queue_size = rist_receiver_data_read(ctx, &b, 0);
+				if (queue_size > 0) {
+					if (queue_size % 10 == 0 || queue_size > 50) {
+						// We need a better way to report on this
+						uint32_t flow_id = b ? b->flow_id : 0;
+						rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
+					}
+					if (b && b->payload) cb_recv(&callback_object, b);
+				}
+				else
+					break;
+			}
+		}
 	}
 	else {
 #ifndef _WIN32
