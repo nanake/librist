@@ -84,7 +84,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 			usleep(5000);
 			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
 			{
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Data out exit loop took more than 10 seconds to exit. Something is wrong!\n");
 				assert(0);
 			}
 		}

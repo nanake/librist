@@ -270,8 +270,10 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 	char *remote_log_address = NULL;
+#ifndef _WIN32
 	/* Receiver pipe handle */
 	int receiver_pipe[2];
+#endif
 
 #ifdef USE_MBEDTLS
 	FILE *srpfile = NULL;
@@ -517,6 +519,7 @@ next:
 			exit(1);
 		}
 	}
+#ifndef _WIN32
 	else if (data_read_mode == DATA_READ_MODE_POLL) {
 		if (pipe(receiver_pipe))
 		{
@@ -539,6 +542,7 @@ next:
 			exit(1);
 		}
 	}
+#endif
 
 	if (rist_start(ctx)) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
@@ -552,6 +556,7 @@ next:
 		pause();
 #endif
 	}
+#ifndef _WIN32
 	else if (data_read_mode == DATA_READ_MODE_POLL) {
 		fd_set readfds;
 		struct timeval timeout;
@@ -596,6 +601,7 @@ next:
 			}
 		}
 	}
+#endif
 	else {
 #ifndef _WIN32
 		int prio_max = sched_get_priority_max(SCHED_RR);
