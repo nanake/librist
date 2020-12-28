@@ -7,6 +7,7 @@
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
+#include <assert.h>
 
 void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt)
 {
@@ -77,9 +78,15 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	f->shutdown = 1;
 	if (f->receiver_thread)
 	{
+		uint64_t start_time = timestampNTP_u64();
 		while (f->shutdown != 2) {
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
 			usleep(5000);
+			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
+			{
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
+				assert(0);
+			}
 		}
 	}
 	struct rist_peer *p = NULL;

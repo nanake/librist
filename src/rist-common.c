@@ -863,7 +863,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 						// send a data ready signal by writing the index
 						if(write(ctx->receiver_data_ready_notify_fd, &dataout_fifo_write_index, sizeof(size_t)) == -1)
 						{
-							// We ignore the error condition as missing data is not harmfull here
+							// We ignore the error condition as missing data is not harmful here
+							// It is only a signaling mechanism
 						}
 					}
 					atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
