@@ -861,7 +861,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					}
 					if (ctx->receiver_data_ready_notify_fd) {
 						// send a data ready signal by writing a single byte of value 0
-						if(write(ctx->receiver_data_ready_notify_fd, '\0', 1) == -1)
+						char empty = '\0';
+						if(write(ctx->receiver_data_ready_notify_fd, &empty, 1) == -1)
 						{
 							// We ignore the error condition as missing data is not harmful here
 							// It is only a signaling mechanism
