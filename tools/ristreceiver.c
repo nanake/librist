@@ -556,53 +556,7 @@ next:
 		pause();
 #endif
 	}
-#ifndef _WIN32
-	else if (data_read_mode == DATA_READ_MODE_POLL) {
-		fd_set readfds;
-		struct timeval timeout;
-		timeout.tv_sec = 1;
-		timeout.tv_usec = 0;
-		while (!signalReceived) {
-			FD_ZERO(&readfds);
-			FD_SET(receiver_pipe[ReadEnd], &readfds);
-			int ret = select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
-			if (ret == -1 && errno != EINTR) {
-				fprintf(stderr, "Pipe read error %d, exiting\n", errno);
-				break;
-			}
-			else if (ret == 0) {
-				// Normal timeout (loop and wait)
-				continue;
-			}
-			/* Consume bytes from pipe (irrelevant index data) */
-			for (;;) {
-				size_t index = 0;
-				if (read(receiver_pipe[ReadEnd], &index, sizeof(size_t)) <= 0) {
-					if (errno != EAGAIN)
-						fprintf(stderr, "Error reading data from pipe: %d\n", errno);
-					break;
-				}
-			}
-			/* Consume data from library */
-			const struct rist_data_block *b = NULL;
-			int queue_size = 0;
-			for (;;) {
-				queue_size = rist_receiver_data_read(ctx, &b, 0);
-				if (queue_size > 0) {
-					if (queue_size % 10 == 0 || queue_size > 50) {
-						// We need a better way to report on this
-						uint32_t flow_id = b ? b->flow_id : 0;
-						rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
-					}
-					if (b && b->payload) cb_recv(&callback_object, b);
-				}
-				else
-					break;
-			}
-		}
-	}
-#endif
-	else {
+	else if (data_read_mode == DATA_READ_MODE_API) {
 #ifndef _WIN32
 		int prio_max = sched_get_priority_max(SCHED_RR);
 		struct sched_param param = { 0 };
@@ -627,6 +581,52 @@ next:
 			}
 		}
 	}
+#ifndef _WIN32
+	else if (data_read_mode == DATA_READ_MODE_POLL) {
+		char pipebuffer[256];
+		fd_set readfds;
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 5000;
+		while (!signalReceived) {
+			FD_ZERO(&readfds);
+			FD_SET(receiver_pipe[ReadEnd], &readfds);
+			int ret = select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
+			if (ret == -1 && errno != EINTR) {
+				fprintf(stderr, "Pipe read error %d, exiting\n", errno);
+				break;
+			}
+			else if (ret == 0) {
+				// Normal timeout (loop and wait)
+				continue;
+			}
+			/* Consume bytes from pipe (irrelevant data) */
+			for (;;) {
+				if (read(receiver_pipe[ReadEnd], &pipebuffer, sizeof(pipebuffer)) <= 0) {
+					if (errno != EAGAIN)
+						fprintf(stderr, "Error reading data from pipe: %d\n", errno);
+					break;
+				}
+			}
+			/* Consume data from library */
+			const struct rist_data_block *b = NULL;
+			int queue_size = 0;
+			for (;;) {
+				queue_size = rist_receiver_data_read(ctx, &b, 0);
+				if (queue_size > 0) {
+					if (queue_size % 10 == 0 || queue_size > 50) {
+						// We need a better way to report on this
+						uint32_t flow_id = b ? b->flow_id : 0;
+						rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
+					}
+					if (b && b->payload) cb_recv(&callback_object, b);
+				}
+				else
+					break;
+			}
+		}
+	}
+#endif
 
 	rist_destroy(ctx);
 

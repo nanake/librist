@@ -860,8 +860,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 								f->dataout_fifo_queue[dataout_fifo_write_index]);
 					}
 					if (ctx->receiver_data_ready_notify_fd) {
-						// send a data ready signal by writing the index
-						if(write(ctx->receiver_data_ready_notify_fd, &dataout_fifo_write_index, sizeof(size_t)) == -1)
+						// send a data ready signal by writing a single byte of value 0
+						if(write(ctx->receiver_data_ready_notify_fd, '\0', 1) == -1)
 						{
 							// We ignore the error condition as missing data is not harmful here
 							// It is only a signaling mechanism

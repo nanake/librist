@@ -65,17 +65,17 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
 	void *arg);
 
 /**
- * @brief Enable data-ready signaling channel using a file descriptor
+ * @brief Set data ready signalling fd
  *
- * Call to enable a data-ready signaling channel that will deliver a data-ready signal
- * using an application provided file descriptor.
- * The data being sent is irrelevant (loop index) and it just indicates that data is
- * ready to be read. Use the standard rist_receiver_data_read function to retrieve the data.
- * The reading of the data is not guaranteed to be perfectly aligned in time so
- * use the timestamp property of the rist_data_block structure if you need precise aligment.
- * The calling application must create the file handle and pass is to the library. It is
- * recommended that this data channel be non blocking.
- * This function can also be used to remove the signal handler by using and fd of 0.
+ * Calling applications can provide an fd that will be written to whenever a packet
+ * is ready for reading via FIFO read function (rist_receiver_data_read).
+ * This allows calling applications to poll an fd (i.e.: in event loops).
+ * Whenever a packet is ready for reading, a byte (with undefined value) will 
+ * be written to the FD. Calling application should make no assumptions 
+ * whatsoever based on the number of bytes available for reading.
+ * It is highly recommended that the fd is setup to operate in non blocking mode.
+ * A call with a 0 value fd disables the notify fd functionality. And must be 
+ * made before a calling application closes the fd.
  * @param ctx RIST receiver context
  * @param file_handle The file descriptor to be written to
  * @return 0 on success, -1 on error
