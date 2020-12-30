@@ -97,14 +97,14 @@ int udpsocket_set_optimal_buffer_size(int sd)
 int udpsocket_set_optimal_buffer_send_size(int sd)
 {
 	uint32_t bufsize = UDPSOCKET_SOCK_BUFSIZE;
-	uint32_t current_sendbuf = udpsocket_get_buffer_size(sd);
+	uint32_t current_sendbuf = udpsocket_get_buffer_send_size(sd);
 	if (current_sendbuf < bufsize){
 		setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(uint32_t));
-		current_sendbuf = udpsocket_get_buffer_size(sd);
+		current_sendbuf = udpsocket_get_buffer_send_size(sd);
 #if defined(SO_SNDBUFFORCE)
 		if (current_sendbuf < bufsize){
 			setsockopt(sd, SOL_SOCKET, SO_SNDBUFFORCE, (char *)&bufsize, sizeof(uint32_t));
-			current_sendbuf = udpsocket_get_buffer_size(sd);
+			current_sendbuf = udpsocket_get_buffer_send_size(sd);
 		}
 #endif
 	}
@@ -112,11 +112,11 @@ int udpsocket_set_optimal_buffer_send_size(int sd)
 		// Settle for a smaller size
 		bufsize = UDPSOCKET_SOCK_BUFSIZE/5;
 		setsockopt(sd, SOL_SOCKET, SO_SNDBUF, (char *)&bufsize, sizeof(uint32_t));
-		current_sendbuf = udpsocket_get_buffer_size(sd);
+		current_sendbuf = udpsocket_get_buffer_send_size(sd);
 #if defined(SO_SNDBUFFORCE)
 		if (current_sendbuf < bufsize){
 			setsockopt(sd, SOL_SOCKET, SO_SNDBUFFORCE, (char *)&bufsize, sizeof(uint32_t));
-			current_sendbuf = udpsocket_get_buffer_size(sd);
+			current_sendbuf = udpsocket_get_buffer_send_size(sd);
 		}
 #endif
 	}
