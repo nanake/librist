@@ -1167,49 +1167,36 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 		} else {
 			// Multiple peers, we need to search for other retries in the queue for comparison
 			uint64_t delta = 0;
-			size_t index = ctx->sender_retry_queue_write_index;
-			size_t index_end = ctx->sender_retry_queue_read_index;
-			uint64_t rist_max_jitter_ticks = (uint64_t)ctx->common.rist_max_jitter;
-			while (index != index_end) {
-				if ((index % 10) == 0) {
-					// We will completely bypass this check if/when it takes too long as we are
-					// blocking the protocol thread (it could happen when the queue gets too big)
-					uint64_t loop_time = timestampNTP_u64() - now;
-					if (loop_time > rist_max_jitter_ticks) {
-						size_t retry_queue_size = rist_get_sender_retry_queue_size(ctx);
-						rist_log_priv(&ctx->common, RIST_LOG_WARN,
-							"Bypassing duplicate nack request check for seq %"PRIu32" after %"PRIu64"us, age %"PRIu64"ms, q_size = %zu (taking too long)\n",
-							buffer->seq, 1000 * loop_time / RIST_CLOCK, age_ticks / RIST_CLOCK, retry_queue_size);
-						break;
-					}
+			size_t index = 0;
+			//We work backwards from the write index till we either find a retry with same peer & seq
+			//or it's too old to matter (older than 1 RTT ago)
+			index = (ctx->sender_retry_queue_write_index -1) & (ctx->sender_retry_queue_size -1);
+			uint64_t rtt = peer->last_mrtt;
+			if (peer->config.recovery_length_min > rtt)
+				rtt = peer->config.recovery_length_min;
+			// Agressive congestion control only allows every two RTTs
+			if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
+				rtt *= 2;
+			struct rist_retry *lookup = NULL;
+			while (index != ctx->sender_retry_queue_write_index) {
+				lookup = &ctx->sender_retry_queue[index];
+				if (lookup->seq == seq && lookup->peer == peer)
+					break;
+				if (lookup->insert_time < (now - rtt))
+					break;
+				index = (index -1 ) & (ctx->sender_retry_queue_size -1);
+			}
+			retry = &ctx->sender_retry_queue[index];
+			if (retry->seq == seq && retry->peer == peer) {
+				delta = (now - retry->insert_time) / RIST_CLOCK;
+				if (delta < rtt)
+				{
+					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
+						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
+						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+					peer->stats_sender_instant.bloat_skip++;
+					return;
 				}
-				retry = &ctx->sender_retry_queue[index];
-				if (retry->seq == seq && retry->peer == peer) {
-					delta = (now - retry->insert_time) / RIST_CLOCK;
-					uint64_t rtt = peer->last_mrtt;
-					if (peer->config.recovery_rtt_min > rtt)
-						rtt = peer->config.recovery_rtt_min;
-					if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
-						// Agressive congestion control only allows every two RTTs
-						rtt = rtt * 2;
-					}
-					if (delta < rtt)
-					{
-						rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-							"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
-							buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
-						peer->stats_sender_instant.bloat_skip++;
-						return;
-					}
-					else
-					{
-						// We found the peer and the delta is good, exit the search loop
-						break;
-					}
-				}
-				if (index == 0)
-					index = ctx->sender_retry_queue_size;
-				index--;
 			}
 			if (ctx->common.debug) {
 				if (delta) {
