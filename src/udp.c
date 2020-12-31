@@ -291,7 +291,6 @@ out:
 	if (RIST_UNLIKELY(ret <= 0)) {
 		rist_log_priv(ctx, RIST_LOG_ERROR, "\tSend failed: errno=%d, ret=%d, socket=%d\n", errno, ret, p->sd);
 	} else {
-		rist_calculate_bitrate(len, &p->bw);
 		p->stats_sender_instant.sent++;
 		p->stats_receiver_instant.sent_rtcp++;
 	}
@@ -337,6 +336,11 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 					ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
 					p->local_port, seq_gre, payload_len);
 		}
+	}
+	else
+	{
+		// update bandwidth value
+		rist_calculate_bitrate(ret, &p->bw);
 	}
 
 	// TODO:
@@ -1029,18 +1033,24 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	// update bandwidth values
 	rist_calculate_bitrate(0, cli_bw);
 	rist_calculate_bitrate(0, retry_bw);
+	// Make sure we do not flood the network with retries
+	size_t current_bitrate = 0;
+	size_t data_bitrate = 0;
+	size_t retry_bitrate = 0;
+	if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
+	{
+		data_bitrate = cli_bw->eight_times_bitrate_fast / 8;
+		retry_bitrate = retry_bw->eight_times_bitrate_fast / 8;
+	} else {
+		data_bitrate = cli_bw->eight_times_bitrate / 8;
+		retry_bitrate = retry_bw->eight_times_bitrate / 8;
+	}
+	current_bitrate =  data_bitrate + retry_bitrate;
 	if (retry->peer->config.congestion_control_mode >= RIST_CONGESTION_CONTROL_MODE_NORMAL) {
-		// Make sure we do not flood the network with retries
-		size_t current_bitrate = 0;
-		// Last measurement (100ms) vs weighted average
-		if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
-			current_bitrate = cli_bw->eight_times_bitrate_fast / 8 + retry_bw->eight_times_bitrate_fast / 8;
-		else
-			current_bitrate = cli_bw->eight_times_bitrate / 8 + retry_bw->eight_times_bitrate / 8;
 		size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
 		if (current_bitrate > max_bitrate) {
-			rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
-				cli_bw->bitrate, retry_bw->bitrate, max_bitrate, idx);
+			rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %zu, not resending packet %"PRIu64".\n",
+				data_bitrate, retry_bitrate, max_bitrate, idx);
 			retry->peer->stats_sender_instant.retrans_skip++;
 			return -1;
 		}
@@ -1064,8 +1074,8 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Resending %"PRIu32"/%"PRIu32"/%"PRIu16" (idx %zu) after %" PRIu64
 			"ms of first transmission and %"PRIu64"ms in queue, bitrate is %zu + %zu, %zu\n",
-			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, cli_bw->eight_times_bitrate_fast / 8,
-			retry_bw->eight_times_bitrate_fast / 8, cli_bw->eight_times_bitrate_fast / 8 + retry_bw->eight_times_bitrate_fast / 8);
+			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, data_bitrate,
+			retry_bitrate, current_bitrate);
 
 	uint8_t *payload = buffer->data;
 
@@ -1163,7 +1173,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				if (delta < rtt)
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-						"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu32 " ms\n",
+						"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu64 " ms\n",
 						buffer->seq, age_ticks / RIST_CLOCK, delta, rtt);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
