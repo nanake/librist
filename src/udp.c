@@ -773,6 +773,8 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 
 	rist_rtcp_write_sr(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
+	if (peer->echo_enabled)
+		rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 	return;
