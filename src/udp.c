@@ -291,7 +291,7 @@ out:
 	if (RIST_UNLIKELY(ret <= 0)) {
 		rist_log_priv(ctx, RIST_LOG_ERROR, "\tSend failed: errno=%d, ret=%d, socket=%d\n", errno, ret, p->sd);
 	} else {
-		rist_calculate_bitrate_sender(len, &p->bw);
+		rist_calculate_bitrate(len, &p->bw);
 		p->stats_sender_instant.sent++;
 		p->stats_receiver_instant.sent_rtcp++;
 	}
@@ -1024,20 +1024,29 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	// TODO: re-enable rist_send_data_allowed (cooldown feature)
 
-	// Make sure we do not flood the network with retries
 	struct rist_bandwidth_estimation *retry_bw = &retry->peer->retry_bw;
 	struct rist_bandwidth_estimation *cli_bw = &retry->peer->bw;
-	size_t current_bitrate = cli_bw->bitrate + retry_bw->bitrate;
-	size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
-
-	if (current_bitrate > max_bitrate) {
-		rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
-			cli_bw->bitrate, retry_bw->bitrate, max_bitrate, idx);
-		retry->peer->stats_sender_instant.retrans_skip++;
-		return -1;
+	// update bandwidth values
+	rist_calculate_bitrate(0, cli_bw);
+	rist_calculate_bitrate(0, retry_bw);
+	if (retry->peer->config.congestion_control_mode >= RIST_CONGESTION_CONTROL_MODE_NORMAL) {
+		// Make sure we do not flood the network with retries
+		size_t current_bitrate = 0;
+		// Last measurement (100ms) vs weighted average
+		if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
+			current_bitrate = cli_bw->eight_times_bitrate_fast / 8 + retry_bw->eight_times_bitrate_fast / 8;
+		else
+			current_bitrate = cli_bw->eight_times_bitrate / 8 + retry_bw->eight_times_bitrate / 8;
+		size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
+		if (current_bitrate > max_bitrate) {
+			rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %d, not resending packet %"PRIu64".\n",
+				cli_bw->bitrate, retry_bw->bitrate, max_bitrate, idx);
+			retry->peer->stats_sender_instant.retrans_skip++;
+			return -1;
+		}
 	}
 
-	// For timing debugging
+	// Check buffer element age
 	uint64_t now = timestampNTP_u64();
 	uint64_t data_age = (now - ctx->sender_queue[idx]->time) / RIST_CLOCK;
 	uint64_t retry_age = (now - retry->insert_time) / RIST_CLOCK;
@@ -1055,13 +1064,14 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Resending %"PRIu32"/%"PRIu32"/%"PRIu16" (idx %zu) after %" PRIu64
 			"ms of first transmission and %"PRIu64"ms in queue, bitrate is %zu + %zu, %zu\n",
-			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, retry->peer->bw.bitrate,
-			retry_bw->bitrate, retry->peer->bw.bitrate + retry_bw->bitrate);
+			retry->seq, buffer->seq, buffer->seq_rtp, idx, data_age, retry_age, cli_bw->eight_times_bitrate_fast / 8,
+			retry_bw->eight_times_bitrate_fast / 8, cli_bw->eight_times_bitrate_fast / 8 + retry_bw->eight_times_bitrate_fast / 8);
 
 	uint8_t *payload = buffer->data;
 
 	// TODO: I do not think this check is needed anymore ... we fixed the bug that was causing
 	// this scenario ... and we have thread-locking to prevent this
+	/*
 	if (!payload)
 	{
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
@@ -1070,6 +1080,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			retry->seq, idx, data_age, retry_age, retry->peer->bw.bitrate, retry_bw->bitrate,
 			retry->peer->bw.bitrate + retry_bw->bitrate);
 	}
+	*/
 
 	buffer->transmit_count++;
 	size_t ret = 0;
@@ -1083,10 +1094,10 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		if (src_port == 0)
 			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
 		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port);
+		// update bandwidth value
+		rist_calculate_bitrate(ret, retry_bw);
 	}
 
-	// update bandwidh value
-	rist_calculate_bitrate_sender(ret, retry_bw);
 	if (ret < buffer->size) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, buffer->seq);
@@ -1153,7 +1164,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu32 " ms\n",
-						buffer->seq, age_ticks / RIST_CLOCK, delta, peer->config.recovery_rtt_min);
+						buffer->seq, age_ticks / RIST_CLOCK, delta, rtt);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
@@ -1167,10 +1178,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 		} else {
 			// Multiple peers, we need to search for other retries in the queue for comparison
 			uint64_t delta = 0;
-			size_t index = 0;
 			//We work backwards from the write index till we either find a retry with same peer & seq
 			//or it's too old to matter (older than 1 RTT ago)
-			index = (ctx->sender_retry_queue_write_index -1) & (ctx->sender_retry_queue_size -1);
+			size_t index = (ctx->sender_retry_queue_write_index -1) & (ctx->sender_retry_queue_size -1);
 			uint64_t rtt = peer->last_mrtt;
 			if (peer->config.recovery_length_min > rtt)
 				rtt = peer->config.recovery_length_min;
@@ -1199,15 +1209,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				}
 			}
 			if (ctx->common.debug) {
-				if (delta) {
-					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) and rtt_min %" PRIu32 " for peer #%d '%s'\n",
-						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
-				} else {
-					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-						"First nack request for seq %"PRIu32", age %"PRIu64"ms, peer #%d '%s'\n",
-						buffer->seq, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
-				}
+				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
+					"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) and rtt_min %" PRIu32 " for peer #%d '%s'\n",
+					buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
 			}
 		}
 	}

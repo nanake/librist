@@ -1262,47 +1262,70 @@ void rist_peer_authenticate(struct rist_peer *peer)
 			"Successfully Authenticated peer %"PRIu32"\n", peer->adv_peer_id);
 }
 
-static void rist_calculate_bitrate2(struct rist_bandwidth_estimation *bw, size_t len)
+void rist_calculate_bitrate(size_t len, struct rist_bandwidth_estimation *bw)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	uint64_t now = tv.tv_sec * 1000000;
 	now += tv.tv_usec;
 	uint64_t time = now - bw->last_bitrate_calctime;
+	uint64_t time_fast = now - bw->last_bitrate_calctime_fast;
 
 	if (!bw->last_bitrate_calctime) {
 		bw->last_bitrate_calctime = now;
+		bw->last_bitrate_calctime_fast = now;
 		bw->eight_times_bitrate = 0;
+		bw->eight_times_bitrate_fast = 0;
 		bw->bytes = 0;
+		bw->bytes_fast = 0;
+		bw->bitrate = 0;
+		bw->bitrate_fast = 0;
 		return;
 	}
+
+	if (time_fast < 100000 /* 100 ms */) {
+		bw->bytes_fast += len;
+	}
+	else {
+		bw->bytes_fast += len;
+		bw->bitrate_fast = (size_t)((8 * bw->bytes_fast * 1000000) / time_fast);
+		bw->eight_times_bitrate_fast += bw->bitrate_fast - bw->eight_times_bitrate_fast / 8;
+		bw->last_bitrate_calctime_fast = now;
+		bw->bytes_fast = 0;
+	}
+
 	if (time < 1000000 /* 1 second */) {
 		bw->bytes += len;
 		return;
 	}
-
-	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
-	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
-	bw->last_bitrate_calctime = now;
-
-	bw->bytes = 0;
+	else {
+		bw->bytes += len;
+		bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
+		bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
+		bw->last_bitrate_calctime = now;
+		bw->bytes = 0;
+	}
 }
 
-static void rist_calculate_bitrate(struct rist_flow *flow, size_t len, struct rist_bandwidth_estimation *bw)
+static void rist_calculate_flow_bitrate(struct rist_flow *flow, size_t len, struct rist_bandwidth_estimation *bw)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
 	uint64_t now = tv.tv_sec * 1000000;
 	now += tv.tv_usec;
 	uint64_t time = now - bw->last_bitrate_calctime;
+	uint64_t time_fast = now - bw->last_bitrate_calctime_fast;
 
 	if (!bw->last_bitrate_calctime) {
 		bw->last_bitrate_calctime = now;
 		bw->eight_times_bitrate = 0;
+		bw->bitrate = 0;
 		bw->bytes = 0;
+		bw->eight_times_bitrate_fast = 0;
+		bw->bitrate_fast = 0;
+		bw->bytes_fast = 0;
 		return;
 	}
-
 
 	if (flow->last_ipstats_time == 0ULL) {
 		// Initial values
@@ -1325,42 +1348,27 @@ static void rist_calculate_bitrate(struct rist_flow *flow, size_t len, struct ri
 	}
 	flow->last_ipstats_time = now;
 
+
+	if (time_fast < 100000 /* 100 ms */) {
+		bw->bytes_fast += len;
+	}
+	else {
+		bw->bitrate_fast = (size_t)((8 * bw->bytes_fast * 1000000) / time_fast);
+		bw->eight_times_bitrate_fast += bw->bitrate_fast - bw->eight_times_bitrate_fast / 8;
+		bw->last_bitrate_calctime_fast = now;
+		bw->bytes_fast = 0;
+	}
+
 	if (time < 1000000 /* 1 second */) {
 		bw->bytes += len;
 		return;
 	}
-
-	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
-	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
-	bw->last_bitrate_calctime = now;
-
-	bw->bytes = 0;
-}
-
-void rist_calculate_bitrate_sender(size_t len, struct rist_bandwidth_estimation *bw)
-{
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	uint64_t now = tv.tv_sec * 1000000;
-	now += tv.tv_usec;
-	uint64_t time = now - bw->last_bitrate_calctime;
-
-	if (bw->last_bitrate_calctime == 0) {
+	else {
+		bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
+		bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
 		bw->last_bitrate_calctime = now;
-		bw->bitrate = 0;
 		bw->bytes = 0;
-		return;
 	}
-
-	if (time < 1000000 /* 1000 miliseconds */) {
-		bw->bytes += len;
-		return;
-	}
-
-	bw->bitrate = (size_t)((8 * bw->bytes * 1000000) / time);
-	bw->eight_times_bitrate += bw->bitrate - bw->eight_times_bitrate / 8;
-	bw->last_bitrate_calctime = now;
-	bw->bytes = 0;
 }
 
 static void rist_sender_recv_nack(struct rist_peer *peer,
@@ -1714,7 +1722,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 
 	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
-		rist_calculate_bitrate(peer->flow, payload->size, &peer->flow->bw); // update bitrate only if not a dupe
+		rist_calculate_flow_bitrate(peer->flow, payload->size, &peer->flow->bw); // update bitrate only if not a dupe
 	}
 }
 
@@ -2414,7 +2422,7 @@ protocol_bypass:
 							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 									"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 						else {
-							rist_calculate_bitrate2(&p->bw, (recv_bufsize - gre_size - sizeof(*proto_hdr)));//use the unexpanded size to show real BW
+							rist_calculate_bitrate((recv_bufsize - gre_size - sizeof(*proto_hdr)), &p->bw);//use the unexpanded size to show real BW
 							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
 						}
 						break;
