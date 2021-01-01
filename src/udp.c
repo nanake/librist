@@ -1139,8 +1139,13 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	// This is a safety check to protect against buggy or non compliant receivers that request the
 	// same seq number without waiting one RTT.
 
-	if (!buffer)
-	{
+	if (peer->config.recovery_mode == RIST_RECOVERY_MODE_DISABLED) {
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
+			"Nack request for seq %"PRIu32" but nack processing is disabled for this peer\n", seq);
+			peer->stats_sender_instant.retrans_skip++;
+		return;
+	}
+	else if (!buffer) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Nack request for seq %"PRIu32" but we do not have it in the buffer (%zu ms)\n", seq,
 			ctx->sender_recover_min_time);

@@ -257,27 +257,11 @@ static void init_peer_settings(struct rist_peer *peer)
 		// Initial value for some variables
 		peer->recovery_buffer_ticks =
 			(peer->config.recovery_length_max - peer->config.recovery_length_min) / 2 + peer->config.recovery_length_min;
-
-		if (peer->config.recovery_mode == RIST_RECOVERY_MODE_TIME)
-			peer->recovery_buffer_ticks = peer->recovery_buffer_ticks * RIST_CLOCK;
-
-		switch (peer->config.recovery_mode) {
-			case RIST_RECOVERY_MODE_BYTES:
-				peer->missing_counter_max = (uint32_t)(peer->recovery_buffer_ticks /
-					(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t)));
-				break;
-			case RIST_RECOVERY_MODE_TIME:
-				peer->missing_counter_max =
-					(uint32_t)(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
-					(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
-				peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
-				break;
-			case RIST_RECOVERY_MODE_DISABLED:
-			case RIST_RECOVERY_MODE_UNCONFIGURED:
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-						"Sender sent wrong recovery setting.\n");
-				break;
-		}
+		peer->recovery_buffer_ticks = peer->recovery_buffer_ticks * RIST_CLOCK;
+		peer->missing_counter_max =
+			(uint32_t)(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
+			(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
+		peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 				"New peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
@@ -973,7 +957,14 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 		int remove_from_queue_reason = 0;
 		struct rist_peer *peer = mb->peer;
 		ssize_t idx = mb->seq& (f->receiver_queue_max -1);
-		if (f->receiver_queue[idx]) {
+		if (peer->config.recovery_mode == RIST_RECOVERY_MODE_DISABLED) {
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+					"Nack processing is disabled for this peer, removing seq %"PRIu32" from queue ...\n",
+					mb->seq);
+			remove_from_queue_reason = 10;
+			f->stats_instant.missing--;
+			goto nack_loop_continue;
+		} else if (f->receiver_queue[idx]) {
 			if (f->receiver_queue[idx]->seq == mb->seq) {
 				// We filled in the hole already ... packet has been recovered
 				remove_from_queue_reason = 3;
