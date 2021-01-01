@@ -43,7 +43,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	if (peer->stats_sender_instant.sent > 0)
 	{
 		Q = (double)((peer->stats_sender_instant.sent) * 100.0) /
-			(double)(peer->stats_sender_instant.sent + peer->stats_sender_instant.bloat_skip + peer->stats_sender_instant.retrans_skip + peer->stats_sender_instant.retrans);
+			(double)(peer->stats_sender_instant.sent + peer->stats_sender_instant.bloat_skip + peer->stats_sender_instant.bandwidth_skip + peer->stats_sender_instant.retrans_skip + peer->stats_sender_instant.retrans);
 		Q = round_two_digits(Q);
 	}
 
@@ -73,6 +73,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON_AddNumberToObject(json_stats, "retransmitted", (double)peer->stats_sender_instant.retrans);
 	cJSON_AddNumberToObject(json_stats, "bandwidth", (double)bitrate);
 	cJSON_AddNumberToObject(json_stats, "retry_bandwidth", (double)retry_bitrate);
+	cJSON_AddNumberToObject(json_stats, "bandwidth_skipped", (double)peer->stats_sender_instant.bandwidth_skip);
 	cJSON_AddNumberToObject(json_stats, "bloat_skipped", (double)peer->stats_sender_instant.bloat_skip);
 	cJSON_AddNumberToObject(json_stats, "retransmit_skipped", (double)peer->stats_sender_instant.retrans_skip);
 	cJSON_AddNumberToObject(json_stats, "rtt", (double)peer->last_mrtt);

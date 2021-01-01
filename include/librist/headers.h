@@ -289,7 +289,7 @@ struct rist_stats_sender_peer
 	uint64_t received;
 	/* retransmitted packets */
 	uint64_t retransmitted;
-	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + retransmit_skipped + retransmitted */
+	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + bandwidth_skipped + retransmit_skipped + retransmitted */
 	double quality;
 	/* current RTT */
 	uint32_t rtt;
@@ -323,7 +323,7 @@ struct rist_stats_receiver_flow
 	uint32_t recovered_one_retry;
 	/* lost packets */
 	uint32_t lost;
-	/* quality: Q = (sent * 100.0) / sent + bloat_skipped + retransmit_skipped + retransmitted */
+	/* quality: Q = (received * 100.0) / received + missing */
 	double quality;
 	/* packet inter-arrival time (microseconds) */
 	uint64_t min_inter_packet_spacing;

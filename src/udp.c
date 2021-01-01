@@ -1033,27 +1033,28 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	// update bandwidth values
 	rist_calculate_bitrate(0, cli_bw);
 	rist_calculate_bitrate(0, retry_bw);
+
 	// Make sure we do not flood the network with retries
 	size_t current_bitrate = 0;
 	size_t data_bitrate = 0;
 	size_t retry_bitrate = 0;
-	if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
-	{
+	if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
 		data_bitrate = cli_bw->eight_times_bitrate_fast / 8;
+		retry_bitrate = retry_bw->eight_times_bitrate_fast / 8;
+	} else if (retry->peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_NORMAL) {
+		data_bitrate = cli_bw->eight_times_bitrate / 8;
 		retry_bitrate = retry_bw->eight_times_bitrate_fast / 8;
 	} else {
 		data_bitrate = cli_bw->eight_times_bitrate / 8;
 		retry_bitrate = retry_bw->eight_times_bitrate / 8;
 	}
 	current_bitrate =  data_bitrate + retry_bitrate;
-	if (retry->peer->config.congestion_control_mode >= RIST_CONGESTION_CONTROL_MODE_NORMAL) {
-		size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
-		if (current_bitrate > max_bitrate) {
-			rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Bandwidth exceeded: (%zu + %zu) > %zu, not resending packet %"PRIu64".\n",
-				data_bitrate, retry_bitrate, max_bitrate, idx);
-			retry->peer->stats_sender_instant.retrans_skip++;
-			return -1;
-		}
+	size_t max_bitrate = retry->peer->config.recovery_maxbitrate * 1000;
+	if (current_bitrate > max_bitrate) {
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Max bandwidth exceeded: (%zu + %zu) > %zu, not resending packet %"PRIu64".\n",
+			data_bitrate, retry_bitrate, max_bitrate, idx);
+		retry->peer->stats_sender_instant.bandwidth_skip++;
+		return -2;
 	}
 
 	// Check buffer element age
@@ -1065,6 +1066,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			"Retry-request of element %" PRIu32 " (idx %zu) that was sent %" PRIu64
 				"ms ago has been in the queue too long to matter: %"PRIu64"ms > %ums\n",
 			retry->seq, idx, data_age, retry_age, retry->peer->config.recovery_length_max);
+		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
 

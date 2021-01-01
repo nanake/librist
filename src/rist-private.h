@@ -161,6 +161,7 @@ struct rist_peer_sender_stats {
 	uint32_t received;
 	uint32_t retrans;
 	uint32_t bloat_skip;
+	uint32_t bandwidth_skip;
 	uint32_t retrans_skip;
 };
 
