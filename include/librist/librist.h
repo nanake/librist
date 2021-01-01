@@ -107,7 +107,6 @@ RIST_API uint32_t rist_flow_id_create();
 RIST_API int rist_sender_create(struct rist_ctx **ctx, enum rist_profile profile,
 				uint32_t flow_id, struct rist_logging_settings *logging_settings);
 
-
 /**
  * @brief Enable RIST NULL Packet deletion
  *
@@ -220,8 +219,6 @@ RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
 		int (*disconn_cb)(void *arg, struct rist_peer *peer),
 		void *arg);
 
-
-
 /**
  * @brief Add a peer connector to the existing sender.
  *
@@ -258,8 +255,6 @@ RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
  */
 RIST_API int rist_jitter_max_set(struct rist_ctx *ctx, int t);
 
-
-
 /**
  * @brief Kickstart a pre-configured sender
  *
@@ -270,7 +265,6 @@ RIST_API int rist_jitter_max_set(struct rist_ctx *ctx, int t);
  * @return 0 on success, -1 in case of error.
  */
 RIST_API int rist_start(struct rist_ctx *ctx);
-
 
 /**
  * @brief Destroy RIST sender
