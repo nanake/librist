@@ -293,14 +293,13 @@ static void init_peer_settings(struct rist_peer *peer)
 			int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 			// Asume MTU of 1400 for now
 			uint32_t max_nacksperloop = ctx->recovery_maxbitrate_max * max_jitter_ms / (8*1400);
-			//normalize with the total buffer size / 1 second
-			if (peer->config.recovery_length_min)
-				max_nacksperloop = max_nacksperloop * 1000 / peer->config.recovery_length_min;
-			else
-				max_nacksperloop = max_nacksperloop * 2000 / peer->config.recovery_length_max;
+			// Normalize against the total buffer size
+			max_nacksperloop = max_nacksperloop * 1000 / peer->config.recovery_length_max;
 			// Anything less that 2240Kbps at 5ms will round down to zero (100Mbps is 44)
 			if (max_nacksperloop == 0)
 				max_nacksperloop = 1;
+			// The effective buffer is 50% the total buffer size
+			max_nacksperloop = max_nacksperloop  * 2;
 			if (max_nacksperloop > ctx->max_nacksperloop) {
 				ctx->max_nacksperloop = (uint32_t)max_nacksperloop;
 				rist_log_priv(&ctx->common, RIST_LOG_INFO, "Setting max nacks per cycle to %"PRIu32"\n",
@@ -316,7 +315,7 @@ static void init_peer_settings(struct rist_peer *peer)
 		/* Set target recover size (buffer) */
 		if ((peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max)) > ctx->sender_recover_min_time) {
 			ctx->sender_recover_min_time = peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max);
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Setting buffer size to %zums\n", ctx->sender_recover_min_time);
+			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Setting buffer size to %zums (Max buffer size + 2 * Max RTT)\n", ctx->sender_recover_min_time);
 			// TODO: adjust this size based on the dynamic RTT measurement
 		}
 
@@ -2679,6 +2678,7 @@ protocol_bypass:
 		// send fifo queue grows to 10 packets (we do not want to harm real-time data)
 		// We also stop on maxcounter (jitter control and max bandwidth protection)
 		size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
+		uint64_t start_time = timestampNTP_u64();
 		while (queued_items < 10) {
 			ssize_t ret = rist_retry_dequeue(ctx);
 			if (ret == 0) {
@@ -2688,8 +2688,15 @@ protocol_bypass:
 				errors++;
 			} else {
 				total_bytes += ret;
+				counter++;
 			}
-			if (++counter > ctx->max_nacksperloop) {
+			if (counter > ctx->max_nacksperloop) {
+				break;
+			}
+			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 100)
+			{
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Nack processing loop tool longer than 100ms. Something is wrong!\n");
+				// TODO: clear out the nack queue here?
 				break;
 			}
 			queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
@@ -2697,8 +2704,9 @@ protocol_bypass:
 		if (ctx->common.debug && 2 * (counter - 1) > ctx->max_nacksperloop)
 		{
 			rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-					"Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu\n",
-					counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx));
+					"Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu, m=%zu\n",
+					counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx),
+					ctx->max_nacksperloop);
 		}
 
 	}
