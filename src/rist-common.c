@@ -516,7 +516,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		}
 		rist_flush_missing_flow_queue(f);
 		/* Initialize flow session timeout and stats timers */
-		f->flag_discontinuity = true;
+		f->flag_flow_buffer_start = true;
 		f->last_recv_ts = now_monotonic;
 		f->checks_next_time = now_monotonic;
 		/* Calculate and store clock offset with respect to source */
@@ -831,9 +831,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					uint32_t flags = 0;
 					if (holes)
 						flags = RIST_DATA_FLAGS_DISCONTINUITY;
-					else if (f->flag_discontinuity) {
-						f->flag_discontinuity = false;
-						flags = RIST_DATA_FLAGS_DISCONTINUITY;
+					if (f->flag_flow_buffer_start) {
+						f->flag_flow_buffer_start = false;
+						flags |= RIST_DATA_FLAGS_FLOW_BUFFER_START;
 					}
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;

@@ -160,7 +160,8 @@ enum rist_data_block_sender_flags
 
 enum rist_data_block_receiver_flags
 {
-	RIST_DATA_FLAGS_DISCONTINUITY = 1
+	RIST_DATA_FLAGS_DISCONTINUITY = 1,
+	RIST_DATA_FLAGS_FLOW_BUFFER_START = 2
 };
 
 enum rist_stats_type

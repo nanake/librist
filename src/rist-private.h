@@ -190,7 +190,7 @@ struct rist_flow {
 	uint64_t stats_report_time; 	   /* in ticks */
 	atomic_ulong receiver_queue_output_idx;  /* next packet to output */
 	size_t receiver_queue_max;
-	bool flag_discontinuity;
+	bool flag_flow_buffer_start;
 
 	/* Missing incoming packets, waiting for retransmission */
 	struct rist_missing_buffer *missing;
