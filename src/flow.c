@@ -135,13 +135,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	{
 		if (f->dataout_fifo_queue[i])
 		{
-			const uint8_t *payload = f->dataout_fifo_queue[i]->payload;
-			if (payload) {
-				free((void*)payload);
-				payload = NULL;
-			}
-			free(f->dataout_fifo_queue[i]);
-			f->dataout_fifo_queue[i] = NULL;
+			free_data_block(&f->dataout_fifo_queue[i]);
 		}
 	}
 

@@ -343,7 +343,7 @@ struct rist_receiver {
 	pthread_mutex_t mutex;
 
 	/* Receiver data callback */
-	int (*receiver_data_callback)(void *arg, const struct rist_data_block *data_block);
+	receiver_data_callback_t receiver_data_callback;
 	void *receiver_data_callback_argument;
 	int receiver_data_ready_notify_fd;
 
@@ -591,6 +591,8 @@ RIST_PRIV void rist_shutdown_peer(struct rist_peer *peer);
 RIST_PRIV void rist_print_inet_info(char *prefix, struct rist_peer *peer);
 RIST_PRIV void rist_peer_rtcp(struct evsocket_ctx *ctx, void *arg);
 RIST_PRIV void rist_populate_cname(struct rist_peer *peer);
+RIST_PRIV void free_data_block(struct rist_data_block **const block);
+
 /* needed after splitting up */
 RIST_PRIV PTHREAD_START_FUNC(sender_pthread_protocol, arg);
 RIST_PRIV PTHREAD_START_FUNC(receiver_pthread_protocol, arg);

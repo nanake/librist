@@ -244,7 +244,9 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	//b->virt_src_port = cb_arg->src_port;
 	//b->virt_dst_port = cb_arg->dst_port; 
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
-	return rist_sender_data_write(cb_arg->sender_ctx, b);
+	int ret = rist_sender_data_write(cb_arg->sender_ctx, b);
+	rist_receiver_data_block_free((struct rist_data_block **const) &b);
+	return ret;
 }
 
 static void intHandler(int signal) {

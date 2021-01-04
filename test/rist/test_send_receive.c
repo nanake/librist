@@ -180,14 +180,13 @@ int main(int argc, char *argv[]) {
 		goto out;
 	}
 
-    const struct rist_data_block *b;
+    const struct rist_data_block *b = NULL;
     char rcompare[1316];
     int receive_count = 1;
     bool got_first = false;
     while (receive_count < 16000) {
         if (atomic_load(&stop))
             break;
-        b = NULL;
         int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
         if (queue_length > 0) {
             if (!got_first) {
@@ -204,6 +203,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
             receive_count++;
+            rist_receiver_data_block_free((struct rist_data_block **const)&b);
         }
     }
 	if (!got_first || receive_count < 12500)

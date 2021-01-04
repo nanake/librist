@@ -43,11 +43,26 @@ RIST_API int rist_receiver_nack_type_set(struct rist_ctx *ctx, enum rist_nack_ty
  * Use this API to read data from an internal fifo queue instead of the callback
  *
  * @param ctx RIST receiver context
- * @param[out] data_block a pointer to the rist_data_block structure
+ * @param[out] reference counted data_blockstructure MUST be freed via rist_receiver_data_block_free
  * @param timeout How long to wait for queue data (ms), 0 for no wait
  * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
  */
 RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_data_block **data_block, int timeout);
+
+
+/**
+ * @brief Data callback function
+ *
+ * Optional calling application provided function for receiving callbacks upon data reception.
+ * Can be used to directly process data, or signal the calling application to read within it's own context.
+ * Stalling in this function will hinder data-reception of the libRIST library.
+ * This function will be called from a per-flow output thread and must be thread-safe.
+ *
+ * @param arg optional user data set via rist_receiver_data_callback_set
+ * @param data_block reference counted data_block structure MUST be freed via rist_receiver_data_block_free
+ * @return int, ignored.
+ */
+typedef int (*receiver_data_callback_t)(void *arg, const struct rist_data_block *data_block);
 
 /**
  * @brief Enable data callback channel
@@ -61,8 +76,18 @@ RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_dat
  * @return 0 on success, -1 on error
  */
 RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
-	int (*data_callback)(void *arg, const struct rist_data_block *data_block),
+	receiver_data_callback_t,
 	void *arg);
+
+/**
+ * @brief Free rist data block
+ *
+ * Must be called whenever a received data block is no longer needed by the calling application.
+ *
+ * @param block double pointer to rist_data_block, containing pointer will be set to NULL
+ */
+
+RIST_API void rist_receiver_data_block_free(struct rist_data_block **const block);
 
 /**
  * @brief Set data ready signalling fd
@@ -70,11 +95,11 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
  * Calling applications can provide an fd that will be written to whenever a packet
  * is ready for reading via FIFO read function (rist_receiver_data_read).
  * This allows calling applications to poll an fd (i.e.: in event loops).
- * Whenever a packet is ready for reading, a byte (with undefined value) will 
- * be written to the FD. Calling application should make no assumptions 
+ * Whenever a packet is ready for reading, a byte (with undefined value) will
+ * be written to the FD. Calling application should make no assumptions
  * whatsoever based on the number of bytes available for reading.
  * It is highly recommended that the fd is setup to operate in non blocking mode.
- * A call with a 0 value fd disables the notify fd functionality. And must be 
+ * A call with a 0 value fd disables the notify fd functionality. And must be
  * made before a calling application closes the fd.
  * @param ctx RIST receiver context
  * @param file_handle The file descriptor to be written to
@@ -329,7 +354,7 @@ RIST_API int rist_stats_free(const struct rist_stats *stats_container);
 RIST_API int rist_peer_config_free(const struct rist_peer_config **peer_config);
 
 /**
- * @brief Populate a preallocated peer_config structure with library default values 
+ * @brief Populate a preallocated peer_config structure with library default values
  *
  * @return 0 on success or non-zero on error.
  */

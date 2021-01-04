@@ -15,6 +15,7 @@
 #include "eap.h"
 #include "lz4.h"
 #include "mpegts.h"
+#include "rist_ref.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
@@ -703,27 +704,54 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 	return 0;
 }
 
+void free_data_block(struct rist_data_block **const block)
+{
+	assert(block != NULL);
+	struct rist_data_block *b = *block;
+	if (!b)
+		return;
+
+	if (atomic_fetch_sub(&b->ref->refcnt, 1) == 1)
+	{
+		assert(b->ref->ptr == b);
+		uint8_t *payload = ((uint8_t*)b->payload - RIST_MAX_PAYLOAD_OFFSET);//this is extremely ugly, though these offsets will stop existing in next release
+		free(payload);
+		free((void *)b->ref);
+		free(b);
+	}
+	*block = NULL;
+}
+
 static struct rist_data_block *new_data_block(struct rist_data_block *output_buffer_current, struct rist_buffer *b, uint8_t *payload, uint32_t flow_id, uint32_t flags)
 {
 	struct rist_data_block *output_buffer;
-	if (output_buffer_current)
-		output_buffer = output_buffer_current;
+	if (output_buffer_current) {
+		if (rist_ref_iswritable(output_buffer_current->ref)) {
+			output_buffer = output_buffer_current;
+			uint8_t *p = ((uint8_t*)output_buffer_current->payload - RIST_MAX_PAYLOAD_OFFSET);
+			free(p);
+		} else {
+			free_data_block(&output_buffer_current);
+			output_buffer = calloc(1, sizeof(*output_buffer));
+		}
+	}
 	else
 		output_buffer = calloc(1, sizeof(struct rist_data_block));
+	if (!output_buffer) {
+		rist_log_priv2(get_cctx(b->peer)->logging_settings, RIST_LOG_ERROR, "Error (re)allocating rist_data_block.");
+		return NULL;
+	}
+	if (!output_buffer->ref) {
+		output_buffer->ref = rist_ref_create(output_buffer);
+		if (!output_buffer->ref) {
+			rist_log_priv2(get_cctx(b->peer)->logging_settings, RIST_LOG_ERROR, "Error allocating rist_ref.");
+			free(output_buffer);
+			return NULL;
+		}
+	}
 	output_buffer->peer = b->peer;
 	output_buffer->flow_id = flow_id;
-	uint8_t *newbuffer;
-	if (output_buffer->payload && b->size != output_buffer->payload_len) {
-		newbuffer = realloc((void *)output_buffer->payload, b->size);
-	} else if (!output_buffer->payload) {
-		newbuffer = malloc(b->size);
-	}
-	else {
-		newbuffer = (void *)output_buffer->payload;
-	}
-
-	memcpy(newbuffer, payload, b->size);
-	output_buffer->payload = newbuffer;
+	output_buffer->payload = payload;
 	output_buffer->payload_len = b->size;
 	output_buffer->virt_src_port = b->src_port;
 	output_buffer->virt_dst_port = b->dst_port;
@@ -842,7 +870,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					f->dataout_fifo_queue[dataout_fifo_write_index] = new_data_block(
 							block, b,
 							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
-					if (ctx->receiver_data_callback) {
+					b->data = NULL;
+					if (ctx->receiver_data_callback && f->dataout_fifo_queue[dataout_fifo_write_index]) {
+						rist_ref_inc(f->dataout_fifo_queue[dataout_fifo_write_index]->ref);
 						// send to callback synchronously
 						ctx->receiver_data_callback(ctx->receiver_data_callback_argument,
 								f->dataout_fifo_queue[dataout_fifo_write_index]);

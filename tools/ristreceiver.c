@@ -168,7 +168,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 		rist_log(logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
 		return -1;
 	}
-
+	rist_receiver_data_block_free((struct rist_data_block **const) &b);
 	return 0;
 }
 

@@ -186,6 +186,7 @@ struct rist_data_block
 	/* Get's populated by librist with the rtp_seq on output, can be used on input to tell librist which rtp_seq to use */
 	uint64_t seq;
 	uint32_t flags;
+	struct rist_ref *ref;
 };
 
 struct rist_oob_block

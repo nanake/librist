@@ -164,6 +164,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	if ((size_t)atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
 	{
 		data_block = f->dataout_fifo_queue[dataout_read_index];
+		f->dataout_fifo_queue[dataout_read_index] = NULL;
 		num = atomic_load_explicit(&f->dataout_fifo_queue_counter, memory_order_acquire);
 		atomic_store_explicit(&f->dataout_fifo_queue_read_index, (dataout_read_index + 1) & (RIST_DATAOUT_QUEUE_BUFFERS - 1), memory_order_release);
 		if (data_block)
@@ -184,6 +185,13 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	*data_buffer = data_block;
 
 	return (int)num;
+}
+
+void rist_receiver_data_block_free(struct rist_data_block **block)
+{
+	struct rist_data_block *b = *block;
+	if (b->ref != NULL)
+		free_data_block(block);
 }
 
 uint32_t rist_flow_id_create()
