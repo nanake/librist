@@ -134,8 +134,7 @@ enum rist_recovery_mode
 {
 	RIST_RECOVERY_MODE_UNCONFIGURED = 0,
 	RIST_RECOVERY_MODE_DISABLED = 1,
-	RIST_RECOVERY_MODE_TIME_BLIND = 2,
-	RIST_RECOVERY_MODE_TIME = 3,
+	RIST_RECOVERY_MODE_TIME = 2,
 };
 
 enum rist_congestion_control_mode
