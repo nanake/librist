@@ -159,7 +159,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 }
 
-size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
+size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
 {
 	struct rist_common_ctx *ctx = get_cctx(p);
 	struct rist_key *k = &p->key_tx;
@@ -167,6 +167,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 	size_t len, gre_len;
 	size_t hdr_len = 0;
 	ssize_t ret = 0;
+	uint32_t seq = p->seq++;
 	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
 	   so we create a local pointer that points to the payload pointer, if we would either encrypt or compress we instead
 	   malloc and mempcy, to ensure our source stays clean. We only do this with RAW data as these buffers are the only
@@ -226,7 +227,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint32_t seq, uint16_t seq_rtp, u
 				SET_BIT(hdr->rtp.flags, 4);
 			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
 			hdr->rtp.seq = htobe16(seq_rtp);
-			if ((seq + 1) != ctx->seq)
+			if ((seq_rtp + 1) != ctx->seq_rtp)
 			{
 				// This is a retransmission
 				//rist_log_priv(&ctx->common, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"/%"PRIu32"\n", seq, seq_rtp, ctx->seq);
@@ -303,7 +304,7 @@ out:
 }
 
 /* This function is used by receiver for all and by sender only for rist-data and oob-data */
-int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_gre, uint32_t seq_rtp)
+int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp)
 {
 	// This can only and will most likely be zero for data packets. RTCP should always have a value.
 	assert(payload_type != RIST_PAYLOAD_TYPE_DATA_RAW && payload_type != RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT && payload_type != RIST_PAYLOAD_TYPE_DATA_OOB ? dst_port != 0 : 1);
@@ -320,21 +321,21 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL) && !p->receiver_mode)
 		source_time = timestampNTP_u64();
 
-	size_t ret = rist_send_seq_rtcp(p, seq_gre, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
+	size_t ret = rist_send_seq_rtcp(p, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
 
 	if ((!p->compression && ret < payload_len) || ret <= 0)
 	{
 		if (p->address_family == AF_INET6) {
 			// TODO: print IP and port (and error number?)
 			rist_log_priv(get_cctx(p), RIST_LOG_ERROR,
-				"\tError on transmission sendto for seq #%"PRIu32"\n", seq_gre);
+				"\tError on transmission sendto for seq #%"PRIu32"\n", seq_rtp);
 		} else {
 			struct sockaddr_in *sin4 = (struct sockaddr_in *)&p->u.address;
 			unsigned char *ip = (unsigned char *)&sin4->sin_addr.s_addr;
 			rist_log_priv(get_cctx(p), RIST_LOG_ERROR,
 				"\tError on transmission sendto, ret=%d to %d.%d.%d.%d:%d/%d, seq #%"PRIu32", %d bytes\n",
 					ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
-					p->local_port, seq_gre, payload_len);
+					p->local_port, seq_rtp, payload_len);
 		}
 	}
 	else
@@ -668,8 +669,7 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	if (peer->echo_enabled == false)
 		rist_rtcp_write_xr_echoreq(rtcp_buf, &payload_len, peer, peer->adv_flow_id);
 	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
-	struct rist_common_ctx *cctx = get_cctx(peer);
-	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 }
 
 int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len)
@@ -762,13 +762,11 @@ int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_
 	}
 
 	// We use direct send from receiver to sender (no fifo to keep track of seq/idx)
-	struct rist_common_ctx *cctx = get_cctx(peer);
-	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 }
 
 static void rist_sender_send_rtcp(uint8_t *rtcp_buf, int payload_len, struct rist_peer *peer) {
-	struct rist_common_ctx *cctx = get_cctx(peer);
-	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, rtcp_buf, payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+	rist_send_common_rtcp(peer, RIST_PAYLOAD_TYPE_RTCP, rtcp_buf, payload_len, 0, peer->local_port, peer->remote_port, 0);
 }
 
 void rist_sender_periodic_rtcp(struct rist_peer *peer) {
@@ -792,8 +790,7 @@ int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_tim
 	rist_rtcp_write_echoresp(rtcp_buf, &payload_len, echo_request_time, peer->adv_flow_id);
 	if (peer->receiver_mode) {
 		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
-		struct rist_common_ctx *cctx = get_cctx(peer);
-		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 	} else {
 		/* I do this to not break advanced mode, however echo responses should really NOT be resend when lost ymmv */
 		rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
@@ -810,8 +807,7 @@ int rist_request_echo(struct rist_peer *peer) {
 	if (peer->receiver_mode)
 	{
 		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
-		struct rist_common_ctx *cctx = get_cctx(peer);
-		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, cctx->seq++, 0);
+		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 	}
 	else
 	{
@@ -915,13 +911,13 @@ peer_select:
 #endif
 					if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
+					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 					}
 					child = child->sibling_next;
 				}
 			} else {
 				uint8_t *payload = buffer->data;
-				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
+				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			}
 		} else {
 			/* Election of next peer */
@@ -948,13 +944,13 @@ peer_select:
 #endif
 				if (child->is_data && !child->dead) {
 					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
+					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port,  buffer->seq_rtp);
 				}
 				child = child->sibling_next;
 			}
 		} else {
 			uint8_t *payload = buffer->data;
-			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq, buffer->seq_rtp);
+			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			ctx->weight_counter--;
 			peer->w_count--;
 		}
@@ -1105,7 +1101,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		uint16_t src_port = buffer->src_port;
 		if (src_port == 0)
 			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port);
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port);
 		// update bandwidth value
 		rist_calculate_bitrate(ret, retry_bw);
 	}

@@ -2724,7 +2724,7 @@ protocol_bypass:
 
 			uint8_t *payload = oob_buffer->data;
 			rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
-					oob_buffer->size, 0, 0, 0, ctx->seq++, 0);
+					oob_buffer->size, 0, 0, 0, 0);
 			ctx->oob_queue_bytesize -= oob_buffer->size;
 			ctx->oob_queue_read_index++;
 		}
@@ -2811,7 +2811,7 @@ protocol_bypass:
 				if (buffer->type == RIST_PAYLOAD_TYPE_RTCP) {
 					// TODO can we ever have a null or dead buffer->peer?
 					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, ctx->common.seq++, 0);
+					rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, 0);
 					buffer->seq = ctx->common.seq;
 					buffer->seq_rtp = ctx->common.seq_rtp;
 				}
