@@ -304,7 +304,7 @@ int main(int argc, char *argv[])
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = (char)getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);

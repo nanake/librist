@@ -27,7 +27,7 @@ void user_verifier_lookup(char * username,
 
 	int reading = 0;//0 = username, 1 = verifier, 2 = salt
 	bool skipnextline = false;
-	char read = getc(fh);
+	int read = getc(fh);
 	//expected format: username:verifier:salt:3
 	while (read != EOF)
 	{
