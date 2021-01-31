@@ -53,7 +53,7 @@ static inline void rist_log_impl(struct rist_logging_settings *log_settings, enu
 	ssize_t msglen;
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	msglen = asprintf(&logmsg, "%d.%6.6d|%ld.%ld|%s %s", (int)tv.tv_sec,
+	msglen = asprintf(&logmsg, "%d.%6.6d|%"PRIdPTR".%"PRIdPTR"|%s %s", (int)tv.tv_sec,
 			 (int)tv.tv_usec, receiver_id, sender_id, prefix, msg);
 	if (RIST_UNLIKELY(msglen <= 0)) {
 		fprintf(stderr, "[ERROR] Failed to format log message\n");
