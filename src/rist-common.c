@@ -1871,6 +1871,30 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 	}
 }
 
+static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
+{
+	switch(sa->sa_family) {
+		case AF_INET:
+			inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
+					s, (socklen_t)maxlen);
+			break;
+
+		case AF_INET6:
+			inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
+						s, (socklen_t)maxlen);
+			break;
+
+		default:
+			strncpy(s, "Unknown AF", maxlen);
+			return NULL;
+	}
+
+	struct sockaddr_in *sin = (struct sockaddr_in *)s;
+	*port = htons (sin->sin_port);
+
+	return s;
+}
+
 static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		uint32_t flow_id, struct rist_buffer *payload)
 {
@@ -1881,6 +1905,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 	uint8_t subtype;
 	uint32_t nack_seq_msb = 0;
 	peer->stats_receiver_instant.received_rtcp++;
+	struct rist_common_ctx *ctx = get_cctx(peer);
 
 	while (processed_bytes < payload->size) {
 		pkt = (uint8_t*)payload->data + processed_bytes;
@@ -1891,7 +1916,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		if ( bytes_left < 4 )
 		{
 			/* we must have at least 4 bytes */
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Rist rtcp packet must have at least 4 bytes, we have %d\n",
+			rist_log_priv(ctx, RIST_LOG_ERROR, "Rist rtcp packet must have at least 4 bytes, we have %d\n",
 					bytes_left);
 			return;
 		}
@@ -1903,7 +1928,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 		if (bytes > bytes_left)
 		{
 			/* check for a sane number of bytes */
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed feedback packet, expecting %u bytes in the" \
+			rist_log_priv(ctx, RIST_LOG_ERROR, "Malformed feedback packet, expecting %u bytes in the" \
 					" packet, got a buffer of %u bytes. ptype = %d\n", bytes,
 					bytes_left, ptype);
 			return;
@@ -1932,7 +1957,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					RIST_FALLTHROUGH;
 				}
 				else {
-					rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
+					rist_log_priv(ctx, RIST_LOG_DEBUG, "Unsupported rtcp custom subtype %d, ignoring ...\n", subtype);
 					break;
 				}
 			case PTYPE_NACK_BITMASK:
@@ -1953,17 +1978,18 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					if (name_length > bytes_left)
 					{
 						/* check for a sane number of bytes */
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed SDES packet, wrong cname len %u, got a " \
+						rist_log_priv(ctx, RIST_LOG_ERROR, "Malformed SDES packet, wrong cname len %u, got a " \
 								"buffer of %u bytes.\n", name_length, bytes_left);
 						return;
 					}
+					bool new_peer = false;
 					if (memcmp(pkt + RTCP_SDES_SIZE, peer->receiver_name, name_length) != 0)
 					{
 						memcpy(peer->receiver_name, pkt + RTCP_SDES_SIZE, name_length);
-						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Peer %"PRIu32" receiver name is now: %s\n",
+						rist_log_priv(ctx, RIST_LOG_INFO, "Peer %"PRIu32" receiver name is now: %s\n",
 								peer->adv_peer_id, peer->receiver_name);
+						new_peer = true;
 					}
-					//}
 					if (peer->receiver_mode) {
 						rist_receiver_rtcp_authenticate(peer, seq, flow_id);
 					} else if (peer->sender_ctx && peer->listening) {
@@ -1972,7 +1998,33 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 							rist_peer_authenticate(peer);
 						}
 					}
-
+					else if (new_peer && peer->authenticated) {
+						if (ctx->auth.conn_cb) {
+							char ip_string_buffer[INET6_ADDRSTRLEN];
+							uint16_t dummyport;
+							uint16_t port = 0;
+							char *ip_string =
+								get_ip_str(&peer->u.address, &ip_string_buffer[0], &dummyport, INET6_ADDRSTRLEN);
+							if (!ip_string){
+								ip_string = "";
+							}
+							// Real source port vs virtual source port
+							if (ctx->profile == RIST_PROFILE_SIMPLE)
+								port = peer->remote_port;
+							char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+							char *incoming_ip_string = get_ip_str(&peer->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
+							if (incoming_ip_string) {
+								if (ctx->auth.conn_cb(ctx->auth.arg,
+											incoming_ip_string,
+											port,
+											ip_string,
+											peer->local_port,
+											peer)) {
+									return;
+								}
+							}
+						}
+					}
 				break;
 			}
 			case PTYPE_SR:;
@@ -1983,7 +2035,7 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 				rist_handle_xr_pkt(peer, pkt);
 				break;
 			default:
-				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Unrecognized RTCP packet with PTYPE=%02x!!\n", ptype);
+				rist_log_priv(ctx, RIST_LOG_DEBUG, "Unrecognized RTCP packet with PTYPE=%02x!!\n", ptype);
 		}
 		processed_bytes += bytes;
 	}
@@ -2094,30 +2146,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->session_timeout = peer_src->session_timeout;
 
 		init_peer_settings(peer);
-	}
-
-	static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
-	{
-		switch(sa->sa_family) {
-			case AF_INET:
-				inet_ntop(AF_INET, &(((struct sockaddr_in *)sa)->sin_addr),
-						s, (socklen_t)maxlen);
-				break;
-
-			case AF_INET6:
-				inet_ntop(AF_INET6, &(((struct sockaddr_in6 *)sa)->sin6_addr),
-						  s, (socklen_t)maxlen);
-				break;
-
-			default:
-				strncpy(s, "Unknown AF", maxlen);
-				return NULL;
-		}
-
-		struct sockaddr_in *sin = (struct sockaddr_in *)s;
-		*port = htons (sin->sin_port);
-
-		return s;
 	}
 
 	static void kill_peer(struct rist_peer *peer)
