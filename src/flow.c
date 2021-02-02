@@ -116,6 +116,14 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 			p->parent->flow = NULL;
 		}
 	}
+	struct rist_peer *peer = ctx->common.PEERS;
+	while (peer)
+	{
+		if (peer->flow == f) {
+			peer->flow = NULL;
+		}
+		peer = peer->next;
+	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Free flow peer list\n");
 	f->peer_lst_len = 0;
@@ -236,10 +244,16 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 
 	// Find the flow based on the flow_id
 	struct rist_flow *f;
-	for (f = ctx->common.FLOWS; f != NULL; f = f->next) {
-		if (f->flow_id == flow_id) {
-			break;
+	if (ctx->common.profile > RIST_PROFILE_SIMPLE)
+	{
+		for (f = ctx->common.FLOWS; f != NULL; f = f->next) {
+			if (f->flow_id == flow_id) {
+				break;
+			}
 		}
+	} else
+	{
+		f = p->parent->flow;
 	}
 
 	/* create flow if necessary */

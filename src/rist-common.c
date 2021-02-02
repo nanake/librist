@@ -506,6 +506,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		return -1;
 	if (RIST_UNLIKELY(!f->receiver_queue_has_items)) {
 		/* we just received our first packet for this flow */
+		pthread_mutex_lock(&f->mutex);
 		if (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0)
 		{
 			/* Clear the queue if the queue had data */
@@ -540,6 +541,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		/* reset stats */
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
 		f->receiver_queue_has_items = true;
+		pthread_mutex_unlock(&f->mutex);
 		return 0; // not a dupe
 	}
 
@@ -1502,6 +1504,11 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 			while (tmp) {
 				if (tmp->is_rtcp) {
 					if (tmp->local_port == rtcp_port && peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
+						if (tmp->dead)
+						{
+							tmp = tmp->sibling_next;
+							continue;
+						}
 						peer->peer_rtcp = tmp;
 						tmp->peer_data = peer;
 						break;
@@ -1514,6 +1521,11 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 				while (tmp) {
 					if (tmp->is_rtcp) {
 						if (tmp->local_port == rtcp_port && address_compare(&peer->u.address, &tmp->u.address)) {
+							if (tmp->dead)
+							{
+								tmp = tmp->sibling_next;
+								continue;
+							}
 							peer->peer_rtcp = tmp;
 							tmp->peer_data = peer;
 							break;
@@ -1629,6 +1641,11 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 				while (tmp) {
 					if (tmp->is_data) {
 						if (tmp->local_port == data_port && peer->adv_flow_id == tmp->adv_flow_id && address_compare(&peer->u.address, &tmp->u.address)) {
+							if (tmp->dead)
+							{
+								tmp = tmp->sibling_next;
+								continue;
+							}
 							peer->peer_data = tmp;
 							tmp->peer_rtcp = peer;
 							break;
@@ -1641,6 +1658,11 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 					while (tmp) {
 						if (tmp->is_data) {
 							if (tmp->local_port == data_port && address_compare(&peer->u.address, &tmp->u.address)) {
+								if (tmp->dead)
+								{
+									tmp = tmp->sibling_next;
+									continue;
+								}
 								peer->peer_data = tmp;
 								tmp->peer_rtcp = peer;
 								break;
@@ -1656,7 +1678,8 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 						if (tmp->is_data) {
 							if (tmp->local_port == data_port && tmp->peer_rtcp == NULL) {
 								peer->peer_data = tmp;
-								tmp->peer_rtcp = peer;
+								if (tmp->peer_rtcp->dead)
+									tmp->peer_rtcp = peer;
 								break;
 							}
 						}
@@ -1686,10 +1709,13 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
 					"Authenticated RTCP peer %d and flow %"PRIu32" for connection with cname: %s\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->receiver_name);
-			if (ctx->common.profile == RIST_PROFILE_SIMPLE && peer->parent->flow == NULL) {
-				peer->parent->flow = peer->flow;
-				peer->parent->flow->authenticated = true;
+			if (ctx->common.profile == RIST_PROFILE_SIMPLE) 
+			{
 				peer->parent->authenticated = true;
+				if (peer->parent->flow == NULL) {
+					peer->parent->flow = peer->flow;
+					peer->parent->flow->authenticated = true;
+				}
 			}
 		}
 	}
@@ -2860,9 +2886,11 @@ protocol_bypass:
 
 		//uint64_t now = timestampNTP_u64();
 		while (!flow->shutdown) {
+			pthread_mutex_lock(&(flow->mutex));
 			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
 			}
+			pthread_mutex_unlock(&(flow->mutex));
 			pthread_mutex_lock(&(flow->mutex));
 			int ret = pthread_cond_timedwait_ms(&(flow->condition), &(flow->mutex), max_output_jitter_ms);
 			pthread_mutex_unlock(&(flow->mutex));
@@ -3097,13 +3125,20 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		}
 	}
 
-	if (peer->peer_data != NULL && peer->peer_data != peer)
-		peer->peer_data->peer_rtcp = NULL;
-	if (peer->peer_rtcp != NULL && peer->peer_rtcp != peer)
-		peer->peer_rtcp->peer_data = NULL;
-
+	struct rist_peer *check = ctx->PEERS;
+	while (check)
+	{
+		if (check->peer_data == peer)
+			check->peer_data = NULL;
+		if (check->peer_rtcp == peer)
+			check->peer_rtcp = NULL;
+		check = check->next;
+	}
 	if (peer->parent) {
 		peer_remove_child(peer);
+		if (peer->parent->child == NULL) {
+			peer->parent->authenticated = false;
+		}
 	}
 	peer_remove_linked_list(peer);
 
@@ -3120,10 +3155,17 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		}
 		if (found)
 		{
-			peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
-			peer->flow->peer_lst_len--;
-			if (peer->flow->peer_lst_len == 0)
+			if (peer->flow->peer_lst_len > 1)
+			{
+				peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
+				peer->flow->peer_lst_len--;
+			} else
+			{
+				free(peer->flow->peer_lst);
+				peer->flow->peer_lst_len = 0;
 				peer->flow->peer_lst = NULL;
+			}
+
 		}
 	}
 
@@ -3137,10 +3179,16 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
             }
 		}
 		if (found) {
-			peer->sender_ctx->peer_lst = realloc(peer->sender_ctx->peer_lst, sizeof(peer) * (peer->sender_ctx->peer_lst_len -1));
-			peer->sender_ctx->peer_lst_len--;
-			if (peer->sender_ctx->peer_lst_len == 0)
+			if (peer->sender_ctx->peer_lst_len > 1)
+			{
+				peer->sender_ctx->peer_lst = realloc(peer->sender_ctx->peer_lst, sizeof(peer) * (peer->sender_ctx->peer_lst_len -1));
+				peer->sender_ctx->peer_lst_len--;
+			} else
+			{
+				free(peer->sender_ctx->peer_lst);
+				peer->sender_ctx->peer_lst_len = 0;
 				peer->sender_ctx->peer_lst = NULL;
+			}
 		}
     }
 
