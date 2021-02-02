@@ -37,6 +37,7 @@
 #define MAX_OUTPUT_COUNT 10
 
 static int signalReceived = 0;
+static bool authenticated = false;
 static struct rist_logging_settings *logging_settings;
 
 struct rist_callback_object {
@@ -82,6 +83,7 @@ static struct option long_options[] = {
 #ifdef USE_MBEDTLS
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
+{ "fast-start",      no_argument,       NULL, 'f' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 { 0, 0, 0, 0 },
@@ -103,6 +105,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
 #endif
+"       -f | --fast-start                         | Starts sending rtp data before handshake is completed    |\n"
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -176,9 +179,11 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			offset = 12; // TODO: check for header extensions and remove them as well
 		data_block.payload = recv_buf + offset;
 		data_block.payload_len = recv_bufsize - offset;
-		int w = rist_sender_data_write(callback_object->sender_ctx, &data_block);
-		// TODO: report error?
-		(void) w;
+		if (authenticated) {
+			int w = rist_sender_data_write(callback_object->sender_ctx, &data_block);
+			// TODO: report error?
+			(void) w;
+		}
 	}
 	else
 	{
@@ -208,6 +213,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	char buffer[500];
 	char message[200];
+	authenticated = true;
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
 	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
@@ -361,9 +367,12 @@ static PTHREAD_START_FUNC(input_loop, arg)
 				if (queue_size % 10 == 0 || queue_size > 50)
 					rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
 				if (b && b->payload) {
-					int w = rist_sender_data_write(callback_object->sender_ctx, b);
-					// TODO: report error?
-					(void) w;
+					if (authenticated) {
+						int w = rist_sender_data_write(callback_object->sender_ctx, b);
+						// TODO: report error?
+						(void) w;
+					}
+					rist_receiver_data_block_free((struct rist_data_block **const)&b);
 				}
 			}
 		}
@@ -392,6 +401,7 @@ int main(int argc, char *argv[])
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	bool npd = false;
+	bool faststart = false;
 	struct rist_sender_args peer_args;
 	char *remote_log_address = NULL;
 
@@ -417,7 +427,7 @@ int main(int argc, char *argv[])
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:v:hun", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:v:fhun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -462,6 +472,9 @@ int main(int argc, char *argv[])
 			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
+		case 'f':
+			faststart = true;
+			break;
 		case 'n':
 			npd = true;
 			break;
@@ -480,6 +493,9 @@ int main(int argc, char *argv[])
 	if (argc < 2) {
 		usage(argv[0]);
 	}
+
+	if (profile == RIST_PROFILE_SIMPLE || faststart)
+		authenticated = true;
 
 	// Update log settings with custom loglevel and remote address if necessary
 	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
