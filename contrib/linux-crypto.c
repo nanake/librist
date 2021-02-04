@@ -181,11 +181,25 @@ int linux_crypto_init(struct linux_crypto **_ctx) {
 
 }
 
+void linux_crypto_free(struct linux_crypto **ctx) {
+	if (!ctx || !*ctx) {
+		return;
+	}
+
+	if ((*ctx)->cryptofd)
+		close((*ctx)->cryptofd);
+	if ((*ctx)->sockfd)
+		close((*ctx)->sockfd);
+	free(*ctx);
+	*ctx = NULL;
+}
+
 int linux_crypto_set_key(const uint8_t *key, int keylen, struct linux_crypto *ctx) {
-		int ret;
+	int ret;
 
 	if (ctx->cryptofd) {
 		close(ctx->cryptofd);
+		ctx->cryptofd = 0;
 	}
 
 	ret = setsockopt(ctx->sockfd, SOL_ALG, ALG_SET_KEY, key, keylen);
@@ -195,12 +209,13 @@ int linux_crypto_set_key(const uint8_t *key, int keylen, struct linux_crypto *ct
 		return -1;
 	}
 
-	ctx->cryptofd = accept(ctx->sockfd, NULL, 0);
-	if ( ctx->cryptofd == -1) {
+	ret = accept(ctx->sockfd, NULL, 0);
+	if (ret == -1) {
 		fprintf(stderr, "Failed to accept socket!\n");
-		return ctx->cryptofd;
+		return ret;
 	}
-	return ret;
+	ctx->cryptofd = ret;
+	return 0;
 }
 
 int linux_crypto_decrypt(uint8_t inbuf[], uint8_t outbuf[], int buflen, uint8_t iv[], struct linux_crypto *ctx) {

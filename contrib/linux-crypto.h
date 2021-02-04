@@ -36,4 +36,5 @@ int linux_crypto_init(struct linux_crypto **ctx);
 int linux_crypto_set_key(const uint8_t *key, int keylen,struct linux_crypto *ctx);
 int linux_crypto_decrypt(uint8_t inbuf[], uint8_t outbuf[], int buflen, uint8_t iv[], struct linux_crypto *ctx);
 int linux_crypto_encrypt(uint8_t inbuf[], uint8_t outbuf[], int buflen, uint8_t iv[], struct linux_crypto *ctx);
+void linux_crypto_free(struct linux_crypto **ctx);
 #endif

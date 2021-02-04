@@ -42,7 +42,7 @@ int _librist_crypto_psk_rist_key_destroy(struct rist_key *key)
 #ifdef USE_MBEDTLS
 	    mbedtls_aes_free(&key->mbedtls_aes_ctx);
 #elif defined(LINUX_CRYPTO)
-	    free(key->linux_crypto_ctx);//TODO: write function to do proper cleanup (close socket etc)
+	    linux_crypto_free(&key->linux_crypto_ctx);
 #endif
     }
 	return 0;
