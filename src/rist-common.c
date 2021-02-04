@@ -2016,40 +2016,28 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 								peer->adv_peer_id, peer->receiver_name);
 						new_peer = true;
 					}
+					bool peer_authenticated = peer->authenticated;
+					int connection_message = 0;
 					if (peer->receiver_mode) {
 						rist_receiver_rtcp_authenticate(peer, seq, flow_id);
+						connection_message = RIST_CLIENT_CONNECTED;
 					} else if (peer->sender_ctx && peer->listening) {
 						// TODO: create rist_sender_recv_rtcp
 						if (!peer->authenticated) {
 							rist_peer_authenticate(peer);
 						}
+						connection_message = RIST_CLIENT_CONNECTED;
 					}
-					else if (new_peer && peer->authenticated) {
-						if (ctx->auth.conn_cb) {
-							char ip_string_buffer[INET6_ADDRSTRLEN];
-							uint16_t dummyport;
-							uint16_t port = 0;
-							char *ip_string =
-								get_ip_str(&peer->u.address, &ip_string_buffer[0], &dummyport, INET6_ADDRSTRLEN);
-							if (!ip_string){
-								ip_string = "";
-							}
-							// Real source port vs virtual source port
-							if (ctx->profile == RIST_PROFILE_SIMPLE)
-								port = peer->remote_port;
-							char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
-							char *incoming_ip_string = get_ip_str(&peer->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
-							if (incoming_ip_string) {
-								if (ctx->auth.conn_cb(ctx->auth.arg,
-											incoming_ip_string,
-											port,
-											ip_string,
-											peer->local_port,
-											peer)) {
-									return;
-								}
-							}
-						}
+					else {
+						connection_message = RIST_CONNECTION_ESTABLISHED;
+					}
+					if (peer->timed_out || new_peer || (!peer_authenticated && peer->authenticated)) {
+						if (!new_peer)
+							rist_log_priv(ctx, RIST_LOG_INFO, "Peer %"PRIu32" receiver with name %s reconnected\n",
+								peer->adv_peer_id, peer->receiver_name);
+						peer->timed_out = 0;
+						if (ctx->connection_status_callback)
+							ctx->connection_status_callback(ctx->connection_status_callback_argument, peer, connection_message);
 					}
 				break;
 			}
@@ -2925,32 +2913,42 @@ protocol_bypass:
 	}
 
 
-void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
-{
-	struct rist_peer *peer = cctx->PEERS;
-	while (peer)
+	void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
 	{
-		struct rist_peer *next = peer->next;
-		if (!peer->dead && peer->parent && now > peer->last_rtcp_received && peer->last_rtcp_received > 0)
+		struct rist_peer *peer = cctx->PEERS;
+		while (peer)
 		{
-			if (peer->parent && (now - peer->last_rtcp_received) > peer->session_timeout &&
-					peer->last_rtcp_received > 0)
+			struct rist_peer *next = peer->next;
+			if (!peer->dead && now > peer->last_rtcp_received && peer->last_rtcp_received > 0)
 			{
-				rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN,
-						"Peer %u timed out\n", peer->adv_peer_id);
-				kill_peer(peer);
-			}
-		} else if (peer->dead && peer->parent)
-		{
-			if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
+				if ((now - peer->last_rtcp_received) > peer->session_timeout)
+				{
+					if (peer->parent)
+					{
+						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out\n", peer->adv_peer_id);
+						if (cctx->connection_status_callback)
+							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CLIENT_TIMED_OUT);
+						kill_peer(peer);
+					}
+					else if (!peer->timed_out)
+					{
+						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Peer %u timed out\n", peer->adv_peer_id);
+						if (cctx->connection_status_callback)
+							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
+						peer->timed_out = 1;
+					}
+				}
+			} else if (peer->dead && peer->parent)
 			{
-				rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
-				rist_peer_remove(cctx, peer, NULL);
+				if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
+				{
+					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
+					rist_peer_remove(cctx, peer, NULL);
+				}
 			}
+			peer = next;
 		}
-		peer = next;
 	}
-}
 
 	PTHREAD_START_FUNC(sender_pthread_protocol, arg)
 	{

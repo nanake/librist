@@ -41,6 +41,7 @@
 static int signalReceived = 0;
 static struct rist_logging_settings *logging_settings;
 enum rist_profile profile = RIST_PROFILE_MAIN;
+static int peer_connected_count = 0;
 
 static struct option long_options[] = {
 { "inputurl",        required_argument, NULL, 'i' },
@@ -117,6 +118,17 @@ static uint32_t risttools_convertNTPtoRTP(uint64_t i_ntp)
 	i_ntp *= 90000;
 	i_ntp = i_ntp >> 32;
 	return (uint32_t)i_ntp;
+}
+
+static void connection_status_callback(void *arg, struct rist_peer *peer, enum rist_connection_status peer_connection_status)
+{
+	(void)arg;
+	if (peer_connection_status == RIST_CONNECTION_ESTABLISHED || peer_connection_status == RIST_CLIENT_CONNECTED)
+		peer_connected_count++;
+	else
+		peer_connected_count--;
+	rist_log(logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n", 
+				peer, peer_connection_status, peer_connected_count);
 }
 
 static int cb_recv(void *arg, const struct rist_data_block *b)
@@ -381,6 +393,11 @@ int main(int argc, char *argv[])
 
 	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
+		exit(1);
+	}
+
+	if (rist_connection_status_callback_set(ctx, connection_status_callback, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
 		exit(1);
 	}
 

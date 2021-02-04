@@ -37,7 +37,7 @@
 #define MAX_OUTPUT_COUNT 10
 
 static int signalReceived = 0;
-static bool authenticated = false;
+static int peer_connected_count = 0;
 static struct rist_logging_settings *logging_settings;
 
 struct rist_callback_object {
@@ -179,7 +179,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			offset = 12; // TODO: check for header extensions and remove them as well
 		data_block.payload = recv_buf + offset;
 		data_block.payload_len = recv_bufsize - offset;
-		if (authenticated) {
+		if (peer_connected_count) {
 			int w = rist_sender_data_write(callback_object->sender_ctx, &data_block);
 			// TODO: report error?
 			(void) w;
@@ -208,16 +208,26 @@ static void usage(char *cmd)
 	exit(1);
 }
 
+static void connection_status_callback(void *arg, struct rist_peer *peer, enum rist_connection_status peer_connection_status)
+{
+	(void)arg;
+	if (peer_connection_status == RIST_CONNECTION_ESTABLISHED || peer_connection_status == RIST_CLIENT_CONNECTED)
+		peer_connected_count++;
+	else
+		peer_connected_count--;
+	rist_log(logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n", 
+				peer, peer_connection_status, peer_connected_count);
+}
+
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	char buffer[500];
 	char message[200];
-	authenticated = true;
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
 	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
-	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
+	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been peer_connected_count, sending oob/api message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = buffer;
@@ -269,6 +279,11 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 
 	if (rist_auth_handler_set(setup->ctx, cb_auth_connect, cb_auth_disconnect, setup->ctx) < 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
+		return NULL;
+	}
+
+	if (rist_connection_status_callback_set(setup->ctx, connection_status_callback, NULL) == -1) {
+		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
 		return NULL;
 	}
 
@@ -367,7 +382,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 				if (queue_size % 10 == 0 || queue_size > 50)
 					rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
 				if (b && b->payload) {
-					if (authenticated) {
+					if (peer_connected_count) {
 						int w = rist_sender_data_write(callback_object->sender_ctx, b);
 						// TODO: report error?
 						(void) w;
@@ -495,7 +510,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (profile == RIST_PROFILE_SIMPLE || faststart)
-		authenticated = true;
+		peer_connected_count = 1;
 
 	// Update log settings with custom loglevel and remote address if necessary
 	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {

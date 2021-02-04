@@ -375,6 +375,27 @@ RIST_API int rist_logging_settings_free(const struct rist_logging_settings **log
 RIST_API int rist_udp_config_free(const struct rist_udp_config **udp_config);
 
 /**
+ * @brief Connection status callback function
+ *
+ * Optional calling application provided function for receiving connection status changes for peers.
+ *
+ * @param arg optional user data set via rist_connection_status_callback_set
+ * @param peer peer associated with the event
+ * @param rist_peer_connection_status status value
+ * @return void.
+ */
+typedef void (*connection_status_callback_t)(void *arg, struct rist_peer *peer, enum rist_connection_status peer_connection_status);
+
+/**
+ * @brief Set callback for receiving connection status change events
+ *
+ * @param ctx RIST context
+ * @param connection_status_callback_t Callback function that will be called.
+ * @param arg extra arguments for callback function
+ */
+RIST_API int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_callback_t, void *arg);
+
+/**
  * @brief Get the version of libRIST
  *
  * @return String representing the version of libRIST

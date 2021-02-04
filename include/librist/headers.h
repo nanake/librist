@@ -169,6 +169,14 @@ enum rist_stats_type
 	RIST_STATS_RECEIVER_FLOW
 };
 
+enum rist_connection_status
+{
+	RIST_CONNECTION_ESTABLISHED = 0,
+	RIST_CONNECTION_TIMED_OUT = 1,
+	RIST_CLIENT_CONNECTED = 2,
+	RIST_CLIENT_TIMED_OUT = 3
+};
+
 struct rist_ctx;
 struct rist_peer;
 

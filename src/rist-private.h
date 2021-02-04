@@ -335,6 +335,10 @@ struct rist_common_ctx {
 
 	bool debug;
 	uint32_t birthtime_rtp_offset;
+
+	/* Connection status callback */
+	connection_status_callback_t connection_status_callback;
+	void *connection_status_callback_argument;
 };
 
 struct rist_receiver {
@@ -538,6 +542,7 @@ struct rist_peer {
 	struct rist_peer_receiver_stats stats_receiver_total;
 
 	int dead;
+	int timed_out;
 	uint64_t dead_since;
 	uint64_t birthtime_peer;
 	uint64_t birthtime_local;

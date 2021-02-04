@@ -219,6 +219,30 @@ int rist_receiver_data_notify_fd_set(struct rist_ctx *rist_ctx, int fd)
 	return 0;
 }
 
+int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_callback_t connection_status_callback,
+										void *arg)
+{
+	if (RIST_UNLIKELY(!ctx))
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "ctx is null on rist_connection_status_callback_set call!\n");
+		return -1;
+	}
+	struct rist_common_ctx *cctx = NULL;
+	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx) {
+		cctx = &ctx->receiver_ctx->common;
+	}
+	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx) {
+		cctx = &ctx->sender_ctx->common;
+	}
+	else {
+		rist_log_priv3(RIST_LOG_ERROR, "Unknown error in rist_connection_status_callback_set call!\n");
+		return -1;
+	}
+	cctx->connection_status_callback = connection_status_callback;
+	cctx->connection_status_callback_argument = arg;
+	return 0;
+}
+
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
 									int (*data_callback)(void *arg, const struct rist_data_block *data_block),
 									void *arg)
