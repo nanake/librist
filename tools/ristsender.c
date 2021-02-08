@@ -106,7 +106,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
 #endif
 "       -f | --fast-start value                   | Controls data output flow before handshake is completed  |\n"
-"                                                 | -1 = hold data out and igmp source joins                 |\n"
+//"                                                 | -1 = hold data out and igmp source joins                 |\n"
 "                                                 |  0 = hold data out                                       |\n"
 "                                                 |  1 = start to send data immediately                      |\n"
 "       -h | --help                               | Show this help                                           |\n"
