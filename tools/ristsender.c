@@ -33,8 +33,8 @@
 
 #define RISTSENDER_VERSION "2"
 
-#define MAX_INPUT_COUNT 10
-#define MAX_OUTPUT_COUNT 10
+#define MAX_INPUT_COUNT 20
+#define MAX_OUTPUT_COUNT 20
 
 static int signalReceived = 0;
 static int peer_connected_count = 0;

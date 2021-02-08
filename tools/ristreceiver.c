@@ -30,8 +30,8 @@
 
 #define RISTRECEIVER_VERSION "2"
 
-#define MAX_INPUT_COUNT 10
-#define MAX_OUTPUT_COUNT 10
+#define MAX_INPUT_COUNT 20
+#define MAX_OUTPUT_COUNT 20
 #define ReadEnd  0
 #define WriteEnd 1
 #define DATA_READ_MODE_CALLBACK 0
