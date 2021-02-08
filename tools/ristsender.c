@@ -83,7 +83,7 @@ static struct option long_options[] = {
 #ifdef USE_MBEDTLS
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
-{ "fast-start",      no_argument,       NULL, 'f' },
+{ "fast-start",      required_argument, NULL, 'f' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 { 0, 0, 0, 0 },
@@ -105,7 +105,10 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
 #endif
-"       -f | --fast-start                         | Starts sending rtp data before handshake is completed    |\n"
+"       -f | --fast-start value                   | Controls data output flow before handshake is completed  |\n"
+"                                                 | -1 = hold data out and igmp source joins                 |\n"
+"                                                 |  0 = hold data out                                       |\n"
+"                                                 |  1 = start to send data immediately                      |\n"
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -416,7 +419,7 @@ int main(int argc, char *argv[])
 	enum rist_profile profile = RIST_PROFILE_MAIN;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	bool npd = false;
-	bool faststart = false;
+	int faststart = 0;
 	struct rist_sender_args peer_args;
 	char *remote_log_address = NULL;
 
@@ -442,7 +445,7 @@ int main(int argc, char *argv[])
 
 	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:v:fhun", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:f:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -488,7 +491,7 @@ int main(int argc, char *argv[])
 			exit(1);
 		break;
 		case 'f':
-			faststart = true;
+			faststart = atoi(optarg);
 			break;
 		case 'n':
 			npd = true;
@@ -509,7 +512,12 @@ int main(int argc, char *argv[])
 		usage(argv[0]);
 	}
 
-	if (profile == RIST_PROFILE_SIMPLE || faststart)
+	if (faststart < 0 || faststart > 1) {
+		fprintf(stderr,"Invalid or not implemented fast-start mode %d\n", faststart);
+		exit(1);
+	}
+
+	if (profile == RIST_PROFILE_SIMPLE || faststart > 0)
 		peer_connected_count = 1;
 
 	// Update log settings with custom loglevel and remote address if necessary
