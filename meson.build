@@ -146,7 +146,6 @@ if builtin_lz4
 endif
 
 if use_mbedtls
-	add_project_arguments(['-DUSE_MBEDTLS'], language: 'c')
 	if not builtin_mbedtls
 		mbedcrypto_lib = dependency('mbedcrypto', required: false)
 		if not mbedcrypto_lib.found()
@@ -158,25 +157,37 @@ if use_mbedtls
 	endif
 	if builtin_mbedtls
 		cmake = import('cmake')
-		### meson 0.55.0:
-		#mbedtls_options = cmake.subproject_options()
-		#mbedtls_options.add_cmake_defines({'ENABLE_TESTING' : false})
-		#mbedtls_options.add_cmake_defines({'ENABLE_PROGRAMS': false})
-		#mbedtls_options.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
-		### backwards compatible way is via cmake_options kwarg
-		toolchainfile = ''
-		if meson.is_cross_build()
-			if meson.get_cross_property('mingw_toolchainfile')
-				toolchainfile = '-DCMAKE_TOOLCHAIN_FILE='+meson.current_source_dir() + '/common/ci/x86_64-w64-mingw32.cmake'
-			endif
+		toolchainfile = meson.get_cross_property('rist_cmake_toolchainfile', '')
+		if toolchainfile != ''
+			toolchainfile = meson.current_source_dir() / toolchainfile
 		endif
-		mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON', '-DCMAKE_C_VISIBILITY_PRESET=hidden', toolchainfile])
+		if meson.version().version_compare('>= 0.55.0')
+			mbedtls_options = cmake.subproject_options()
+			mbedtls_options.add_cmake_defines({'ENABLE_TESTING' : false})
+			mbedtls_options.add_cmake_defines({'ENABLE_PROGRAMS': false})
+			mbedtls_options.add_cmake_defines({'CMAKE_POSITION_INDEPENDENT_CODE': true})
+			mbedtls_options.add_cmake_defines({'CMAKE_C_VISIBILITY_PRESET': 'hidden'})
+			mbedtls_options.set_install(false)
+			###Meson < 0.56.0 does /not/ generate a cmake toolchain file and thus cross build (at least for mingw) fails
+			if meson.version().version_compare('< 0.56.0') and toolchainfile != ''
+				mbedtls_options.add_cmake_defines({'CMAKE_TOOLCHAIN_FILE': toolchainfile})
+			endif
+			mbedtls_proj = cmake.subproject('mbedtls', options: mbedtls_options)
+		else
+			if toolchainfile != ''
+				toolchainfile = '-DCMAKE_TOOLCHAIN_FILE='+toolchainfile
+			endif
+			mbedtls_proj = cmake.subproject('mbedtls', cmake_options: ['-DENABLE_TESTING=OFF', '-DENABLE_PROGRAMS=OFF', '-DCMAKE_POSITION_INDEPENDENT_CODE=ON', '-DCMAKE_C_VISIBILITY_PRESET=hidden', toolchainfile])
+		endif
 		inc += mbedtls_proj.include_directories('mbedcrypto')
 		mbedcrypto_lib = mbedtls_proj.dependency('mbedcrypto')
 	endif
-	deps += mbedcrypto_lib
-	platform_files += 'contrib/srp.c'
-	platform_files += 'src/eap.c'
+	if mbedcrypto_lib.found()
+		add_project_arguments(['-DUSE_MBEDTLS'], language: 'c')
+		deps += mbedcrypto_lib
+		platform_files += 'contrib/srp.c'
+		platform_files += 'src/eap.c'
+	endif
 endif
 
 subdir('include')
