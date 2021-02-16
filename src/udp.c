@@ -51,8 +51,6 @@ uint64_t timestampNTP_RTC_u64(void) {
 	timespec_t ts;
 #if defined (__APPLE__)
 	clock_gettime_osx(CLOCK_REALTIME_OSX, &ts);
-#elif defined _WIN32
-	clock_gettime(CLOCK_MONOTONIC, &ts);
 #else
 	clock_gettime(CLOCK_REALTIME, &ts);
 #endif
