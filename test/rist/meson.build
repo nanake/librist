@@ -22,7 +22,8 @@ endif
 
 test_send_receive = executable('test_send_receive', 
                                 'test_send_receive.c',
-								'../../contrib/pthread-shim.c',
+				'../../contrib/time-shim.c',
+				'../../contrib/pthread-shim.c',
                                 include_directories: inc,
                                 link_with: librist,
                                 dependencies: [

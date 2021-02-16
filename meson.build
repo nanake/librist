@@ -8,7 +8,22 @@ project('libRIST', 'c',
         meson_version: '>= 0.51.0')
 
 cc = meson.get_compiler('c')
+# Configuration data for config.h
+cdata = configuration_data()
 
+# Arguments in test_args will be used even on feature tests
+test_args = []
+
+if host_machine.system() == 'linux'
+    test_args += '-D_GNU_SOURCE'
+    add_project_arguments('-D_GNU_SOURCE', language: 'c')
+elif host_machine.system() == 'darwin'
+    test_args += '-D_DARWIN_C_SOURCE'
+    add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
+else
+    test_args += '-D_POSIX_C_SOURCE=200112L'
+    add_project_arguments('-D_POSIX_C_SOURCE=200112L', language: 'c')
+endif
 
 # libRIST version
 #If the internal source has changed, increase minor
@@ -52,6 +67,14 @@ if host_machine.system() == 'windows'
 	builtin_cjson = true
 	builtin_lz4 = true
 else
+    if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
+        cdata.set('HAVE_CLOCK_GETTIME', 1)
+    elif host_machine.system() != 'darwin'
+        if not cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : rt_dependency)
+            error('clock_gettime not found')
+        endif
+        cdata.set('HAVE_CLOCK_GETTIME', 1)
+    endif
 	add_project_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 	add_project_arguments(cc.get_supported_arguments([
 		'-Wundef',
@@ -253,3 +276,6 @@ if get_option('static_analyze')
 endif
 
 librist_dep = declare_dependency(include_directories: inc, link_with : librist)
+
+# Generate config.h
+config_h_target = configure_file(output: 'config.h', configuration: cdata)

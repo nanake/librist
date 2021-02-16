@@ -407,7 +407,7 @@ int main(int argc, char *argv[])
 {
 	int c;
 	int option_index;
-	struct rist_callback_object callback_object[MAX_INPUT_COUNT] = { 0 };
+	struct rist_callback_object callback_object[MAX_INPUT_COUNT] = { {0} };
 	struct evsocket_event *event[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;

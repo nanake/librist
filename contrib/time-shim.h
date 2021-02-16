@@ -6,6 +6,8 @@
 #ifndef __TIME_SHIM_H
 #define __TIME_SHIM_H
 
+# include "../../config.h"
+
 #if defined(_WIN32)
 #define usleep(a)	Sleep((a)/1000)
 # include <winsock2.h>
@@ -20,10 +22,33 @@ typedef struct timespec timespec_t;
 int clock_gettime(clockid_t clock, timespec_t *tp);
 
 #elif defined(__APPLE__)
+#  define CLOCK_REALTIME_OSX 0
+#  define CLOCK_MONOTONIC_OSX 1
+#ifndef HAVE_CLOCK_GETTIME
+typedef int clockid_t_osx;
+#else
+# ifndef HAVE_CLOCK_GETTIME
+#  define CLOCK_REALTIME CALENDAR_CLOCK
+# endif
+# ifndef CLOCK_MONOTONIC
+#  define CLOCK_MONOTONIC SYSTEM_CLOCK
+# endif
+#endif
 #include <mach/mach_time.h>
-typedef mach_timespec_t timespec_t;
-int clock_gettime_osx(timespec_t *ts);
-
+#include <time.h>
+typedef __darwin_time_t time_t;
+#ifndef _STRUCT_TIMESPEC
+struct timespec {
+  time_t tv_sec;
+  long   tv_nsec;
+};
+#endif
+typedef struct timespec timespec_t;
+#ifdef HAVE_CLOCK_GETTIME
+int clock_gettime_osx(clock_id_t clock_id, timespec_t *tp);
+#else
+int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp);
+#endif
 #else
 # include <sys/time.h>
 # include <time.h>

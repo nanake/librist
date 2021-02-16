@@ -6,6 +6,7 @@ if host_machine.system() == 'windows'
 	tools_dependencies += [ cc.find_library('ws2_32') ]
 endif
 
+tools_deps += [	'../contrib/time-shim.c']
 tools_deps += [	'../contrib/pthread-shim.c']
 
 srp_shared = []

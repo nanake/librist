@@ -18,8 +18,8 @@
 #include <fcntl.h>
 #include <inttypes.h>
 #include <stddef.h>
-#include "pthread-shim.h"
 #include "time-shim.h"
+#include "pthread-shim.h"
 #include "socket-shim.h"
 #include "libevsocket.h"
 #include "librist.h"

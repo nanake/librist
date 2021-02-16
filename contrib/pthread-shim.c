@@ -310,6 +310,7 @@ int sem_post(sem_t *sem)
 
 #ifdef __APPLE__
 #include <sys/time.h>
+#include "time-shim.h"
 #endif
 
 // This is not part of the POSIX API
@@ -317,12 +318,12 @@ int sem_post(sem_t *sem)
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
 {
 #ifdef __APPLE__
-	struct timespec timeToWait;
-	clock_gettime(CLOCK_REALTIME, &timeToWait);
-	timeToWait.tv_nsec += ms * 1000000UL;
-	timeToWait.tv_nsec %= 1000000000UL;
-	timeToWait.tv_sec += timeToWait.tv_nsec < (ms * 1000000L) ? 1 : 0;
-	return pthread_cond_timedwait(cond, mutex, &timeToWait);
+	timespec_t timeToWait;
+	clock_gettime_osx(CLOCK_REALTIME_OSX, &timeToWait);
+	struct timespec timeToWaitApple;
+	timeToWaitApple.tv_nsec = timeToWait.tv_nsec + ms * 1000000UL;
+	timeToWaitApple.tv_sec = timeToWait.tv_sec + timeToWait.tv_nsec < (ms * 1000000L) ? 1 : 0;
+	return pthread_cond_timedwait(cond, mutex, &timeToWaitApple);
 #else
 	timespec_t ts;
 	struct timeval tv;

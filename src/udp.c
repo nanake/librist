@@ -32,10 +32,9 @@ uint64_t timestampNTP_u64(void)
 	// over every 232 seconds (136 years) and a theoretical resolution of
 	// 2−32 seconds (233 picoseconds). NTP uses an epoch of January 1, 1900.
 	// Therefore, the first rollover occurs on February 7, 2036.
-
 	timespec_t ts;
-#ifdef __APPLE__
-	clock_gettime_osx(&ts);
+#if defined (__APPLE__)
+	clock_gettime_osx(CLOCK_MONOTONIC_OSX, &ts);
 #else
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 #endif
@@ -50,8 +49,8 @@ uint64_t timestampNTP_u64(void)
 
 uint64_t timestampNTP_RTC_u64(void) {
 	timespec_t ts;
-#ifdef __APPLE__
-	clock_gettime_osx(&ts);
+#if defined (__APPLE__)
+	clock_gettime_osx(CLOCK_REALTIME_OSX, &ts);
 #elif defined _WIN32
 	clock_gettime(CLOCK_MONOTONIC, &ts);
 #else
