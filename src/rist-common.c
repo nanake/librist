@@ -891,6 +891,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
 					f->dataout_fifo_queue_bytesize += b->size;
 					unsigned long fifo_count = atomic_load_explicit(&f->dataout_fifo_queue_counter, memory_order_relaxed);
+					if (!ctx->receiver_data_callback && fifo_count == RIST_DATAOUT_QUEUE_BUFFERS)
+						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Rist data out fifo queue overflow\n");
 					while ((fifo_count +1) <= RIST_DATAOUT_QUEUE_BUFFERS)
 					{
 						if (atomic_compare_exchange_weak(&f->dataout_fifo_queue_counter, &fifo_count, (fifo_count +1)))
