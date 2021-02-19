@@ -5,7 +5,6 @@
 
 #include "time-shim.h"
 #include "pthread-shim.h"
-
 #ifdef _WIN32
 
 #include <errno.h>
@@ -317,14 +316,6 @@ int sem_post(sem_t *sem)
 // Convience function around pthread
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
 {
-#ifdef __APPLE__
-	timespec_t timeToWait;
-	clock_gettime_osx(CLOCK_REALTIME_OSX, &timeToWait);
-	struct timespec timeToWaitApple;
-	timeToWaitApple.tv_nsec = timeToWait.tv_nsec + ms * 1000000UL;
-	timeToWaitApple.tv_sec = timeToWait.tv_sec + timeToWait.tv_nsec < (ms * 1000000L) ? 1 : 0;
-	return pthread_cond_timedwait(cond, mutex, &timeToWaitApple);
-#else
 	timespec_t ts;
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
@@ -332,7 +323,6 @@ int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint
 	ts.tv_sec = tv.tv_sec + odd / 1000000000ULL;
 	ts.tv_nsec = odd % 1000000000ULL;
 	return pthread_cond_timedwait(cond, mutex, (const struct timespec*)&ts);
-#endif
 }
 
 #endif

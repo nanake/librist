@@ -25,9 +25,9 @@ int clock_gettime(clockid_t clock, timespec_t *tp);
 #  define CLOCK_REALTIME_OSX 0
 #  define CLOCK_MONOTONIC_OSX 1
 #ifndef HAVE_CLOCK_GETTIME
-typedef int clockid_t_osx;
+typedef int clockid_t;
 #else
-# ifndef HAVE_CLOCK_GETTIME
+#ifndef CLOCK_REALTIME
 #  define CLOCK_REALTIME CALENDAR_CLOCK
 # endif
 # ifndef CLOCK_MONOTONIC
@@ -44,11 +44,7 @@ struct timespec {
 };
 #endif
 typedef struct timespec timespec_t;
-#ifdef HAVE_CLOCK_GETTIME
 int clock_gettime_osx(clock_id_t clock_id, timespec_t *tp);
-#else
-int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp);
-#endif
 #else
 # include <sys/time.h>
 # include <time.h>
