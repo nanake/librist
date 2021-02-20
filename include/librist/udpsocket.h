@@ -34,9 +34,9 @@ typedef int socklen_t;
 #include <netdb.h>
 #include <unistd.h>
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #include <netinet/ip.h>
 #include <netinet/ip6.h>
-#include <netinet/in.h>
 #include <net/if.h>
 #include <poll.h>
 #endif /* Windows / POSIX */

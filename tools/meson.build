@@ -32,7 +32,9 @@ executable('ristsender',
 executable('ristreceiver',
 	['ristreceiver.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
 	link_with : [librist],
-	dependencies: [tools_dependencies],
+	dependencies: [
+		tools_dependencies,
+		threads],
 	include_directories: inc,
 	install: true)
 
@@ -51,3 +53,4 @@ if use_mbedtls
 			include_directories: inc,
 			install: true)
 endif
+

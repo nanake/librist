@@ -43,7 +43,7 @@
 #define be64toh(x) OSSwapBigToHostInt64(x)
 #define le64toh(x) OSSwapLittleToHostInt64(x)
 
-#else
+#elif defined(__linux__)
 # include <endian.h>
 # if !defined(htobe64)
 #  if __BYTE_ORDER == __LITTLE_ENDIAN
@@ -59,7 +59,8 @@
 #   define be64toh(x) (x)
 #  endif
 # endif
+#else
+#include <sys/endian.h>
 #endif
-
 
 #endif

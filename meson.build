@@ -11,20 +11,6 @@ cc = meson.get_compiler('c')
 # Configuration data for config.h
 cdata = configuration_data()
 
-# Arguments in test_args will be used even on feature tests
-test_args = []
-
-if host_machine.system() == 'linux'
-    test_args += '-D_GNU_SOURCE'
-    add_project_arguments('-D_GNU_SOURCE', language: 'c')
-elif host_machine.system() == 'darwin'
-    test_args += '-D_DARWIN_C_SOURCE'
-    add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
-else
-    test_args += '-D_POSIX_C_SOURCE=200112L'
-    add_project_arguments('-D_POSIX_C_SOURCE=200112L', language: 'c')
-endif
-
 # libRIST version
 #If the internal source has changed, increase minor
 #If any interfaces have been added, removed, or changed since the last update, increment major and minor to 0.
@@ -54,6 +40,8 @@ if not get_option('fallback_builtin')
 	required_library = true
 endif
 
+threads = []
+test_args = []
 if host_machine.system() == 'windows'
 	deps += [ cc.find_library('ws2_32') ]
 	add_project_arguments(['-D_WIN32_WINNT=0x0601'], language: 'c')
@@ -66,15 +54,30 @@ if host_machine.system() == 'windows'
 	#Windows meson tends to break on pkgconfig/Cmake finding, so use builtin libraries
 	builtin_cjson = true
 	builtin_lz4 = true
+	librist_soversion = ''
 else
-    if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
-        cdata.set('HAVE_CLOCK_GETTIME', 1)
-    elif host_machine.system() != 'darwin'
-        if not cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : rt_dependency)
-            error('clock_gettime not found')
-        endif
-        cdata.set('HAVE_CLOCK_GETTIME', 1)
-    endif
+	if host_machine.system() == 'linux'
+		test_args += '-D_GNU_SOURCE'
+		add_project_arguments('-D_GNU_SOURCE', language: 'c')
+		if cc.check_header('linux/if_alg.h')
+			add_project_arguments(['-DLINUX_CRYPTO'], language: 'c')
+			platform_files += 'contrib/linux-crypto.c'
+		endif
+	elif host_machine.system() == 'darwin'
+		test_args += '-D_DARWIN_C_SOURCE'
+		add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
+	endif
+	librist_soversion = librist_soversion
+	if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
+		cdata.set('HAVE_CLOCK_GETTIME', 1)
+	elif host_machine.system() != 'darwin'
+		lib_rt = cc.find_library('rt', required: false)
+		if not cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : lib_rt)
+		error('clock_gettime not found')
+		endif
+		deps += [ lib_rt ]
+		cdata.set('HAVE_CLOCK_GETTIME', 1)
+	endif
 	add_project_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 	add_project_arguments(cc.get_supported_arguments([
 		'-Wundef',
@@ -88,27 +91,14 @@ else
 		'-Wmaybe-uninitialized',
 		'-Wno-error=deprecated-declarations'
 		]), language : 'c')
+	threads = [ dependency('threads') ]
+	deps += threads
 endif
 
 if cc.has_argument('-fvisibility=hidden')
     add_project_arguments('-fvisibility=hidden', language: 'c')
 else
     warning('Compiler does not support -fvisibility=hidden, all symbols will be public!')
-endif
-
-test_args = []
-threads = []
-if host_machine.system() == 'linux'
-    test_args += '-D_GNU_SOURCE'
-	add_project_arguments(['-D_GNU_SOURCE'], language: 'c')
-	threads = [ dependency('threads') ]
-	deps += threads
-	lib_rt = cc.find_library('rt', required: false)
-	deps += [ lib_rt ]
-	if cc.check_header('linux/if_alg.h')
-		add_project_arguments(['-DLINUX_CRYPTO'], language: 'c')
-		platform_files += 'contrib/linux-crypto.c'
-	endif
 endif
 
 # Header checks
@@ -127,12 +117,6 @@ if not cc.check_header('stdatomic.h')
     else
         error('Atomics not supported')
     endif
-endif
-
-if host_machine.system() == 'windows'
-	librist_soversion = ''
-else 
-	librist_soversion = librist_soversion
 endif
 
 #On ubuntu cjson does not come with pkgconfig files, hence the extended checking.
