@@ -309,7 +309,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__APPLE__)
 	if (is_multicast) {
 		struct sockaddr_in6 sa = { .sin6_family = raw.sin6_family, .sin6_port = raw.sin6_port };
 		if (bind(sd, (struct sockaddr *)&sa, addrlen) < 0)	{
