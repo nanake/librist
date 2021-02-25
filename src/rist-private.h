@@ -465,6 +465,7 @@ struct rist_peer {
 
 	/* Identifiers for multipeer links */
 	uint32_t adv_peer_id;
+	uint32_t peer_ssrc;
 
 	char receiver_name[RIST_MAX_HOSTNAME];
 

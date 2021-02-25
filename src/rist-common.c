@@ -1803,11 +1803,14 @@ static void rist_rtcp_handle_echo_request(struct rist_peer *peer, struct rist_rt
 	if (RIST_UNLIKELY(!peer->echo_enabled))
 		peer->echo_enabled = true;
 	uint64_t echo_request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
-	rist_respond_echoreq(peer, echo_request_time);
+	uint32_t ssrc = be32toh(echoreq->ssrc);
+	rist_respond_echoreq(peer, echo_request_time, ssrc);
 }
 
 static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_rtcp_echoext *echoreq) {
 	peer->echo_enabled = true;
+	if (be32toh(echoreq->ssrc) != peer->peer_ssrc)
+		return;
 	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
 	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
 	peer->last_mrtt = (uint32_t)rtt / RIST_CLOCK;
@@ -1876,6 +1879,9 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 		if (block_type == 5)
 		{
 			struct rist_rtcp_xr_dlrr *dlrr = (struct rist_rtcp_xr_dlrr *)&xr_pkt[offset];
+			uint32_t ssrc  = be32toh(dlrr->ssrc);
+			if (ssrc != peer->peer_ssrc)
+				return;
 			uint64_t lrr_tmp = (peer->last_sender_report_ts >> 16) & 0xFFFFFFFF;
 			uint64_t lrr = be32toh(dlrr->lrr);
 			uint64_t rtt;
@@ -1886,7 +1892,7 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 			} else {
 				//Slightly less accurate, needed when RTT is bigger than our RTCP interval.
 				uint64_t now = timestampNTP_u64();
-				lrr = lrr << 16;
+				lrr = (lrr << 16) & 0x0000FFFFFFFF0000;
 				lrr |= (now & 0xFFFF000000000000);
 				rtt  = now - lrr  - ((uint64_t)be32toh(dlrr->delay) << 16);
 			}
@@ -2164,6 +2170,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->config.max_retries = peer_src->config.max_retries;
 		peer->config.timing_mode = peer_src->config.timing_mode;
 		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
+		peer->peer_ssrc = peer_src->peer_ssrc;
 		peer->session_timeout = peer_src->session_timeout;
 
 		init_peer_settings(peer);

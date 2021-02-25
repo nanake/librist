@@ -768,6 +768,7 @@ static int rist_receiver_peer_create(struct rist_receiver *ctx,
 	if (!p)
 		return -1;
 
+	p->peer_ssrc = prand_u32();
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 	{
 		if (p->local_port % 2 != 0)
@@ -780,6 +781,7 @@ static int rist_receiver_peer_create(struct rist_receiver *ctx,
 
 		sprintf((char *)config->address, "%s:%d", p->url, p->local_port + 1);
 		p_rtcp = rist_receiver_peer_insert_local(ctx, config);
+		p_rtcp->peer_ssrc = p->peer_ssrc;
 		if (!p_rtcp)
 		{
 			udpsocket_close(p->sd);

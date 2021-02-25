@@ -637,13 +637,13 @@ static inline void rist_rtcp_write_echoresp(uint8_t *buf,int *offset, const uint
 	echo->delay = 0;
 }
 
-static inline void rist_rtcp_write_xr_echoreq(uint8_t *buf, int *offset,struct rist_peer *peer, const uint32_t flow_id)
+static inline void rist_rtcp_write_xr_echoreq(uint8_t *buf, int *offset,struct rist_peer *peer)
 {
 	struct rist_rtcp_hdr *xr_hdr = (struct rist_rtcp_hdr *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
 	*offset += sizeof(*xr_hdr);
 	xr_hdr->flags =  0x80;//v=2;p=0;
 	xr_hdr->ptype = PTYPE_XR;
-	xr_hdr->ssrc = htobe32(flow_id);
+	xr_hdr->ssrc = htobe32(peer->peer_ssrc);
 	struct rist_rtcp_xr_rrtrb *block = (struct rist_rtcp_xr_rrtrb *)(buf + RIST_MAX_PAYLOAD_OFFSET + *offset);
 	*offset += sizeof(*block);
 	block->block_type = 4;
@@ -664,7 +664,7 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	rist_rtcp_write_rr(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	if (peer->echo_enabled == false)
-		rist_rtcp_write_xr_echoreq(rtcp_buf, &payload_len, peer, peer->adv_flow_id);
+		rist_rtcp_write_xr_echoreq(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 }
@@ -779,12 +779,12 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	return;
 }
 
-int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time) {
+int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time, uint32_t ssrc) {
 	uint8_t *rtcp_buf = get_cctx(peer)->buf.rtcp;
 	int payload_len = 0;
 	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
-	rist_rtcp_write_echoresp(rtcp_buf, &payload_len, echo_request_time, peer->adv_flow_id);
+	rist_rtcp_write_echoresp(rtcp_buf, &payload_len, echo_request_time, ssrc);
 	if (peer->receiver_mode) {
 		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;
 		return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
@@ -800,7 +800,7 @@ int rist_request_echo(struct rist_peer *peer) {
 	int payload_len = 0;
 	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
-	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
+	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->sender_ctx? peer->adv_flow_id : peer->peer_ssrc);
 	if (peer->receiver_mode)
 	{
 		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;

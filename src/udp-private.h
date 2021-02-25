@@ -375,7 +375,7 @@ RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
 RIST_PRIV int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len);
 RIST_PRIV int rist_receiver_periodic_rtcp(struct rist_peer *peer);
 RIST_PRIV void rist_sender_periodic_rtcp(struct rist_peer *peer);
-RIST_PRIV int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time);
+RIST_PRIV int rist_respond_echoreq(struct rist_peer *peer, const uint64_t echo_request_time, uint32_t ssrc);
 RIST_PRIV int rist_request_echo(struct rist_peer *peer);
 RIST_PRIV int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, uint32_t seq_rtp);
 RIST_PRIV size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
