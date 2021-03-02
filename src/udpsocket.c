@@ -34,7 +34,7 @@ int udpsocket_resolve_host(const char *host, uint16_t port, struct sockaddr *add
 	} else {
 		struct addrinfo *res;
 		int gai_ret = getaddrinfo(host, NULL, NULL, &res);
-		if (gai_ret < 0) {
+		if (gai_ret != 0) {
 			rist_log_priv3( RIST_LOG_ERROR, "Failure resolving host %s: %s\n", host, gai_strerror(gai_ret));
 			return -1;
 		}
