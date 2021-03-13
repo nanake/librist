@@ -568,8 +568,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			|| (highest_written_idx < reader_idx && !(idx < highest_written_idx || idx > reader_idx))) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
 			f->stats_instant.dropped_late++;
-                        if (packet_time > f->last_packet_ts)
-                            f->last_seq_found = seq;
+			if (packet_time > f->last_packet_ts)
+				f->last_seq_found = seq;
 			return -1;
 		}
 		if (!retry) {
@@ -588,8 +588,10 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			f->last_seq_found  = seq;
 		f->stats_instant.dropped_full++;
 		//Something is wrong, and we should reset
-		if (f->stats_instant.dropped_full > 100)
+		if (f->stats_instant.dropped_full > 100) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Buffer is full, resetting buffer\n");
 			f->receiver_queue_has_items = false;
+		}
 		return -1;
 	}
 	if (RIST_UNLIKELY(f->receiver_queue[idx])) {
@@ -607,6 +609,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 			f->receiver_queue[idx] = NULL;
 		}
 	}
+
 
 	/* Now, we insert the packet into receiver queue */
 	if (receiver_insert_queue_packet(f, peer, idx, buf, len, seq, source_time, src_port, dst_port, packet_time)) {
@@ -832,6 +835,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							//Reset the flow if we keep hitting packets that are too late, likely our time offset is wrong.
 							f->too_late_ctr++;
 							if (f->too_late_ctr > 100) {
+								rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Too many old packets, resetting buffer\n");
 								f->receiver_queue_has_items = false;
 								return;
 							}
