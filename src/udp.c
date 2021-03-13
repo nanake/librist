@@ -59,7 +59,7 @@ uint64_t timestampNTP_RTC_u64(void) {
 	t /= 1000000000;
 	// There is 70 years (incl. 17 leap ones) offset to the Unix Epoch.
 	// No leap seconds during that period since they were not invented yet.
-	t |= (70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec;
+	t |= (70LL * 365 + 17) * 24 * 60 * 60 + ts.tv_sec << 32;
 	return t;
 }
 
