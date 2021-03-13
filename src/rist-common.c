@@ -3569,7 +3569,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		//1000	1.00
 
 		// socket polls (returns in max_jitter_ms max and processes the next 100 socket events)
-		pthread_mutex_unlock(&ctx->common.peerlist_lock);
+		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		evsocket_loop_single(ctx->common.evctx, max_jitter_ms, 100);
 		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 
