@@ -1634,7 +1634,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 		// the peer could already be part of a flow and it came back after timing out
 		if (!peer->flow) {
 			if (rist_receiver_associate_flow(peer, flow_id) != 1) {
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created/associate peer to flow.\n");
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create/associate peer to flow.\n");
 				return false;
 			}
 			if (ctx->common.profile == RIST_PROFILE_SIMPLE && peer->parent->peer_data->authenticated)

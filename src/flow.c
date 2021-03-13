@@ -253,6 +253,10 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		}
 	} else
 	{
+		if (!p->parent) {
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "FLOW #%"PRIu32" cannot be created yet because this peer has no parent\n", flow_id);
+			return -1;
+		}
 		f = p->parent->flow;
 	}
 
