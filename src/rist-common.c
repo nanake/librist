@@ -2454,14 +2454,17 @@ protocol_bypass:
 		bool failed_eap = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
-				p->last_rtcp_received = timestampNTP_u64();
+				uint64_t now = timestampNTP_u64();
 				if (p->eap_authentication_state != 1 && p->dead) {
+					uint64_t dead_time = (now - p->last_rtcp_received);
 					p->dead = false;
 					//Only used on main profile
 					++p->parent->child_alive_count;
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-							"Peer %d was dead and it is now alive again\n", p->adv_peer_id);
+							"Peer %d was dead for %"PRIu64" ms and it is now alive again\n", 
+								dead_time / RIST_CLOCK, p->adv_peer_id);
 				}
+				p->last_rtcp_received = now;
 				payload.peer = p;
 				if (cctx->profile == RIST_PROFILE_SIMPLE)
 				{
@@ -2943,7 +2946,8 @@ protocol_bypass:
 				{
 					if (peer->parent)
 					{
-						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out\n", peer->adv_peer_id);
+						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
+							(now - peer->last_rtcp_received)/ RIST_CLOCK);
 						if (cctx->connection_status_callback)
 							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CLIENT_TIMED_OUT);
 						kill_peer(peer);
