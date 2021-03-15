@@ -48,6 +48,9 @@ if host_machine.system() == 'windows'
 	if get_option('default_library') != 'static'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
+	if get_option('have_mingw_pthreads')
+		cdata.set('HAVE_PTHREADS', 1)
+	endif
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
 	add_project_arguments(cc.get_supported_arguments(['-wd4996', '-wd4324']), language: 'c')

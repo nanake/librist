@@ -14,7 +14,11 @@
 #include <winsock2.h> //<-- not used here, but included because otherwise our order is broken.
 #define _WINSOCKAPI_
 # include <windows.h>
-
+#ifdef HAVE_PTHREADS
+#include <pthread.h>
+# define PTHREAD_START_FUNC(fname,aname) void *fname(void *aname)
+RIST_PRIV int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms);
+#else
 typedef CRITICAL_SECTION pthread_mutex_t;
 typedef void pthread_mutexattr_t;
 typedef void pthread_condattr_t;
@@ -62,7 +66,7 @@ typedef HANDLE sem_t;
 RIST_PRIV int sem_init(sem_t *sem, int pshared, unsigned value);
 RIST_PRIV int sem_post(sem_t *sem);
 RIST_PRIV int sem_wait(sem_t *sem);
-
+#endif
 #else
 # include <pthread.h>
 # include <sys/types.h>

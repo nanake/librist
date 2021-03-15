@@ -6,7 +6,18 @@
 #include "time-shim.h"
 #include "pthread-shim.h"
 #ifdef _WIN32
-
+#ifdef HAVE_PTHREADS
+int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
+{
+	timespec_t ts;
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	uint64_t odd = (tv.tv_usec + (ms * 1000)) * 1000;
+	ts.tv_sec = tv.tv_sec + odd / 1000000000ULL;
+	ts.tv_nsec = odd % 1000000000ULL;
+	return pthread_cond_timedwait(cond, mutex, (const struct timespec *)&ts);
+}
+#else
 #include <errno.h>
 
 int pthread_create(pthread_t *thread, pthread_attr_t *attr, DWORD (__stdcall *start_routine)(LPVOID), void *arg)
@@ -304,7 +315,7 @@ int sem_post(sem_t *sem)
 		return 0;
 	}
 }
-
+#endif
 #else
 
 #ifdef __APPLE__
