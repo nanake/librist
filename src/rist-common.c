@@ -2211,6 +2211,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 		peer->peer_ssrc = peer_src->peer_ssrc;
 		peer->session_timeout = peer_src->session_timeout;
+		peer->gre_version = 1;
 
 		init_peer_settings(peer);
 	}
@@ -2315,7 +2316,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-
+			uint8_t gre_version = gre->flags2 & 0x7;
 			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 				// Key bit is set, that means the other side want to send
 				// encrypted data.
@@ -2349,7 +2350,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					nonce = gre_key_seq->checksum_reserved1;
 					gre_size -= 4;
 				}
-				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), (unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
+				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
 			} else if (has_seq) {
 				// Key bit is not set, that means the other side does not want to send
 				//  encrypted data

@@ -244,13 +244,14 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 		if (k->key_size) {
 			// Prepare GRE header
 			struct rist_gre_key_seq_real *gre_key_seq = (void *) header_buf;
+			gre_key_seq->flags2 = p->gre_version &0x7;
 			SET_BIT(gre_key_seq->flags1, 5); // set key flag
 			SET_BIT(gre_key_seq->flags1, 4); // set seq bit
 
 			gre_key_seq->prot_type = htobe16(proto_type);
 			gre_key_seq->seq = htobe32(seq);
 
-			_librist_crypto_psk_encrypt(&p->key_tx, gre_key_seq->seq, (unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len), (hdr_len + payload_len));
+			_librist_crypto_psk_encrypt(&p->key_tx, gre_key_seq->seq, p->gre_version, (unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len), (hdr_len + payload_len));
 			gre_key_seq->nonce = k->gre_nonce;
 		} else {
 			struct rist_gre_hdr *gre_seq = (struct rist_gre_hdr *) header_buf;

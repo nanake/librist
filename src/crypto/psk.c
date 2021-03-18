@@ -105,13 +105,14 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     key->used_times = 0;
 }
 
-static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
     /* Prepare AES iv */
     uint8_t iv[AES_BLOCK_SIZE];
     // The byte array needs to be zeroes and then the seq in network byte order
-    memset(iv, 0, 12);
-    memcpy(iv + 12, &seq_nbe, sizeof(seq_nbe));
+	uint8_t copy_offset = gre_version == 1? 0 : 12;
+    memset(iv, 0, 16);
+    memcpy(iv + copy_offset, &seq_nbe, sizeof(seq_nbe));
 #ifdef USE_MBEDTLS
         size_t aes_offset = 0;
         unsigned char buf[16];
@@ -129,7 +130,7 @@ static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, 
     key->used_times++;
 }
 
-void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
     if (!nonce)
         return;
@@ -141,11 +142,11 @@ void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t 
     if (key->used_times > RIST_AES_KEY_REUSE_TIMES)
         return;
 
-    _librist_crypto_psk_aes_ctr(key, seq_nbe, inbuf, outbuf, payload_len);
+    _librist_crypto_psk_aes_ctr(key, seq_nbe, gre_version, inbuf, outbuf, payload_len);
     return;
 }
 
-void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version, uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
     if (!key->gre_nonce || (key->used_times +1) > RIST_AES_KEY_REUSE_TIMES || (key->key_rotation > 0 && key->used_times >= key->key_rotation)) {
         do {
@@ -153,6 +154,7 @@ void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t
         } while (!key->gre_nonce);
         _librist_crypto_aes_key(key);
     }
-    _librist_crypto_psk_aes_ctr(key, seq_nbe, inbuf, outbuf, payload_len);
+
+    _librist_crypto_psk_aes_ctr(key, seq_nbe, gre_version, inbuf, outbuf, payload_len);
     return;
 }

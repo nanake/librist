@@ -498,6 +498,7 @@ struct rist_peer {
 	struct rist_key key_rx; // used for received packets
 	struct eapsrp_ctx *eap_ctx;
 	int eap_authentication_state;
+	uint8_t gre_version;
 
 	/* compression flag (sender only) */
 	bool compression;
