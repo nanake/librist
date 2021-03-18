@@ -1,5 +1,5 @@
 [wrap-file]
-directory = mbedtls-2.23.0
-source_url = https://github.com/ARMmbed/mbedtls/archive/v2.23.0.tar.gz
-source_filename = v2.23.0.tar.gz
-source_hash = 9933fe6b5991d5308e183a5a07454f76d7054721ba269d0c3811b227cb629e7a
+directory = mbedtls-2.26.0
+source_url = https://github.com/ARMmbed/mbedtls/archive/v2.26.0.tar.gz
+source_filename = v2.26.0.tar.gz
+source_hash = 37949e823c7e1f6695fc56858578df355da0770c284b1c1304cfc8b396d539cd
