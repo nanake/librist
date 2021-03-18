@@ -10,7 +10,6 @@ project('libRIST', 'c',
 cc = meson.get_compiler('c')
 # Configuration data for config.h
 cdata = configuration_data()
-
 # libRIST version
 #If the internal source has changed, increase minor
 #If any interfaces have been added, removed, or changed since the last update, increment major and minor to 0.
@@ -34,6 +33,7 @@ builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
 builtin_mbedtls = get_option('builtin_mbedtls')
 use_mbedtls = get_option('use_mbedtls')
+cdata.set10('ALLOW_INSECURE_IV_FALLBACK', get_option('allow_insecure_iv_fallback'))
 
 required_library = false
 if not get_option('fallback_builtin')

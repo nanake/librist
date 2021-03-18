@@ -16,6 +16,7 @@
 #include "lz4.h"
 #include "mpegts.h"
 #include "rist_ref.h"
+#include "config.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
@@ -2317,6 +2318,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
 			uint8_t gre_version = gre->flags2 & 0x7;
+
 			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 				// Key bit is set, that means the other side want to send
 				// encrypted data.
@@ -2334,6 +2336,10 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				}
 				if (!p)
 					p = peer;
+#if ALLOW_INSECURE_IV_FALLBACK == 1
+				if (gre_version < 1)
+					p->gre_version = gre_version;
+#endif
 				k = &p->key_rx;
 				p = peer;
 
