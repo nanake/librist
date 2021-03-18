@@ -546,6 +546,42 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	}
 
 	uint64_t packet_time = receiver_calculate_packet_time(f, source_time, now, retry, payload_type);
+    size_t idx = seq & (f->receiver_queue_max - 1);
+    if (RIST_UNLIKELY(peer->config.timing_mode == RIST_TIMING_MODE_ARRIVAL && retry))
+	{
+		//arrival packet time would be incorrect for a retry packet, so instead we interpolate between packets.
+		//this does assume CBR
+		struct rist_buffer *previous = NULL;
+		size_t index = (idx -1)& (f->receiver_queue_max - 1);
+		while (previous == NULL && index != idx)
+		{
+			previous = f->receiver_queue[index];
+			index = (index -1)& (f->receiver_queue_max - 1);
+		}
+		struct rist_buffer *next = NULL;
+		index = (idx +1)& (f->receiver_queue_max -1);
+		while (next == NULL && index != idx)
+		{
+			next = f->receiver_queue[index];
+			index = (index +1)& (f->receiver_queue_max -1);
+		}
+		//interpolate the arrival time, assuming CBR
+		if (next && previous)
+		{
+			uint32_t steps = (next->seq - previous->seq);
+			if (f->short_seq)
+				steps = (uint16_t)steps;
+			uint64_t time_per_step = (next->packet_time - previous->packet_time) / steps;
+			uint32_t steps_since_previous = seq - previous->seq;
+			if (f->short_seq)
+				steps_since_previous = (uint16_t)steps_since_previous;
+			packet_time = previous->packet_time + (time_per_step * steps_since_previous);
+			assert(packet_time < next->packet_time);
+		} else if (next)
+		{
+			packet_time = next->packet_time;
+		}
+	}
 	f->last_recv_ts = now_monotonic;
 
 	// Now, get the new position and check what is there
@@ -554,7 +590,6 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	   valid way anyway.
 	   We only check this for packets that arrive out of order (i.e.: with a lower
 	   output time than the highest known output time) */
-	size_t idx = seq & (f->receiver_queue_max - 1);
 	size_t reader_idx;
 	bool out_of_order = false;
 	uint32_t expected_seq = (f->last_seq_found +1) & (UINT16_MAX -1);
