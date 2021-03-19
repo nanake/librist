@@ -93,7 +93,6 @@ static void _librist_crypto_aes_key(struct rist_key *key)
 #endif
 #ifdef USE_MBEDTLS
     mbedtls_aes_setkey_enc(&key->mbedtls_aes_ctx, aes_key, key->key_size);
-    mbedtls_aes_setkey_dec(&key->mbedtls_aes_ctx, aes_key, key->key_size);
 #elif defined(LINUX_CRYPTO)
     if (key->linux_crypto_ctx)
         linux_crypto_set_key(aes_key, key->key_size / 8, key->linux_crypto_ctx);
