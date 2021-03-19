@@ -227,7 +227,7 @@ static int rist__get_monotonic(struct timeval *tv)
 #ifdef HAVE_CLOCK_GETTIME
 int clock_gettime_osx(clock_id_t clock_id, timespec_t *tp)
 #else
-int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp);
+int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp)
 #endif
 {
     int ret = 0;
