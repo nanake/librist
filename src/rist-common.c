@@ -701,7 +701,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 				f->stats_total.recovered_average);
 		return 8;
 	} else {
-		if ((uint64_t)(now - b->insertion_time) > peer->recovery_buffer_ticks) {
+		if ((uint64_t)(now - b->insertion_time) > (peer->recovery_buffer_ticks *1.1)) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 					"Datagram %" PRIu32 " is missing but it is too late (%" PRIu64
 					"ms) to send NACK!, retry #%lu, retry queue %d, max time %"PRIu64"\n",
