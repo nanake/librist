@@ -1167,6 +1167,8 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				uint64_t rtt = peer->last_mrtt;
 				if (peer->config.recovery_rtt_min > rtt)
 					rtt = peer->config.recovery_rtt_min;
+				if (peer->config.recovery_rtt_max < rtt)
+					rtt = peer->config.recovery_rtt_max;
 				if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
 					// Agressive congestion control only allows every two RTTs
 					rtt = rtt * 2;
