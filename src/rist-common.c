@@ -907,38 +907,38 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					}
 					/* insert into fifo queue */
 					uint8_t *payload = b->data;
-					size_t dataout_fifo_write_index = atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire);
-					struct rist_data_block *block = f->dataout_fifo_queue[dataout_fifo_write_index];
-					f->dataout_fifo_queue[dataout_fifo_write_index] = new_data_block(
-							block, b,
+					struct rist_data_block *block = new_data_block(
+							NULL, b,
 							&payload[RIST_MAX_PAYLOAD_OFFSET], f->flow_id, flags);
 					b->data = NULL;
-					if (ctx->receiver_data_callback && f->dataout_fifo_queue[dataout_fifo_write_index]) {
-						rist_ref_inc(f->dataout_fifo_queue[dataout_fifo_write_index]->ref);
+					if (ctx->receiver_data_callback && block) {
+						rist_ref_inc(block->ref);
 						// send to callback synchronously
 						ctx->receiver_data_callback(ctx->receiver_data_callback_argument,
-								f->dataout_fifo_queue[dataout_fifo_write_index]);
+								block);
 					}
-					if (ctx->receiver_data_ready_notify_fd) {
-						// send a data ready signal by writing a single byte of value 0
-						char empty = '\0';
-						if(write(ctx->receiver_data_ready_notify_fd, &empty, 1) == -1)
-						{
-							// We ignore the error condition as missing data is not harmful here
-							// It is only a signaling mechanism
+
+					size_t dataout_fifo_write_index = atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_relaxed);
+					size_t dataout_fifo_read_index = atomic_load_explicit(&f->dataout_fifo_queue_read_index, memory_order_acquire);
+					uint32_t fifo_count = (dataout_fifo_write_index - dataout_fifo_read_index)&(RIST_DATAOUT_QUEUE_BUFFERS -1);
+					if (!ctx->receiver_data_callback && fifo_count +1 == RIST_DATAOUT_QUEUE_BUFFERS) {
+						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Rist data out fifo queue overflow\n");
+						rist_receiver_data_block_free(&block);
+					} else
+					{
+						f->dataout_fifo_queue[dataout_fifo_write_index] = block;
+						atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
+						// Wake up the fifo read thread (poll)
+						if (ctx->receiver_data_ready_notify_fd) {
+							// send a data ready signal by writing a single byte of value 0
+							char empty = '\0';
+							if(write(ctx->receiver_data_ready_notify_fd, &empty, 1) == -1)
+							{
+								// We ignore the error condition as missing data is not harmful here
+								// It is only a signaling mechanism
+							}
 						}
 					}
-					atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (RIST_DATAOUT_QUEUE_BUFFERS-1), memory_order_relaxed);
-					f->dataout_fifo_queue_bytesize += b->size;
-					unsigned long fifo_count = atomic_load_explicit(&f->dataout_fifo_queue_counter, memory_order_relaxed);
-					if (!ctx->receiver_data_callback && fifo_count == RIST_DATAOUT_QUEUE_BUFFERS)
-						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Rist data out fifo queue overflow\n");
-					while ((fifo_count +1) <= RIST_DATAOUT_QUEUE_BUFFERS)
-					{
-						if (atomic_compare_exchange_weak(&f->dataout_fifo_queue_counter, &fifo_count, (fifo_count +1)))
-							break;
-					}
-					// Wake up the fifo read thread (poll)
 					if (f->stats_instant.buffer_duration_count < 2048)
 					{
 						f->stats_instant.buffer_duration[f->stats_instant.buffer_duration_count] = (uint32_t)(delay_rtc / RIST_CLOCK);
@@ -1756,7 +1756,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
 					"Authenticated RTCP peer %d and flow %"PRIu32" for connection with cname: %s\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->receiver_name);
-			if (ctx->common.profile == RIST_PROFILE_SIMPLE) 
+			if (ctx->common.profile == RIST_PROFILE_SIMPLE)
 			{
 				peer->parent->authenticated = true;
 				if (peer->parent->flow == NULL) {
@@ -2238,7 +2238,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		}
 
 		struct rist_common_ctx *cctx = get_cctx(peer);
-	
+
 		socklen_t addrlen = peer->address_len;
 		ssize_t recv_bufsize = -1;
 		uint16_t family = AF_INET;
@@ -3254,7 +3254,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		}
     }
 
-	
+
 	/* data receive event */
 	if (!peer->parent && peer->event_recv)
 	{
@@ -3262,7 +3262,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		struct evsocket_ctx *evctx = ctx->evctx;
 		evsocket_delevent(evctx, peer->event_recv);
 	}
-	
+
 	/* rtcp timer */
 	if (peer->send_keepalive)
 	{
@@ -3270,7 +3270,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		peer->send_keepalive = false;
 	}
 
-	
+
 	if (!peer->parent && peer->sd > -1)
 	{
 		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] Closing peer socket on port %d\n", peer->local_port);
@@ -3284,7 +3284,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 #endif
 	if (peer->url)
 		free(peer->url);
-	
+
 	if (ctx->auth.arg) {
 		ctx->auth.disconn_cb(ctx->auth.arg, peer);
 	}

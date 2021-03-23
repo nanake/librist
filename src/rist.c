@@ -110,7 +110,10 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 	struct rist_flow *f_loop = ctx->common.FLOWS;
 	while (f_loop) {
 		struct rist_flow *nextflow = f_loop->next;
-		num_loop = atomic_load_explicit(&f_loop->dataout_fifo_queue_counter, memory_order_acquire);
+		unsigned long reader_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_read_index, memory_order_relaxed);
+		unsigned long write_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_write_index, memory_order_acquire);
+
+		num_loop = (write_index - reader_index)&(RIST_DATAOUT_QUEUE_BUFFERS -1);
 		if (num_loop > *num)
 		{
 			f = f_loop;
@@ -160,27 +163,21 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 		return 0;
 	}
 
-	size_t dataout_read_index = atomic_load_explicit(&f->dataout_fifo_queue_read_index, memory_order_relaxed);
-	if ((size_t)atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) != dataout_read_index)
+	unsigned long dataout_read_index = atomic_load_explicit(&f->dataout_fifo_queue_read_index, memory_order_relaxed);
+	size_t write_index = atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire);
+	if (write_index != dataout_read_index)
 	{
-		data_block = f->dataout_fifo_queue[dataout_read_index];
-		f->dataout_fifo_queue[dataout_read_index] = NULL;
-		num = atomic_load_explicit(&f->dataout_fifo_queue_counter, memory_order_acquire);
-		atomic_store_explicit(&f->dataout_fifo_queue_read_index, (dataout_read_index + 1) & (RIST_DATAOUT_QUEUE_BUFFERS - 1), memory_order_release);
-		if (data_block)
-		{
-			//rist_log_priv(&ctx->common, RIST_LOG_INFO, "[INFO] data queue level %u -> %zu bytes, index %u!\n", f->dataout_fifo_queue_counter,
-			//		f->dataout_fifo_queue_bytesize, f->dataout_fifo_queue_read_index);
-			f->dataout_fifo_queue_bytesize -= data_block->payload_len;
-			atomic_fetch_sub_explicit(&f->dataout_fifo_queue_counter, 1, memory_order_release);
-		}
+		do {
+			num = (atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) - dataout_read_index) &(RIST_DATAOUT_QUEUE_BUFFERS -1);
+			if (atomic_compare_exchange_weak(&f->dataout_fifo_queue_read_index, &dataout_read_index, (dataout_read_index +1)&(RIST_DATAOUT_QUEUE_BUFFERS -1)))
+			{
+				data_block = f->dataout_fifo_queue[dataout_read_index];
+				f->dataout_fifo_queue[dataout_read_index] = NULL;
+				break;
+			}
+		} while (num > 0);
 	}
-
-	if (RIST_UNLIKELY(data_block == NULL && num > 0))
-	{
-		//I think this should never happen, should we consider this an error (-1 return code)?
-		num = 0;
-	}
+	assert(!(data_block == NULL && num > 0));
 
 	*data_buffer = data_block;
 
