@@ -1893,6 +1893,8 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 		uint64_t now = timestampNTP_u64();
 		lsr_ntp = lsr_ntp << 16;
 		lsr_ntp |= (now & 0xFFFF000000000000);
+		if (lsr_ntp > now)
+			return;
 		rtt  = now - lsr_ntp  - ((uint64_t)be32toh(rr->dlsr) << 16);
 	}
 	peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
@@ -1935,6 +1937,8 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 				uint64_t now = timestampNTP_u64();
 				lrr = (lrr << 16) & 0x0000FFFFFFFF0000;
 				lrr |= (now & 0xFFFF000000000000);
+				if (lrr > now)
+					return;
 				rtt  = now - lrr  - ((uint64_t)be32toh(dlrr->delay) << 16);
 			}
 			peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
