@@ -666,7 +666,7 @@ int rist_receiver_periodic_rtcp(struct rist_peer *peer) {
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	if (peer->echo_enabled == false)
 		rist_rtcp_write_xr_echoreq(rtcp_buf, &payload_len, peer);
-	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
+	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->peer_ssrc);
 	return rist_send_common_rtcp(peer, payload_type, &rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, 0, peer->local_port, peer->remote_port, 0);
 }
 
@@ -774,7 +774,7 @@ void rist_sender_periodic_rtcp(struct rist_peer *peer) {
 	rist_rtcp_write_sr(rtcp_buf, &payload_len, peer);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
 	if (peer->echo_enabled)
-		rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->adv_flow_id);
+		rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->peer_ssrc);
 	// Push it to the FIFO buffer to be sent ASAP (even in the simple profile case)
 	rist_sender_send_rtcp(&rtcp_buf[RIST_MAX_PAYLOAD_OFFSET], payload_len, peer);
 	return;
@@ -801,7 +801,7 @@ int rist_request_echo(struct rist_peer *peer) {
 	int payload_len = 0;
 	rist_rtcp_write_empty_rr(rtcp_buf, &payload_len, peer->adv_flow_id);
 	rist_rtcp_write_sdes(rtcp_buf, &payload_len, peer->cname, peer->adv_flow_id);
-	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->sender_ctx? peer->adv_flow_id : peer->peer_ssrc);
+	rist_rtcp_write_echoreq(rtcp_buf, &payload_len, peer->peer_ssrc);
 	if (peer->receiver_mode)
 	{
 		uint8_t payload_type = RIST_PAYLOAD_TYPE_RTCP;

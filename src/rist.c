@@ -463,7 +463,7 @@ int rist_sender_flow_id_set(struct rist_ctx *rist_ctx, uint32_t flow_id)
 	ctx->adv_flow_id = flow_id;
 	for (size_t i = 0; i < ctx->peer_lst_len; i++)
 	{
-		ctx->peer_lst[i]->adv_flow_id = flow_id;
+		ctx->peer_lst[i]->peer_ssrc = ctx->peer_lst[i]->adv_flow_id = flow_id;
 	}
 	return 0;
 }

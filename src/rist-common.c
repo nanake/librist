@@ -1889,6 +1889,8 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 		rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
 
 	} else {
+		if (!lsr_ntp)//this can happen on the first time
+			return;
 		//Slightly less accurate, needed when RTT is bigger than our RTCP interval.
 		uint64_t now = timestampNTP_u64();
 		lsr_ntp = lsr_ntp << 16;
@@ -2655,7 +2657,7 @@ protocol_bypass:
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
 							&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
 				}
-				p->adv_flow_id = p->sender_ctx->adv_flow_id;
+				p->peer_ssrc = p->adv_flow_id = p->sender_ctx->adv_flow_id;
 			}
 			// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
 			p->address_family = family;
@@ -3440,7 +3442,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	newpeer->cooldown_time = 0;
 	newpeer->is_rtcp = b_rtcp;
 	newpeer->adv_peer_id = ++ctx->common.peer_counter;
-	newpeer->adv_flow_id = ctx->adv_flow_id;
+	newpeer->peer_ssrc = newpeer->adv_flow_id = ctx->adv_flow_id;
 
 	store_peer_settings(config, newpeer);
 
