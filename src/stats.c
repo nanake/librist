@@ -217,7 +217,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(json_stats, "quality", Q);
 	cJSON_AddNumberToObject(json_stats, "received", (double)flow->stats_instant.received);
 	cJSON_AddNumberToObject(json_stats, "dropped_late", (double)flow->stats_instant.dropped_late);
-	cJSON_AddNumberToObject(json_stats, "dropped_full", (double)flow->stats_instant.dropped_late);
+	cJSON_AddNumberToObject(json_stats, "dropped_full", (double)flow->stats_instant.dropped_full);
 	cJSON_AddNumberToObject(json_stats, "missing", (double)flow->stats_instant.missing);
 	cJSON_AddNumberToObject(json_stats, "recovered_total", (double)flow->stats_instant.recovered);
 	cJSON_AddNumberToObject(json_stats, "reordered", (double)flow->stats_instant.reordered);
