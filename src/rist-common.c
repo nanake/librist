@@ -595,17 +595,10 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 	bool out_of_order = false;
 	uint32_t expected_seq = (f->last_seq_found +1) & (UINT16_MAX -1);
 	if (RIST_UNLIKELY(packet_time < f->last_packet_ts && seq != expected_seq)) {
-		size_t highest_written_idx = f->last_seq_found & (f->receiver_queue_max -1);
-		reader_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
-		/* Either highest written packet is ahead of read idx, and packet should go in between, or
-		   we have wrapped around and packet idx should be bigger than readidx OR smaller than highest
-		   written idx */
-		if ((highest_written_idx > reader_idx && !(idx < highest_written_idx && idx > reader_idx))
-			|| (highest_written_idx < reader_idx && !(idx < highest_written_idx || idx > reader_idx))) {
+		if (now > (packet_time + (f->recovery_buffer_ticks *1.1)))
+		{
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
 			f->stats_instant.dropped_late++;
-			if (packet_time > f->last_packet_ts)
-				f->last_seq_found = seq;
 			return -1;
 		}
 		if (!retry) {
@@ -675,7 +668,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 				recalculate_clock_offset(f);
 		}
 		//If we stopped due to bloat or missing count max this will be incorrect.
-		f->last_seq_found = seq;
+		if (!out_of_order)
+			f->last_seq_found = seq;
 	}
 	return 0;
 }
