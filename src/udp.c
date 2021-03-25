@@ -1024,6 +1024,10 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	struct rist_bandwidth_estimation *retry_bw = &retry->peer->retry_bw;
 	struct rist_bandwidth_estimation *cli_bw = &retry->peer->bw;
+	if (retry->peer->peer_data)
+	{
+		retry_bw = &retry->peer->peer_data->retry_bw;
+	}
 	// update bandwidth values
 	rist_calculate_bitrate(0, cli_bw);
 	rist_calculate_bitrate(0, retry_bw);
@@ -1109,7 +1113,10 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, buffer->seq);
 		retry->peer->stats_sender_instant.retrans_skip++;
 	} else {
-		retry->peer->stats_sender_instant.retrans++;
+		if (retry->peer->peer_data)
+			retry->peer->peer_data->stats_sender_instant.retrans++;
+		else
+			retry->peer->stats_sender_instant.retrans++;
 	}
 
 	return ret;
