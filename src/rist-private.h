@@ -246,7 +246,7 @@ struct rist_flow {
 	uint64_t last_recv_ts;
 
 	/* Receiver timed async data output */
-	struct rist_data_block *dataout_fifo_queue[RIST_DATAOUT_QUEUE_BUFFERS];
+	struct rist_data_block **dataout_fifo_queue;
 	size_t dataout_fifo_queue_bytesize;
 	atomic_ulong dataout_fifo_queue_read_index;
 	atomic_ulong dataout_fifo_queue_write_index;
@@ -363,6 +363,7 @@ struct rist_receiver {
 
 	bool simulate_loss;
 	uint16_t loss_percentage;
+	uint32_t fifo_queue_size;
 };
 
 struct rist_sender {

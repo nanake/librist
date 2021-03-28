@@ -38,6 +38,20 @@ RIST_API int rist_receiver_create(struct rist_ctx **ctx, enum rist_profile profi
 RIST_API int rist_receiver_nack_type_set(struct rist_ctx *ctx, enum rist_nack_type nacks_type);
 
 /**
+ * @brief Set output fifo size
+ *
+ * Set the output fifo size to the desired maximum, can be set to 0 to disable
+ * desired size must be a power of 2. When enabled libRIST will output packets
+ * into the fifo queue for reading by the calling application.
+ * The fifo buffer size can only be set before starting, and defaults to 1024
+ *
+ * @param ctx RIST receiver context
+ * @param desired_size max number of packets to keep in fifo buffer, 0 to disable
+ * @return 0 for success
+ */
+RIST_API int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t desired_size);
+
+/**
  * @brief Reads rist data
  *
  * Use this API to read data from an internal fifo queue instead of the callback

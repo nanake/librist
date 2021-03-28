@@ -42,7 +42,7 @@ int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 
 	ctx->common.logging_settings = logging_settings;
 	ctx->common.stats_report_time = (uint64_t)1000 * (uint64_t)RIST_CLOCK;
-
+	ctx->fifo_queue_size = RIST_DATAOUT_QUEUE_BUFFERS;
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "RIST Receiver Library version:%s \n", LIBRIST_VERSION);
 
 	if (logging_settings && logging_settings->log_level == RIST_LOG_SIMULATE)
@@ -113,7 +113,7 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 		unsigned long reader_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_read_index, memory_order_relaxed);
 		unsigned long write_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_write_index, memory_order_acquire);
 
-		num_loop = (write_index - reader_index)&(RIST_DATAOUT_QUEUE_BUFFERS -1);
+		num_loop = (write_index - reader_index)&(ctx->fifo_queue_size -1);
 		if (num_loop > *num)
 		{
 			f = f_loop;
@@ -168,8 +168,8 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 	if (write_index != dataout_read_index)
 	{
 		do {
-			num = (atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) - dataout_read_index) &(RIST_DATAOUT_QUEUE_BUFFERS -1);
-			if (atomic_compare_exchange_weak(&f->dataout_fifo_queue_read_index, &dataout_read_index, (dataout_read_index +1)&(RIST_DATAOUT_QUEUE_BUFFERS -1)))
+			num = (atomic_load_explicit(&f->dataout_fifo_queue_write_index, memory_order_acquire) - dataout_read_index) &(ctx->fifo_queue_size -1);
+			if (atomic_compare_exchange_weak(&f->dataout_fifo_queue_read_index, &dataout_read_index, (dataout_read_index +1)&(ctx->fifo_queue_size -1)))
 			{
 				data_block = f->dataout_fifo_queue[dataout_read_index];
 				f->dataout_fifo_queue[dataout_read_index] = NULL;
@@ -1019,3 +1019,28 @@ int rist_destroy(struct rist_ctx *ctx) {
 	return 0;
 }
 
+int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t desired_size)
+{
+	if (!ctx)
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_set_fifo_size called with null ctx\n");
+		return -1;
+	}
+	if (ctx->mode == RIST_RECEIVER_MODE || !ctx->receiver_ctx)
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_set_fifo_size can only be called on receiver\n");
+		return -2;
+	}
+	if (ctx->receiver_ctx->receiver_thread)
+	{
+		rist_log_priv2(ctx->receiver_ctx->common.logging_settings, RIST_LOG_ERROR, "rist_receiver_set_fifo_size must be called before starting\n");
+		return -3;
+	}
+	if ((desired_size & (desired_size -1)) != 0)
+	{
+		rist_log_priv2(ctx->receiver_ctx->common.logging_settings, RIST_LOG_ERROR, "Desired fifo size must be a power of 2\n");
+		return -4;
+	}
+	ctx->receiver_ctx->fifo_queue_size = desired_size;
+	return 0;
+}

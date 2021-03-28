@@ -139,7 +139,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	empty_receiver_queue(f, &ctx->common);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Freeing data fifo queue\n");
-	for (int i = 0; i < RIST_DATAOUT_QUEUE_BUFFERS; i++)
+	for (size_t i = 0; i < ctx->fifo_queue_size; i++)
 	{
 		if (f->dataout_fifo_queue[i])
 		{
@@ -195,6 +195,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	f->receiver_id = ctx->id;
 	f->stats_next_time = timestampNTP_u64();
 	f->max_output_jitter = ctx->common.rist_max_jitter;
+	f->dataout_fifo_queue = calloc(ctx->fifo_queue_size, sizeof(*f->dataout_fifo_queue));
 	int ret = pthread_cond_init(&f->condition, NULL);
 	if (ret) {
 		free(f);
