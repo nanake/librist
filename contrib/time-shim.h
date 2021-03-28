@@ -13,7 +13,21 @@
 # include <winsock2.h>
 # include <time.h>
 
-# define CLOCK_MONOTONIC 1
+#ifndef CLOCK_REALTIME
+#define CLOCK_REALTIME 0
+#endif
+
+#ifndef CLOCK_MONOTONIC
+#define CLOCK_MONOTONIC 1
+#endif
+
+#ifndef CLOCK_PROCESS_CPUTIME_ID
+#define CLOCK_PROCESS_CPUTIME_ID 2
+#endif
+
+#ifndef CLOCK_THREAD_CPUTIME_ID
+#define CLOCK_THREAD_CPUTIME_ID 3
+#endif
 
 typedef int clockid_t;
 int gettimeofday(struct timeval *tv, void * not_implemented);
