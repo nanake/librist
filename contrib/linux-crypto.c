@@ -1,9 +1,11 @@
-/* Copyright (C) 2014 - 2019, Stephan Mueller <smueller@chronox.de>
- * Copyright 2020 in2ip B.V.
- * Linux Crypto API, based on libkcapi
+/* Copyright © 2014-2019, Stephan Mueller <smueller@chronox.de>
+ * Copyright © 2020 in2ip B.V.
+ * Linux Crypto API, based on libkcapi, relicensed to BSD-2 with author's permission
  * Author: Stephan Mueller <smueller@chronox.de>
  * Modified for librist by: Gijs Peskens <gijs@in2ip.nl>
  * Modified for librist by: Sergio Ammirata <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifdef __linux

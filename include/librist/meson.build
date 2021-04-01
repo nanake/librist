@@ -1,3 +1,6 @@
+# librist. Copyright (c) 2020 SipRadius LLC. All right reserved.
+# SPDX-License-Identifier: BSD-2-Clause
+
 version_h_data = configuration_data()
 
 version_h_data.set('LIBRIST_API_VERSION_MAJOR', librist_api_version_major)

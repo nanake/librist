@@ -1,5 +1,8 @@
-/* librist. Copyright 2020 in2ip B.V. All right reserved.
+/* librist. Copyright © 2020 in2ip B.V. All right reserved.
  * Author: Gijs Peskens <gijs@in2ip.nl>
+ * Author: Sergio Ammirata <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifndef __LINUX_CRYPTO_H

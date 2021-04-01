@@ -1,6 +1,9 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
- * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
- * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+/*
+ * Copyright © 2020, VideoLAN and librist authors
+ * Copyright © 2019-2020 SipRadius LLC
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifndef RIST_COMMON_ATTRIBUTES_H

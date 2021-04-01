@@ -4,6 +4,13 @@
 * Copyright:
 * Disclaimer: This code is presented "as is" without any guarantees.
 * Details:    Defines the API for the corresponding AES implementation.
+*
+* File copied from the project: https://github.com/B-Con/crypto-algorithms
+* License (quoting from author's github project):
+* This code is released into the public domain free of any restrictions. The author requests 
+* acknowledgement if the code is used, but does not require it. This code is provided free of any 
+* liability and without any quality claims by the author.
+*
 *********************************************************************/
 
 #ifndef AES_H

@@ -13,6 +13,13 @@
                * http://csrc.nist.gov/publications/nistpubs/800-38a/sp800-38a.pdf .
               The CCM mode of operation is specified by NIST SP80-38 C, available at:
                * http://csrc.nist.gov/publications/nistpubs/800-38C/SP800-38C_updated-July20_2007.pdf
+*
+* File copied from the project: https://github.com/B-Con/crypto-algorithms
+* License (quoting from author's github project):
+* This code is released into the public domain free of any restrictions. The author requests 
+* acknowledgement if the code is used, but does not require it. This code is provided free of any 
+* liability and without any quality claims by the author.
+*
 *********************************************************************/
 #ifdef _MSC_VER
 #pragma warning(disable: 4244)

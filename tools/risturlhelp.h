@@ -1,5 +1,7 @@
-/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
+/* librist. Copyright © 2019-2020 SipRadius LLC. All right reserved.
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifndef RIST_URL_HELP_H

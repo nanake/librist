@@ -1,5 +1,12 @@
 #ifndef __GETOPT_H__
-/**
+/*
+ * Copyright © 2020, VideoLAN and librist authors
+ * Copyright © 2019-2020 SipRadius LLC
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+/*
  * DISCLAIMER
  * This file has no copyright assigned and is placed in the Public Domain.
  * This file is part of the mingw-w64 runtime package.

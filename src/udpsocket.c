@@ -1,7 +1,10 @@
-/* librist. Copyright 2020 SipRadius LLC. All right reserved.
+/* librist. Copyright © 2020 SipRadius LLC. All right reserved.
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
+
 #include "librist/udpsocket.h"
 #include "log-private.h"
 #ifdef _WIN32

@@ -1,6 +1,3 @@
-#if defined(_WIN32)
-
-#ifndef __GETOPT_H__
 /**
  * DISCLAIMER
  * This file has no copyright assigned and is placed in the Public Domain.
@@ -12,6 +9,9 @@
  * warranties of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
  */
 
+#if defined(_WIN32)
+
+#ifndef __GETOPT_H__
 #define __GETOPT_H__
 
 /* All the headers include this file. */

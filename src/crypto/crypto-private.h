@@ -1,6 +1,8 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
+/* librist. Copyright © 2019 SipRadius LLC. All right reserved.
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #ifndef RIST_CRYPTO_PRIVATE_H

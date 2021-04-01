@@ -1,8 +1,11 @@
-/* librist. Copyright 2020 SipRadius LLC. All right reserved.
- * rist2rist receive simple profile rist and expose it as main profile
+/* librist. Copyright © 2020 SipRadius LLC. All right reserved.
  * Author: Gijs Peskens
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
+
+/* rist2rist receive simple profile rist and expose it as main profile */
 
 #include <librist/librist.h>
 #include "librist/version.h"

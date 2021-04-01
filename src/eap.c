@@ -1,3 +1,10 @@
+/* librist. Copyright © 2020 SipRadius LLC. All right reserved.
+ * Author: Gijs Peskens <gijs@in2ip.nl>
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
 #include "eap.h"
 #include "endian-shim.h"
 #include "srp.h"

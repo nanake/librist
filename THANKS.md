@@ -16,4 +16,5 @@ SipRadius LLC for funding this project.
 
 And all the librist Authors (git shortlog -sn), including:
 
-Sergio Ammirata, Kuldeep Singh Dhaka, Daniele Lacamera, Antonio Cardace, Gijs Peskens.
+Sergio Ammirata, Kuldeep Singh Dhaka, Daniele Lacamera, Antonio Cardace, Gijs Peskens, James Hurley,
+Marvin Scholz, Stephan Mueller

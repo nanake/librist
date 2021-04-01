@@ -1,10 +1,3 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
- * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
- * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
- *
- * Note: Removed SHA1 and SHA512 as the functions are not available
- */
-
 /*
  * fastpbkdf2 - Faster PBKDF2-HMAC calculation
  * Written in 2015 by Joseph Birr-Pixton <jpixton@gmail.com>
@@ -17,6 +10,12 @@
  * You should have received a copy of the CC0 Public Domain Dedication
  * along with this software. If not, see
  * <http://creativecommons.org/publicdomain/zero/1.0/>.
+ */
+/* librist. Copyright © 2019 SipRadius LLC. All right reserved.
+ * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ *
+ * Note: Removed SHA1 and SHA512 as the functions are not available
  */
 
 #ifndef FASTPBKDF2_H

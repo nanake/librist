@@ -1,3 +1,11 @@
+/*
+ * Copyright © 2020, VideoLAN and librist authors
+ * Copyright © 2019-2020 SipRadius LLC
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
 #ifndef _LIBRIST_SRP_H_
 #define _LIBRIST_SRP_H_
 

@@ -1,7 +1,11 @@
-/* librist. Copyright 2020 SipRadius LLC. All right reserved.
- * Author: Daniele Lacamera <root@danielinux.net>
- * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+/*
+ * Copyright © 2020, VideoLAN and librist authors
+ * Copyright © 2019-2020 SipRadius LLC
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
+
 #ifndef UDPSOCKET_H
 #define UDPSOCKET_H
 #include <stdlib.h>

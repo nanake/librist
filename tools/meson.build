@@ -1,3 +1,6 @@
+# librist. Copyright (c) 2020 SipRadius LLC. All right reserved.
+# Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+# SPDX-License-Identifier: BSD-2-Clause
 
 tools_dependencies = []
 tools_deps = []
@@ -14,9 +17,6 @@ if use_mbedtls
 	srp_shared += 'srp_shared.c'
 	tools_dependencies += mbedcrypto_lib
 endif
-
-
-
 
 executable('ristsender',
 	['ristsender.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],

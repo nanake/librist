@@ -1,9 +1,11 @@
-/* librist. Copyright 2019 SipRadius LLC. All right reserved.
-* Author: Antonio Cardce <anto.cardace@gmail.com>
-* Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
-* Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
-* Author: Marvin Scholz <epirat07 at gmail dot com>
-*/
+/* librist. Copyright © 2019 SipRadius LLC. All right reserved.
+ * Author: Antonio Cardce <anto.cardace@gmail.com>
+ * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ * Author: Marvin Scholz <epirat07 at gmail dot com>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
 #include "time-shim.h"
 

@@ -1,7 +1,3 @@
-#ifdef __cplusplus
-extern "C" {
-#endif
-#include <stddef.h>
 /*
  * Secure Remote Password 6a implementation based on mbedtls.
  *
@@ -65,6 +61,11 @@ extern "C" {
  *    program can be easily modified to profile various combinations of
  *    hash & prime number pairings.
  */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+#include <stddef.h>
 
 #ifndef SRP_H
 #define SRP_H

@@ -1,8 +1,10 @@
-/* librist. Copyright 2019-2020 SipRadius LLC. All right reserved.
+/* librist. Copyright © 2019-2020 SipRadius LLC. All right reserved.
  * Author: Daniele Lacamera <root@danielinux.net>
  * Author: Kuldeep Singh Dhaka <kuldeep@madresistor.com>
  * Author: Sergio Ammirata <sergio@ammirata.net>
  * Author: Gijs Peskens <gijs@in2inip.nl>
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
  */
 
 #include "rist-private.h"
