@@ -217,6 +217,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	atomic_init(&f->dataout_fifo_queue_read_index, 0);
 
 	f->session_timeout = RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK;
+	f->flow_timeout = 250 * RIST_CLOCK;
 
 	/* Append flow to list */
 	rist_flow_append(&ctx->common.FLOWS, f);
@@ -301,6 +302,11 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		if (f->recovery_buffer_ticks > f->session_timeout)
 			f->session_timeout = 2ULL * f->recovery_buffer_ticks;
 	}
+	// Set the flow timeout as the buffer size for the flow
+	// However, we start with 250 ms as the minimum/default
+	// to make sure it is larger than the RTCP interval
+	if (f->recovery_buffer_ticks > f->flow_timeout)
+		f->flow_timeout = f->recovery_buffer_ticks;
 	uint64_t stats_report_time = get_cctx(p)->stats_report_time;
 	if (stats_report_time != 0 && stats_report_time != f->stats_report_time) 
 		f->stats_report_time = stats_report_time;

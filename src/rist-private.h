@@ -243,6 +243,7 @@ struct rist_flow {
 
 	/* Session timeouts variables */
 	uint64_t session_timeout;
+	uint64_t flow_timeout;
 	uint64_t last_recv_ts;
 
 	/* Receiver timed async data output */
