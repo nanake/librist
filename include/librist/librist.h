@@ -131,7 +131,7 @@ RIST_API int rist_receiver_data_notify_fd_set(struct rist_ctx *ctx, int fd);
  *
  * @return random uint32_t number that complies with the flow_id rules
  */
-RIST_API uint32_t rist_flow_id_create();
+RIST_API uint32_t rist_flow_id_create(void);
 
 /* Sender specific functions, use rist_sender_create to create a sender rist_ctx */
 

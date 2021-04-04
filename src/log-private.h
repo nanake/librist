@@ -14,5 +14,5 @@
 RIST_PRIV void rist_log_priv(struct rist_common_ctx *cctx, enum rist_log_level level, const char *format, ...);
 RIST_PRIV void rist_log_priv2(struct rist_logging_settings *logging_settings, enum rist_log_level level, const char *format, ...);
 RIST_PRIV void rist_log_priv3(enum rist_log_level level, const char *format, ...);
-RIST_PRIV struct rist_logging_settings *rist_get_global_logging_settings();
+RIST_PRIV struct rist_logging_settings *rist_get_global_logging_settings(void);
 #endif

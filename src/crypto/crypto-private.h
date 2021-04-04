@@ -12,6 +12,6 @@
 #include <stdint.h>
 
 RIST_PRIV uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase);
-RIST_PRIV uint32_t prand_u32();
+RIST_PRIV uint32_t prand_u32(void);
 
 #endif
