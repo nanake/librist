@@ -10,6 +10,8 @@
 #ifndef GCCVER_STDATOMIC_H_
 #define GCCVER_STDATOMIC_H_
 
+#include <stdbool.h>
+
 #if !defined(__cplusplus)
 
 typedef int atomic_int;
@@ -29,6 +31,7 @@ typedef unsigned long atomic_ulong;
 #define atomic_fetch_add_explicit(p_a, inc, mo) __atomic_fetch_add(p_a, inc, mo)
 #define atomic_fetch_sub(p_a, dec)    __atomic_fetch_sub(p_a, dec, __ATOMIC_SEQ_CST)
 #define atomic_fetch_sub_explicit(p_a, dec, mo) __atomic_fetch_sub(p_a, dec, mo)
+#define atomic_compare_exchange_weak(object, expected, desired) __atomic_compare_exchange_n(object, expected, desired, true, __ATOMIC_SEQ_CST, __ATOMIC_SEQ_CST)
 
 #endif /* !defined(__cplusplus) */
 
