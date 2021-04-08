@@ -17,6 +17,8 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t 
 	uint64_t now = timestampNTP_u64();
 	if (nack_time > now)
 		nack_time = now;
+	if (nack_time < (now - f->recovery_buffer_ticks))
+		nack_time = now;
 	m->seq = seq;
 	m->insertion_time = nack_time;
 
