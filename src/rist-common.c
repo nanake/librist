@@ -2223,7 +2223,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 		peer->peer_ssrc = peer_src->peer_ssrc;
 		peer->session_timeout = peer_src->session_timeout;
-		peer->gre_version = 1;
+		peer->rist_gre_version = 1;
 
 		init_peer_settings(peer);
 	}
@@ -2328,7 +2328,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-			uint8_t gre_version = gre->flags2 & 0x7;
+			uint8_t rist_gre_version = (gre->flags2 >> 3) & 0x7;
 
 			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 				// Key bit is set, that means the other side want to send
@@ -2340,6 +2340,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					return;
 				}
 
+
 				while (p) {
 					if (equal_address(family, addr, p))
 						break;
@@ -2348,10 +2349,16 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				if (!p)
 					p = peer;
 #if ALLOW_INSECURE_IV_FALLBACK == 1
-				if (gre_version < 1)
-					p->gre_version = gre_version;
+				if (rist_gre_version < 1)
+					p->rist_gre_version = rist_gre_version;
 #endif
 				k = &p->key_rx;
+				//Read H bit and set keysize accordingly
+				if (p->rist_gre_version)
+				{
+					int bits = (CHECK_BIT(gre->flags2, 7))? 256 : 128;
+					k->key_size = bits;
+				}
 				p = peer;
 
 				// GRE
@@ -2367,7 +2374,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					nonce = gre_key_seq->checksum_reserved1;
 					gre_size -= 4;
 				}
-				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
+				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
 			} else if (has_seq) {
 				// Key bit is not set, that means the other side does not want to send
 				//  encrypted data
