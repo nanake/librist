@@ -15,7 +15,6 @@
 #include "endian-shim.h"
 #include "time-shim.h"
 #include "eap.h"
-#include "lz4.h"
 #include "mpegts.h"
 #include "rist_ref.h"
 #include "config.h"
@@ -2292,7 +2291,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		uint32_t seq = 0;
 		uint32_t time_extension = 0;
 		struct rist_protocol_hdr *proto_hdr = NULL;
-		uint8_t compression = 0;
 		uint8_t retry = 0;
 		struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 		size_t gre_size = 0;
@@ -2411,22 +2409,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			{
 				payload.type = RIST_PAYLOAD_TYPE_EAPOL;
 				goto protocol_bypass;
-			}
-			// Decompress if necessary
-			if (compression) {
-				void *dbuf = get_cctx(p)->buf.dec;
-				int dlen = LZ4_decompress_safe((const void *)(recv_buf + gre_size), dbuf, (int)payload.size, RIST_MAX_PACKET_SIZE);
-				if (dlen < 0) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-							"Could not decompress data packet (%d), assuming normal data ...\n", dlen);
-				}
-				else {
-					// msg(receiver_id, 0, DEBUG,
-					//      "decompressed %d to %lu\n",
-					//      payload_len, decompressed_len);
-					payload.size = dlen;
-					payload.data = dbuf;
-				}
 			}
 			// Make sure we have enought bytes
 			if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {

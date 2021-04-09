@@ -11,7 +11,6 @@
 #include "log-private.h"
 #include "socket-shim.h"
 #include "endian-shim.h"
-#include "lz4.h"
 #include "eap.h"
 #include "crypto/psk.h"
 #include "mpegts.h"

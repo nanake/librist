@@ -1,6 +1,6 @@
 option('static_analyze', type : 'boolean', value : false)
 option('test', type : 'boolean', value : true)
-option('builtin_lz4', type: 'boolean', value: false)
+#option('builtin_lz4', type: 'boolean', value: false)
 option('builtin_cjson', type: 'boolean', value: false)
 option('builtin_mbedtls', type: 'boolean', value: false)
 option('built_tools', type: 'boolean', value: true)

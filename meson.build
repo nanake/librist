@@ -30,7 +30,7 @@ contrib_libs = []
 inc = []
 inc += include_directories('src', 'include/librist', 'include', 'contrib')
 
-builtin_lz4 = get_option('builtin_lz4')
+#builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
 builtin_mbedtls = get_option('builtin_mbedtls')
 use_mbedtls = get_option('use_mbedtls')
@@ -141,21 +141,21 @@ if builtin_cjson
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
-if not builtin_lz4
-	lz4_lib = dependency('liblz4', required: required_library)
-	if not lz4_lib.found()
-		builtin_lz4 = true
-	endif
-endif
-if builtin_lz4
-	message('Using builtin lz4 library')
-	lz4_lib = declare_dependency( compile_args : [ '-DLZ4LIB_VISIBILITY=',  '-DLZ4FLIB_API='],
-								  sources: ['contrib/lz4/lz4.c',
-											'contrib/lz4/lz4frame.c',
-											'contrib/lz4/lz4hc.c',
-											'contrib/lz4/xxhash.c',],
-								  include_directories: include_directories('contrib/lz4'))
-endif
+#if not builtin_lz4
+#	lz4_lib = dependency('liblz4', required: required_library)
+#	if not lz4_lib.found()
+#		builtin_lz4 = true
+#	endif
+#endif
+#if builtin_lz4
+#	message('Using builtin lz4 library')
+#	lz4_lib = declare_dependency( compile_args : [ '-DLZ4LIB_VISIBILITY=',  '-DLZ4FLIB_API='],
+#								  sources: ['contrib/lz4/lz4.c',
+#											'contrib/lz4/lz4frame.c',
+#											'contrib/lz4/lz4hc.c',
+#											'contrib/lz4/xxhash.c',],
+#								  include_directories: include_directories('contrib/lz4'))
+#endif
 
 if use_mbedtls
 	message('Building mbedtls')
@@ -190,7 +190,7 @@ librist = library('librist',
 		deps,
 		stdatomic_dependency,
 		cjson_lib,
-		lz4_lib
+#		lz4_lib
 	],
 	name_prefix : '',
 	version: librist_version,
