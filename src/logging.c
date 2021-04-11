@@ -11,8 +11,13 @@
 #include "stdio-shim.h"
 #include "udpsocket.h"
 #include "librist/logging.h"
+#include "pthread-shim.h"
 
-static struct rist_logging_settings *g_logging_settings;
+static struct {
+	struct rist_logging_settings settings;
+	volatile bool logs_set;
+	pthread_mutex_t global_logs_lock;
+} global_logging_settings;
 
 static inline void rist_log_impl(struct rist_logging_settings *log_settings, enum rist_log_level level, intptr_t sender_id, intptr_t receiver_id, const char *format, va_list argp) {
 	if (level > log_settings->log_level || (!log_settings->log_cb && !log_settings->log_socket && !log_settings->log_stream)) {
@@ -106,16 +111,48 @@ void rist_log(struct rist_logging_settings *logging_settings, enum rist_log_leve
 //Where we don't have access to either logging settings or common ctx (i.e.: udpsocket)
 void rist_log_priv3(enum rist_log_level level, const char *format, ...)
 {
-	if (RIST_UNLIKELY(g_logging_settings == NULL))
+	if (RIST_UNLIKELY(!global_logging_settings.logs_set))
 		return;
 	va_list argp;
 	va_start(argp, format);
-	rist_log_impl(g_logging_settings, level, 0, 0, format, argp);
+	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
+	rist_log_impl(&global_logging_settings.settings, level, 0, 0, format, argp);
+	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
 	va_end(argp);
 }
 
 struct rist_logging_settings *rist_get_global_logging_settings() {
-	return g_logging_settings;
+	if (global_logging_settings.logs_set)
+		return &global_logging_settings.settings;
+	return NULL;
+}
+
+int rist_logging_set_global(struct rist_logging_settings *logging_settings)
+{
+	if (!logging_settings)
+	{
+		return -1;
+	}
+	if (!global_logging_settings.logs_set)
+	{
+		pthread_mutex_init(&global_logging_settings.global_logs_lock, NULL);
+		global_logging_settings.logs_set = true;
+	}
+	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
+	global_logging_settings.settings.log_cb = logging_settings->log_cb;
+	global_logging_settings.settings.log_cb_arg = logging_settings->log_cb_arg;
+	global_logging_settings.settings.log_level = logging_settings->log_level;
+	if (global_logging_settings.settings.log_socket)
+	{
+		udpsocket_close(global_logging_settings.settings.log_socket);
+	}
+	if (logging_settings->log_socket)
+	{
+		global_logging_settings.settings.log_socket = dup(logging_settings->log_socket);
+	}
+	global_logging_settings.settings.log_stream = logging_settings->log_stream;
+	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
+	return 0;
 }
 
 int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_log_level log_level, int (*log_cb)(void *arg, enum rist_log_level, const char *msg), void *cb_arg, char *address, FILE *logfp)
@@ -127,9 +164,6 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 		settings = calloc(1, sizeof(*settings));
 		*logging_settings = settings;
 	}
-
-	if (!g_logging_settings)
-		g_logging_settings = settings;
 
 	settings->log_level = log_level;
 	settings->log_cb = log_cb;
@@ -160,6 +194,10 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 		rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 		udpsocket_close(settings->log_socket);
 		settings->log_socket = 0;
+	}
+	if (!global_logging_settings.logs_set)
+	{
+		rist_logging_set_global(settings);
 	}
 	return 0;
 }
