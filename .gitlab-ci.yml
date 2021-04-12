@@ -113,7 +113,7 @@ test-macos:
         - macos
     needs: ["build-macos"]
     script:
-        - cd build && meson test --suite unicast --print-errorlogs
+        - cd build && meson test --suite unicast --print-errorlogs --timeout-multiplier=10
     dependencies:
         - build-macos
 
