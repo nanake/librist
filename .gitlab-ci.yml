@@ -26,6 +26,10 @@ build-ubuntu:
     script:
         - meson build --buildtype release --werror
         - ninja -C build
+    artifacts:
+        paths:
+          - build
+        expire_in: 24 hours
 
 build-win64:
     extends: .debian-amd64-common
@@ -66,6 +70,7 @@ analyze-ubuntu:
     script:
         - meson build --buildtype release --werror -Dstatic_analyze=true
         - ninja -C build analyze
+    dependencies: []
 
 test-ubuntu:
     stage: test
@@ -76,3 +81,5 @@ test-ubuntu:
         - meson build --buildtype release --werror -Dtest=true
         - ninja -C build
         - cd build && time MESON_TESTTHREADS=4 meson test --print-errorlogs
+    dependencies:
+        - build-ubuntu
