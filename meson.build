@@ -91,12 +91,15 @@ else
 		'-Wno-missing-field-initializers',
 		'-Wno-unused-parameter',
 		'-Wshorten-64-to-32',
-		'-Watomic-implicit-seq-cst',
 		'-Wunused-parameter',
 		'-Wmaybe-uninitialized',
 		'-Wno-error=deprecated-declarations'
 		]), language : 'c')
 	threads = [ dependency('threads') ]
+	if host_machine.system() != 'freebsd'
+	  add_project_arguments(cc.get_supported_arguments([
+            '-Watomic-implicit-seq-cst']), language: 'c')
+	endif
 	deps += threads
 endif
 

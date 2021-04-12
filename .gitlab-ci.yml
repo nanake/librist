@@ -50,6 +50,14 @@ build-macos:
                       -Duse_mbedtls=false
         - ninja -C build
 
+build-freebsd:
+    stage: build
+    tags:
+        - freebsd
+    script:
+        - LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include" meson build --buildtype release --werror
+        - ninja -C build
+
 analyze-ubuntu:
     stage: analyze
     extends:
