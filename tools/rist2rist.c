@@ -44,7 +44,7 @@ struct rist_cb_arg {
 };
 
 static int keep_running = 1;
-static struct rist_logging_settings *logging_settings;
+static struct rist_logging_settings *logging_settings = NULL;
 
 static struct option long_options[] = {
 { "inurl",           required_argument, NULL, 'i' },
