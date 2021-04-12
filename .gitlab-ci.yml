@@ -95,7 +95,7 @@ test-ubuntu:
         - .ubuntu-amd64-bionic
     needs: ["build-ubuntu"]
     script:
-        - cd build && time MESON_TESTTHREADS=4 meson test --print-errorlogs
+        - cd build && meson test --print-errorlogs
     dependencies:
         - build-ubuntu
 
@@ -114,7 +114,7 @@ test-macos:
         - macos
     needs: ["build-macos"]
     script:
-        - cd build && meson test --suite unicast --print-errorlogs --timeout-multiplier=10
+        - cd build && MESON_TESTTHREADS=4 meson test --suite unicast --print-errorlogs --timeout-multiplier=10
     dependencies:
         - build-macos
 
