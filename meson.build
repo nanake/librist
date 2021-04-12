@@ -50,7 +50,12 @@ if host_machine.system() == 'windows'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
 	if get_option('have_mingw_pthreads')
-		cdata.set('HAVE_PTHREADS', 1)
+		if cc.has_header('pthread.h')
+			threads = cc.find_library('winpthread', static: true)
+			deps += threads
+			add_project_arguments(['-DHAVE_PTHREAD_H'], language: 'c')
+			cdata.set('HAVE_PTHREADS', 1)
+		endif
 	endif
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
