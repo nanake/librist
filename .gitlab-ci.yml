@@ -42,6 +42,11 @@ build-win64:
                       -Ddefault_library=both
                       -Duse_mbedtls=false
         - ninja -C build
+    artifacts:
+        paths:
+          - build
+        expire_in: 24 hours
+
 
 build-macos:
     stage: build
@@ -78,8 +83,15 @@ test-ubuntu:
         - .ubuntu-amd64-bionic
     needs: ["build-ubuntu"]
     script:
-        - meson build --buildtype release --werror -Dtest=true
-        - ninja -C build
         - cd build && time MESON_TESTTHREADS=4 meson test --print-errorlogs
     dependencies:
         - build-ubuntu
+
+test-win64:
+    stage: test
+    extends: .debian-amd64-common
+    needs: ["build-win64"]
+    script:
+        - cd build && meson test --suite unicast --print-errorlogs
+    dependencies:
+        - build-win64
