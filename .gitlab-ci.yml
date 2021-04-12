@@ -58,6 +58,11 @@ build-macos:
                       -Ddefault_library=both
                       -Duse_mbedtls=false
         - ninja -C build
+    artifacts:
+        paths:
+          - build
+        expire_in: 24 hours
+
 
 build-freebsd:
     stage: build
@@ -66,6 +71,11 @@ build-freebsd:
     script:
         - LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include" meson build --buildtype release --werror
         - ninja -C build
+    artifacts:
+        paths:
+          - build
+        expire_in: 24 hours
+
 
 analyze-ubuntu:
     stage: analyze
@@ -95,3 +105,24 @@ test-win64:
         - cd build && meson test --suite unicast --print-errorlogs
     dependencies:
         - build-win64
+
+test-macos:
+    stage: test
+    tags:
+        - macos
+    needs: ["build-macos"]
+    script:
+        - cd build && meson test --suite unicast --print-errorlogs
+    dependencies:
+        - build-macos
+
+test-freebsd:
+    stage: test
+    tags:
+        - freebsd
+    needs: ["build-freebsd"]
+    script:
+        - cd build && meson test --suite unicast --print-errorlogs
+    dependencies:
+        - build-freebsd
+
