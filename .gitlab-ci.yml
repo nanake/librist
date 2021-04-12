@@ -2,6 +2,7 @@ stages:
   - build
   - analyze
   - test
+  - test2
 
 .ubuntu-amd64-bionic:
     image: registry.videolan.org/librist-ubuntu-bionic:20200501213126
@@ -99,9 +100,9 @@ test-ubuntu:
         - build-ubuntu
 
 test-win64:
-    stage: test
+    stage: test2
     extends: .debian-amd64-common
-    needs: ["build-win64"]
+    needs: ["build-win64", "test-ubuntu"]
     script:
         - cd build && meson test --suite unicast --print-errorlogs
     dependencies:
