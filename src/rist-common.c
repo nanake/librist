@@ -2828,7 +2828,7 @@ protocol_bypass:
 			}
 			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 100)
 			{
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Nack processing loop tool longer than 100ms. Something is wrong!\n");
+				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Nack processing loop took longer than 100ms. Something is wrong!\n");
 				// TODO: clear out the nack queue here?
 				break;
 			}
