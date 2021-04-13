@@ -542,8 +542,10 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 		ctx->lookup_func = in->lookup_func;
 		ctx->lookup_func_userdata = in->lookup_func_userdata;
 		strcpy(ctx->authenticator_username, in->authenticator_username);
-		memcpy(ctx->authenticator_bytes_verifier, in->authenticator_bytes_verifier, in->authenticator_len_verifier);
-		memcpy(ctx->authenticator_bytes_salt, in->authenticator_bytes_salt, in->authenticator_len_salt);
+		if (in->authenticator_len_verifier >0 && in->authenticator_bytes_verifier != NULL)
+			memcpy(ctx->authenticator_bytes_verifier, in->authenticator_bytes_verifier, in->authenticator_len_verifier);
+		if (in->authenticator_len_salt > 0 && in->authenticator_bytes_salt != NULL)
+			memcpy(ctx->authenticator_bytes_salt, in->authenticator_bytes_salt, in->authenticator_len_salt);
 		ctx->authenticator_len_salt = in->authenticator_len_salt;
 		ctx->authenticator_len_verifier = in->authenticator_len_verifier;
 		if (!ctx->last_pkt)

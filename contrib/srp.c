@@ -804,7 +804,7 @@ void srp_verifier_verify_session( struct SRPVerifier * ver, const unsigned char 
 struct SRPUser * srp_user_new( struct SRPSession *session, const char * username,
                                const unsigned char * bytes_password, size_t len_password)
 {
-    struct SRPUser  *usr  = (struct SRPUser *) malloc( sizeof(struct SRPUser) );
+    struct SRPUser  *usr  = (struct SRPUser *) calloc(1, sizeof(struct SRPUser) );
     size_t           ulen = strlen(username) + 1;
 
     if (!usr)

@@ -309,6 +309,7 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 	if (init_common_ctx(&ctx->common, profile))
 	{
 		free(ctx);
+		free(rist_ctx);
 		ctx = NULL;
 		return -1;
 	}

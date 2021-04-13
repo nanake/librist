@@ -273,7 +273,7 @@ int main (int argc, char **argv) {
 	int statsinterval = 1000;
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	char *remote_log_address = NULL;
-
+	int exitcode = 0;
 #ifdef _WIN32
 #define STDERR_FILENO 2
 	signal(SIGINT, intHandler);
@@ -324,7 +324,8 @@ int main (int argc, char **argv) {
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {
 				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
-				return 1;
+				exitcode = 1;
+				goto out;
 			}
 		break;
 #endif
@@ -356,19 +357,22 @@ int main (int argc, char **argv) {
 
 	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
 		fprintf(stderr, "Failed to setup logging!\n");
-		exit(1);
+		exitcode = 1;
+		goto out;;
 	}
 
 	struct rist_ctx *receiver_ctx;
 
 	if (rist_receiver_create(&receiver_ctx, RIST_PROFILE_SIMPLE, logging_settings) != 0) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
-		exit(1);
+		exitcode = 1;
+		goto out;;
 	}
 
 	if (rist_auth_handler_set(receiver_ctx, cb_auth_connect, cb_auth_disconnect, receiver_ctx) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
-		exit(1);
+		exitcode = 1;
+		goto out;;
 	}
 
 	struct rist_peer_config app_peer_config = {
@@ -402,13 +406,15 @@ int main (int argc, char **argv) {
 	if (rist_parse_address(inputurl, &peer_config))
 	{
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver \n");
-		exit(1);
+		exitcode = 1;
+		goto out;
 	}
 
 	struct rist_peer *peer;
 	if (rist_peer_create(receiver_ctx, &peer, peer_config) == -1) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver \n");
-		exit(1);
+		exitcode = 1;
+		goto out;
 	}
 
 
@@ -419,13 +425,15 @@ int main (int argc, char **argv) {
 		if (rist_receiver_data_callback_set(receiver_ctx, cb_recv, &cb_arg))
 		{
 			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
-			exit(1);
+			exitcode = 1;
+			goto out;
 		}
 	}
 	cb_arg.sender_ctx = setup_rist_sender(&client_args);
 	if (rist_start(receiver_ctx)) {
 		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
-		exit(1);
+		exitcode = 1;
+		goto out;
 	}
 	/* Start the rist protocol thread */
 	if (enable_data_callback == 1) {
@@ -447,7 +455,7 @@ int main (int argc, char **argv) {
 
 	rist_destroy(receiver_ctx);
 	rist_destroy(cb_arg.sender_ctx);
-
+out:
 	if (client_args.shared_secret)
 		free(client_args.shared_secret);
 	if (cname)
@@ -456,8 +464,10 @@ int main (int argc, char **argv) {
 		free(inputurl);
 	if (outputurl)
 		free(outputurl);
+	if (remote_log_address)
+		free(remote_log_address);
 	
 
 
-	return 0;
+	return exitcode;
 }

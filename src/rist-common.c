@@ -1006,7 +1006,6 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 			if (check->is_rtcp && check->dead_since > dead_since)
 			{
 				peer = check;
-				dead_since = check->dead_since;
 			}
 			if (peer != NULL)
 				rist_receiver_send_nacks(peer,f->nacks.array, f->nacks.counter);
@@ -1729,8 +1728,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 						if (tmp->is_data) {
 							if (tmp->local_port == data_port && tmp->peer_rtcp == NULL) {
 								peer->peer_data = tmp;
-								if (tmp->peer_rtcp->dead)
-									tmp->peer_rtcp = peer;
+								tmp->peer_rtcp = peer;
 								break;
 							}
 						}

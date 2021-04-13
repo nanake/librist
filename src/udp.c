@@ -136,6 +136,8 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 			if (safety_counter++ > 1000)
 				return;
 		}
+		if (!b)
+			return;
 
 		/* perform the deletion based on the buffer size plus twice the configured/measured avg_rtt */
 		uint64_t delay = (timestampNTP_u64() - b->time) / RIST_CLOCK;
@@ -835,8 +837,7 @@ int rist_sender_enqueue(struct rist_sender *ctx, const void *data, size_t len, u
 
 		struct rist_rtp_hdr_ext *hdr_ext = (struct rist_rtp_hdr_ext *)&tmp_buf;
 		memset(tmp_buf, 0, sizeof(*hdr_ext));//hdr_ext
-		int ret = 0;
-		if ((ret = suppress_null_packets(data, &tmp_buf[sizeof(*hdr_ext)], &len, hdr_ext)) > 0)
+		if (suppress_null_packets(data, &tmp_buf[sizeof(*hdr_ext)], &len, hdr_ext) > 0)
 		{
 			memcpy(&hdr_ext->identifier, "RI", 2);
 			hdr_ext->length = htobe16(1);
