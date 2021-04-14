@@ -41,7 +41,7 @@
 #define DATA_READ_MODE_API 2
 
 static int signalReceived = 0;
-static struct rist_logging_settings *logging_settings = NULL;
+static struct rist_logging_settings logging_settings;
 enum rist_profile profile = RIST_PROFILE_MAIN;
 static int peer_connected_count = 0;
 
@@ -89,7 +89,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -129,7 +129,7 @@ static void connection_status_callback(void *arg, struct rist_peer *peer, enum r
 		peer_connected_count++;
 	else
 		peer_connected_count--;
-	rist_log(logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n", 
+	rist_log(&logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n",
 				peer, peer_connection_status, peer_connected_count);
 }
 
@@ -171,7 +171,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 				if (udp_config->rtp)
 					free(payload);
 				if (ret <= 0 && errno != ECONNREFUSED)
-					rist_log(logging_settings, RIST_LOG_ERROR, "Error %d sending udp packet to socket %d\n", errno, callback_object->mpeg[i]);
+					rist_log(&logging_settings, RIST_LOG_ERROR, "Error %d sending udp packet to socket %d\n", errno, callback_object->mpeg[i]);
 				found = 1;
 			}
 		}
@@ -179,7 +179,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 
 	if (found == 0)
 	{
-		rist_log(logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
 		return -1;
 	}
 	rist_receiver_data_block_free((struct rist_data_block **const) &b);
@@ -187,7 +187,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 }
 
 static void intHandler(int signal) {
-	rist_log(logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+	rist_log(&logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
 	signalReceived = signal;
 }
 
@@ -200,7 +200,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
 	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
-	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
+	rist_log(&logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = buffer;
@@ -224,7 +224,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	int message_len = 0;
 	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
 	if (message) {
-		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
+		rist_log(&logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
 	}
 	return 0;
 }
@@ -241,7 +241,7 @@ struct ristreceiver_flow_cumulative_stats *stats_list;
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
 	{
 		struct ristreceiver_flow_cumulative_stats *stats = stats_list;
@@ -260,7 +260,7 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 		stats->lost += stats_container->stats.receiver_flow.lost;
 		stats->recovered += stats_container->stats.receiver_flow.recovered;
 		//Bit ugly, but linking in cJSON seems a bit excessive for this 4 variable JSON string
-		rist_log(logging_settings, RIST_LOG_INFO,
+		rist_log(&logging_settings, RIST_LOG_INFO,
 				 "{\"flow_cumulative_stats\":{\"flow_id\":%"PRIu32",\"received\":%"PRIu64",\"recovered\":%"PRIu64",\"lost\":%"PRIu64"}}\n",
 				 stats->flow_id, stats->received, stats->recovered, stats->lost);
 	}
@@ -311,12 +311,14 @@ int main(int argc, char *argv[])
 #endif
 
 	// Default log settings
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr,"Failed to setup default logging!\n");
-		exit(1);
+    struct rist_logging_settings *log_ptr = &logging_settings;
+    if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, NULL,
+                         stderr) != 0) {
+      fprintf(stderr, "Failed to setup default logging!\n");
+      exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
 	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
@@ -354,13 +356,13 @@ int main(int argc, char *argv[])
 		case 'F':
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
 				return 1;
 			}
 		break;
 #endif
 		case 'u':
-			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
+			rist_log(&logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
 		case 'h':
@@ -380,7 +382,7 @@ int main(int argc, char *argv[])
 	}
 
 	// Update log settings with custom loglevel and remote address if necessary
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
+	if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
 		fprintf(stderr,"Failed to setup logging!\n");
 		exit(1);
 	}
@@ -388,30 +390,30 @@ int main(int argc, char *argv[])
 	/* rist side */
 
 	struct rist_ctx *ctx;
-	if (rist_receiver_create(&ctx, profile, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
+	if (rist_receiver_create(&ctx, profile, &logging_settings) != 0) {
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 		exit(1);
 	}
 
 	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exit(1);
 	}
 
 	if (rist_connection_status_callback_set(ctx, connection_status_callback, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
 		exit(1);
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
 		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
 	}
 
 	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		exit(1);
 	}
 
@@ -425,7 +427,7 @@ int main(int argc, char *argv[])
 		const struct rist_peer_config *peer_config = NULL;
 		if (rist_parse_address(inputtoken, (void *)&peer_config))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
@@ -444,7 +446,7 @@ int main(int argc, char *argv[])
 		}
 
 		/* Print config */
-		rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
+		rist_log(&logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 			peer_config->recovery_maxbitrate, peer_config->recovery_length_min, peer_config->recovery_length_max,
 			peer_config->recovery_reorder_buffer, peer_config->recovery_rtt_min,peer_config->recovery_rtt_max,
 			peer_config->congestion_control_mode, peer_config->min_retries, peer_config->max_retries);
@@ -453,7 +455,7 @@ int main(int argc, char *argv[])
 
 		struct rist_peer *peer;
 		if (rist_peer_create(ctx, &peer, peer_input_config[i]) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
 #ifdef USE_MBEDTLS
@@ -463,17 +465,17 @@ int main(int argc, char *argv[])
 			{
 				srp_error = rist_enable_eap_srp(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
 				if (srp_error)
-					rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
+					rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
 			}
 			if (srpfile)
 			{
 				srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
 				if (srp_error)
-					rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
+					rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
 			}
 		}
 		else
-			rist_log(logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
+			rist_log(&logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
 		rist_peer_config_free(&peer_config);
@@ -495,7 +497,7 @@ int main(int argc, char *argv[])
 		// parameters available to the udp input/output url
 		const struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address(outputtoken, &udp_config)) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
 		}
 
@@ -504,18 +506,18 @@ int main(int argc, char *argv[])
 		int outputlisten;
 		uint16_t outputport;
 		if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &outputport, &outputlisten) || !outputport || strlen(hostname) == 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse output url %s\n", outputtoken);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse output url %s\n", outputtoken);
 			goto next;
 		}
-		rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
+		rist_log(&logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, outputport);
 
 		// Open the output socket
 		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, udp_config->miface);
 		if (callback_object.mpeg[i] <= 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			goto next;
 		} else {
-			rist_log(logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
+			rist_log(&logging_settings, RIST_LOG_INFO, "Output socket is open and bound %s:%d\n", (char *) hostname, outputport);
 			atleast_one_socket_opened = true;
 		}
 		callback_object.udp_config[i] = udp_config;
@@ -534,7 +536,7 @@ next:
 	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer\n");
 			exit(1);
 		}
 	}
@@ -542,29 +544,29 @@ next:
 	else if (data_read_mode == DATA_READ_MODE_POLL) {
 		if (pipe(receiver_pipe))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create pipe for file descriptor channel\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create pipe for file descriptor channel\n");
 			exit(1);
 		}
 		if (fcntl(receiver_pipe[WriteEnd], F_SETFL, O_NONBLOCK) < 0)
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
  			exit(1);
  		}
 		if (fcntl(receiver_pipe[ReadEnd], F_SETFL, O_NONBLOCK) < 0)
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set pipe to non blocking mode\n");
  			exit(1);
  		}
 		if (rist_receiver_data_notify_fd_set(ctx, receiver_pipe[WriteEnd]))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set file descriptor channel\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set file descriptor channel\n");
 			exit(1);
 		}
 	}
 #endif
 
 	if (rist_start(ctx)) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 		exit(1);
 	}
 	/* Start the rist protocol thread */
@@ -581,7 +583,7 @@ next:
 		struct sched_param param = { 0 };
 		param.sched_priority = prio_max;
 		if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0)
-			rist_log(logging_settings, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
+			rist_log(&logging_settings, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
 #else
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 #endif
@@ -594,7 +596,7 @@ next:
 				if (queue_size % 10 == 0 || queue_size > 50) {
 					// We need a better way to report on this
 					uint32_t flow_id = b ? b->flow_id : 0;
-					rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
+					rist_log(&logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
 				}
 				if (b && b->payload) cb_recv(&callback_object, b);
 			}
@@ -636,7 +638,7 @@ next:
 					if (queue_size % 10 == 0 || queue_size > 50) {
 						// We need a better way to report on this
 						uint32_t flow_id = b ? b->flow_id : 0;
-						rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
+						rist_log(&logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: count %d, flow id %u\n", queue_size, flow_id);
 					}
 					if (b && b->payload) cb_recv(&callback_object, b);
 				}
@@ -655,6 +657,7 @@ next:
 			rist_udp_config_free(&callback_object.udp_config[i]);
 	}
 
+	rist_logging_unset_global();
 	if (inputurl)
 		free(inputurl);
 	if (outputurl)
@@ -663,8 +666,6 @@ next:
 		free(oobtun);
 	if (shared_secret)
 		free(shared_secret);
-	const struct rist_logging_settings *logging_settings_tofree = (const struct rist_logging_settings *)logging_settings;
-	rist_logging_settings_free(&logging_settings_tofree);
 
 	struct ristreceiver_flow_cumulative_stats *stats, *next;
 	stats = stats_list;

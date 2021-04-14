@@ -40,7 +40,7 @@
 
 static int signalReceived = 0;
 static int peer_connected_count = 0;
-static struct rist_logging_settings *logging_settings = NULL;
+static struct rist_logging_settings logging_settings;
 
 struct rist_callback_object {
 	int sd;
@@ -59,7 +59,7 @@ struct receive_thread_object {
 };
 
 struct rist_sender_args {
-	struct rist_ctx *ctx;	
+	struct rist_ctx *ctx;
 	char* token;
 	int profile;
 	enum rist_log_level loglevel;
@@ -194,7 +194,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	{
 		// EWOULDBLOCK = EAGAIN = 11 would be the most common recoverable error (if any)
 		if (errno != EWOULDBLOCK)
-			rist_log(logging_settings, RIST_LOG_ERROR, "Input receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, callback_object->sd);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Input receive failed: errno=%d, ret=%d, socket=%d\n", errno, recv_bufsize, callback_object->sd);
 	}
 }
 
@@ -204,12 +204,12 @@ static void input_udp_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 	RIST_MARK_UNUSED(evctx);
 	RIST_MARK_UNUSED(revents);
 	RIST_MARK_UNUSED(fd);
-	rist_log(logging_settings, RIST_LOG_ERROR, "Socket error on sd=%d, stream-id=%d !\n", callback_object->sd, callback_object->udp_config->stream_id);
+	rist_log(&logging_settings, RIST_LOG_ERROR, "Socket error on sd=%d, stream-id=%d !\n", callback_object->sd, callback_object->udp_config->stream_id);
 }
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -220,7 +220,7 @@ static void connection_status_callback(void *arg, struct rist_peer *peer, enum r
 		peer_connected_count++;
 	else
 		peer_connected_count--;
-	rist_log(logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n", 
+	rist_log(&logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n",
 				peer, peer_connection_status, peer_connected_count);
 }
 
@@ -232,7 +232,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
 	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
-	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been peer_connected_count, sending oob/api message: %s\n", message);
+	rist_log(&logging_settings, RIST_LOG_INFO,"Peer has been peer_connected_count, sending oob/api message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = buffer;
@@ -256,7 +256,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	int message_len = 0;
 	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
 	if (message) {
-		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
+		rist_log(&logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
 	}
 	return 0;
 }
@@ -264,43 +264,43 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 static int cb_stats(void *arg, const struct rist_stats *stats_container)
 {
 	(void)arg;
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }
 
 static void intHandler(int signal)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+	rist_log(&logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
 	signalReceived = signal;
 }
 
 static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 {
 	if (rist_stats_callback_set(setup->ctx, setup->statsinterval, cb_stats, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		return NULL;
 	}
 
 	if (rist_auth_handler_set(setup->ctx, cb_auth_connect, cb_auth_disconnect, setup->ctx) < 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		return NULL;
 	}
 
 	if (rist_connection_status_callback_set(setup->ctx, connection_status_callback, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
 		return NULL;
 	}
 
 	if (setup->profile != RIST_PROFILE_SIMPLE) {
 		if (rist_oob_callback_set(setup->ctx, cb_recv_oob, setup->ctx) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
 			return NULL;
 		}
 	}
 
 	if (rist_stats_callback_set(setup->ctx, setup->statsinterval, cb_stats, NULL) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		return NULL;
 	}
 
@@ -308,7 +308,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	const struct rist_peer_config *peer_config_link = NULL;
 	if (rist_parse_address(setup->token, (void *)&peer_config_link))
 	{
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender: %s\n", setup->token);
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender: %s\n", setup->token);
 		return NULL;
 	}
 
@@ -327,7 +327,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	}
 	if (setup->stream_id) {
 		if (setup->stream_id % 2 != 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Error parsing peer options for sender: %s, stream-id (%d) must be even!\n\n", setup->token, setup->stream_id);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Error parsing peer options for sender: %s, stream-id (%d) must be even!\n\n", setup->token, setup->stream_id);
 			return NULL;
 		}
 		else {
@@ -336,14 +336,14 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	}
 
 	/* Print config */
-	rist_log(logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
-		peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max, 
+	rist_log(&logging_settings, RIST_LOG_INFO, "Link configured with maxrate=%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
+		peer_config_link->recovery_maxbitrate, peer_config_link->recovery_length_min, peer_config_link->recovery_length_max,
 		peer_config_link->recovery_reorder_buffer, peer_config_link->recovery_rtt_min, peer_config_link->recovery_rtt_max,
 		peer_config_link->congestion_control_mode, peer_config_link->min_retries, peer_config_link->max_retries);
 
 	struct rist_peer *peer;
 	if (rist_peer_create(setup->ctx, &peer, peer_config_link) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to %s\n", peer_config_link->address);
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to %s\n", peer_config_link->address);
 		free((void *)peer_config_link);
 		return NULL;
 	}
@@ -355,17 +355,17 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 		{
 			srp_error = rist_enable_eap_srp(peer, peer_config_link->srp_username, peer_config_link->srp_password, NULL, NULL);
 			if (srp_error)
-				rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
+				rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
 		}
 		if (srpfile)
 		{
 			srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
 			if (srp_error)
-				rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
+				rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
 		}
 	}
 	else
-		rist_log(logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
+		rist_log(&logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
 	rist_peer_config_free(&peer_config_link);
@@ -385,7 +385,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50)
-					rist_log(logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
+					rist_log(&logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
 				if (b && b->payload) {
 					if (peer_connected_count) {
 						int w = rist_sender_data_write(callback_object->sender_ctx, b);
@@ -440,12 +440,14 @@ int main(int argc, char *argv[])
 #endif
 
 	// Default log settings
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
-		fprintf(stderr,"Failed to setup default logging!\n");
-		exit(1);
+    struct rist_logging_settings *log_ptr = &logging_settings;
+    if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, NULL,
+                         stderr) != 0) {
+      fprintf(stderr, "Failed to setup default logging!\n");
+      exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
 	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:f:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
@@ -483,13 +485,13 @@ int main(int argc, char *argv[])
 		case 'F':
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
 				return 1;
 			}
 		break;
 #endif
 		case 'u':
-			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
+			rist_log(&logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
 		case 'f':
@@ -523,7 +525,7 @@ int main(int argc, char *argv[])
 		peer_connected_count = 1;
 
 	// Update log settings with custom loglevel and remote address if necessary
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
+	if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
 		fprintf(stderr,"Failed to setup logging\n");
 		exit(1);
 	}
@@ -550,7 +552,7 @@ int main(int argc, char *argv[])
 		// First parse extra url and parameters
 		const struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address(inputtoken, &udp_config)) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
 		}
 
@@ -558,10 +560,10 @@ int main(int argc, char *argv[])
 		for (size_t j = 0; j < MAX_INPUT_COUNT; j++) {
 			if (stream_id_check[j] == -1) {
 				stream_id_check[j] = (int32_t)udp_config->stream_id;
-				rist_log(logging_settings, RIST_LOG_INFO, "Assigning stream-id %d to this input\n", udp_config->stream_id);
+				rist_log(&logging_settings, RIST_LOG_INFO, "Assigning stream-id %d to this input\n", udp_config->stream_id);
 				break;
 			} else if ((uint16_t)stream_id_check[j] == udp_config->stream_id) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Every input must have a unique stream-id (%d) when you multiplex\n", udp_config->stream_id);
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Every input must have a unique stream-id (%d) when you multiplex\n", udp_config->stream_id);
 				goto shutdown;
 			}
 		}
@@ -572,17 +574,17 @@ int main(int argc, char *argv[])
 		strcpy(tmpoutputurl, outputurl);
 		char *outputtoken = strtok_r(tmpoutputurl, ",", &saveptroutput);
 		// All output peers should be on the same context per receiver
-		if (rist_sender_create(&callback_object[i].sender_ctx, peer_args.profile, 0, logging_settings) != 0) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
+		if (rist_sender_create(&callback_object[i].sender_ctx, peer_args.profile, 0, &logging_settings) != 0) {
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
 			break;
 		}
 		if (npd) {
 			if (profile == RIST_PROFILE_SIMPLE)
-				rist_log(logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
+				rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
 			else
-				rist_log(logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled. Support for this feature is not guaranteed to be present on receivers. Please make sure the receiver supports it (librist does)\n");
+				rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled. Support for this feature is not guaranteed to be present on receivers. Please make sure the receiver supports it (librist does)\n");
 			if (rist_sender_npd_enable(callback_object[i].sender_ctx) != 0) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
 			}
 		}
 		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
@@ -601,8 +603,8 @@ int main(int argc, char *argv[])
 
 		if (strcmp(udp_config->prefix, "rist") == 0) {
 			// This is a rist input (new context for each listener)
-			if (rist_receiver_create(&callback_object[i].receiver_ctx, peer_args.profile, logging_settings) != 0) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
+			if (rist_receiver_create(&callback_object[i].receiver_ctx, peer_args.profile, &logging_settings) != 0) {
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 				goto next;
 			}
 			peer_args.token = inputtoken;
@@ -619,25 +621,25 @@ int main(int argc, char *argv[])
 			int inputlisten;
 			uint16_t inputport;
 			if (udpsocket_parse_url((void *)udp_config->address, hostname, 200, &inputport, &inputlisten) || !inputport || strlen(hostname) == 0) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse input url %s\n", inputtoken);
 				goto next;
 			}
-			rist_log(logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
+			rist_log(&logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 
 			callback_object[i].sd = udpsocket_open_bind(hostname, inputport, udp_config->miface);
 			if (callback_object[i].sd <= 0) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
 					(char *) hostname, inputport, udp_config->miface);
 				goto next;
 			} else {
 				udpsocket_set_nonblocking(callback_object[i].sd);
-				rist_log(logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
+				rist_log(&logging_settings, RIST_LOG_INFO, "Input socket is open and bound %s:%d\n", (char *) hostname, inputport);
 				atleast_one_socket_opened = true;
 			}
 			callback_object[i].udp_config = udp_config;
 
 			callback_object[i].evctx = evctx;
-			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr, 
+			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr,
 				(void *)&callback_object[i]);
 		}
 
@@ -659,11 +661,11 @@ next:
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 			goto shutdown;
 		}
 		if (callback_object[i].receiver_ctx && rist_start(callback_object[i].receiver_ctx) == -1) {
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 			goto shutdown;
 		}
 		if (callback_object[i].receiver_ctx && pthread_create(&thread_main_loop[i+1], NULL, input_loop, (void *)callback_object) != 0)
@@ -700,6 +702,7 @@ shutdown:
 			pthread_join(thread_main_loop[i], NULL);
 	}
 
+	rist_logging_unset_global();
 	if (inputurl)
 		free(inputurl);
 	if (outputurl)

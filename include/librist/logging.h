@@ -18,14 +18,22 @@
  *
  * Then call rist_logging_set_global to have the settings copied in for the
  * global log settings (used by udpsocket_ functions).
+ *
+ * When logging is initialized with either user_data, an udp socket or
+ * filestream it's important to call rist_logging_unset_global if those
+ * resources are going to be freed, to prevent a use after free, or on exit
+ * when using UDP logging to prevent fd's leaking.
  **/
 
 struct rist_logging_settings {
-	enum rist_log_level log_level;///<minimum log level, ignored when callback is used
+	enum rist_log_level log_level;///<minimum log level
 	/**
 	 * @brief Log callback function
 	 * When set this function is called by the libRIST library whenever a
-	 * log message is available. NULL to disable log callback
+	 * log message is available. NULL to disable log callback.
+	 *
+	 * The log callback function can be called from multiple threads, so it
+	 * needs to be thread-safe.
 	 *
 	 * @param arg, user data
 	 * @param level log level
@@ -46,7 +54,7 @@ RIST_API void rist_log(struct rist_logging_settings *logging_settings, enum rist
  * This also sets the global logging settings if they were not set before.
  *
  * @param logging_settings if pointed to pointer is NULL struct will be allocated, otherwise pointed to struct will have it's values updated by given values, closing and opening sockets as needed.
- * @param log_level log level to filter at when other outputs besides CB are defined.
+ * @param log_level minimum log level to report
  * @param log_cb log callback , NULL to disable
  * @param cb_args user data passed to log callback function, NULL when unused
  * @param address destination address for UDP log messages, NULL when unused
@@ -61,4 +69,11 @@ RIST_API int rist_logging_set(struct rist_logging_settings **logging_settings, e
  * @return 0 for succes
  **/
 RIST_API int rist_logging_set_global(struct rist_logging_settings *logging_settings);
+
+/**
+ * @brief Unset global log settings
+ *
+ * This will unset the global log settings, closing any dupped socket as needed.
+ **/
+RIST_API void rist_logging_unset_global(void);
 #endif

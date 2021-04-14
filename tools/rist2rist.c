@@ -44,7 +44,7 @@ struct rist_cb_arg {
 };
 
 static int keep_running = 1;
-static struct rist_logging_settings *logging_settings = NULL;
+static struct rist_logging_settings logging_settings;
 
 static struct option long_options[] = {
 { "inurl",           required_argument, NULL, 'i' },
@@ -89,7 +89,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -101,7 +101,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
 	int ret = oob_build_api_payload(buffer, (char *)connecting_ip, (char *)local_ip, message, message_len);
-	rist_log(logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
+	rist_log(&logging_settings, RIST_LOG_INFO,"Peer has been authenticated, sending oob/api message: %s\n", message);
 	struct rist_oob_block oob_block;
 	oob_block.peer = peer;
 	oob_block.payload = buffer;
@@ -125,14 +125,14 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	int message_len = 0;
 	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
 	if (message) {
-		rist_log(logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
+		rist_log(&logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
 	}
 	return 0;
 }
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
-	rist_log(logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
 	rist_stats_free(stats_container);
 	return 0;
 }
@@ -142,19 +142,19 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	printf("CName: %s\n", setup->cname);
 	printf("Outurl: %s\n", setup->outputurl);
 	int rist;
-	if (rist_sender_create(&ctx, RIST_PROFILE_MAIN, setup->flow_id, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
+	if (rist_sender_create(&ctx, RIST_PROFILE_MAIN, setup->flow_id, &logging_settings) != 0) {
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
 		exit(1);
 	}
 
 	rist = rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx);
 	if (rist < 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		exit(1);
 	}
 
 	if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 		exit(1);
 	}
 
@@ -197,13 +197,13 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	const struct rist_peer_config *peer_config = &app_peer_config;
 	if (rist_parse_address(setup->outputurl, &peer_config))
 	{
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
 		exit(1);
 	}
 
 	struct rist_peer *peer;
 	if (rist_peer_create(ctx, &peer, peer_config) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to sender\n");
 		exit(1);
 	}
 
@@ -213,13 +213,13 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	{
 		srp_error = rist_enable_eap_srp(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
 		if (srp_error)
-			rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
+			rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
 	}
 	if (srpfile)
 	{
 		srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
 		if (srp_error)
-			rist_log(logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
+			rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
 	}
 #endif
 
@@ -228,7 +228,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	//rist_sender_keepalive_timeout_set(ctx, 5000);
 
 	if (rist_start(ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 		exit(1);
 	}
 	return ctx;
@@ -253,7 +253,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 }
 
 static void intHandler(int signal) {
-	rist_log(logging_settings, RIST_LOG_NOTICE, "Signal %d received\n", signal);
+	rist_log(&logging_settings, RIST_LOG_NOTICE, "Signal %d received\n", signal);
 	keep_running = 0;
 }
 
@@ -287,12 +287,13 @@ int main (int argc, char **argv) {
 #endif
 
 	// Default log settings
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, NULL, stderr) != 0) {
+	struct rist_logging_settings *log_ptr = &logging_settings;
+	if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, NULL, stderr) != 0) {
 		fprintf(stderr,"Failed to setup default logging!\n");
 		exit(1);
 	}
 
-	rist_log(logging_settings, RIST_LOG_INFO, "Starting rist2rist version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting rist2rist version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
 	int option_index;
 	int c;
@@ -323,7 +324,7 @@ int main (int argc, char **argv) {
 		case 'F':
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {
-				rist_log(logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
 				exitcode = 1;
 				goto out;
 			}
@@ -333,7 +334,7 @@ int main (int argc, char **argv) {
 			statsinterval = atoi(optarg);
 			break;
 		case 'u':
-			rist_log(logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
+			rist_log(&logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		case 'h':
 			//
@@ -355,7 +356,7 @@ int main (int argc, char **argv) {
 		usage(argv[0]);
 	}
 
-	if (rist_logging_set(&logging_settings, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
+	if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, remote_log_address, stderr) != 0) {
 		fprintf(stderr, "Failed to setup logging!\n");
 		exitcode = 1;
 		goto out;;
@@ -363,16 +364,16 @@ int main (int argc, char **argv) {
 
 	struct rist_ctx *receiver_ctx;
 
-	if (rist_receiver_create(&receiver_ctx, RIST_PROFILE_SIMPLE, logging_settings) != 0) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
+	if (rist_receiver_create(&receiver_ctx, RIST_PROFILE_SIMPLE, &logging_settings) != 0) {
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 		exitcode = 1;
-		goto out;;
+		goto out;
 	}
 
 	if (rist_auth_handler_set(receiver_ctx, cb_auth_connect, cb_auth_disconnect, receiver_ctx) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exitcode = 1;
-		goto out;;
+		goto out;
 	}
 
 	struct rist_peer_config app_peer_config = {
@@ -405,14 +406,14 @@ int main (int argc, char **argv) {
 	const struct rist_peer_config *peer_config = &app_peer_config;
 	if (rist_parse_address(inputurl, &peer_config))
 	{
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver \n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver \n");
 		exitcode = 1;
 		goto out;
 	}
 
 	struct rist_peer *peer;
 	if (rist_peer_create(receiver_ctx, &peer, peer_config) == -1) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver \n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver \n");
 		exitcode = 1;
 		goto out;
 	}
@@ -424,14 +425,14 @@ int main (int argc, char **argv) {
 	if (enable_data_callback == 1) {
 		if (rist_receiver_data_callback_set(receiver_ctx, cb_recv, &cb_arg))
 		{
-			rist_log(logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
 			exitcode = 1;
 			goto out;
 		}
 	}
 	cb_arg.sender_ctx = setup_rist_sender(&client_args);
 	if (rist_start(receiver_ctx)) {
-		rist_log(logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 		exitcode = 1;
 		goto out;
 	}
@@ -456,6 +457,7 @@ int main (int argc, char **argv) {
 	rist_destroy(receiver_ctx);
 	rist_destroy(cb_arg.sender_ctx);
 out:
+	rist_logging_unset_global();
 	if (client_args.shared_secret)
 		free(client_args.shared_secret);
 	if (cname)

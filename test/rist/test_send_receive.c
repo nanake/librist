@@ -16,8 +16,8 @@
 atomic_ulong failed;
 atomic_ulong stop;
 
-struct rist_logging_settings *logging_settings_sender;
-struct rist_logging_settings *logging_settings_receiver;
+struct rist_logging_settings *logging_settings_sender = NULL;
+struct rist_logging_settings *logging_settings_receiver = NULL;
 char* senderstring = "sender";
 char* receiverstring = "receiver";
 
