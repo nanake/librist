@@ -23,8 +23,6 @@
 int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
 						 struct rist_logging_settings *logging_settings)
 {
-	if (!logging_settings)
-		logging_settings = rist_get_global_logging_settings();
 	struct rist_ctx *rist_ctx = calloc(1, sizeof(*rist_ctx));
 	if (!rist_ctx)
 	{
@@ -273,8 +271,6 @@ int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
 int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 					   uint32_t flow_id, struct rist_logging_settings *logging_settings)
 {
-	if (!logging_settings)
-		logging_settings = rist_get_global_logging_settings();
 	int ret;
 
 	if (profile == RIST_PROFILE_ADVANCED)

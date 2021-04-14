@@ -18,11 +18,26 @@
 #include <windows.h>
 #endif
 
+#define LOGGING_SETTINGS_INITIALIZER        \
+	{                                       \
+		.log_level = RIST_LOG_DISABLE,      \
+        .log_cb = NULL,                     \
+		.log_cb_arg = NULL,                 \
+        .log_socket = -1,                   \
+        .log_stream = NULL,                 \
+	}
+
 static struct {
 	struct rist_logging_settings settings;
-	volatile bool logs_set;
+	bool logs_set;
 	pthread_mutex_t global_logs_lock;
-} global_logging_settings;
+} global_logging_settings = {
+	.settings = LOGGING_SETTINGS_INITIALIZER,
+	.logs_set = false,
+#if !defined(_WIN32) || defined(HAVE_PTHREADS)
+	.global_logs_lock = PTHREAD_MUTEX_INITIALIZER,
+#endif
+};
 
 #if defined(_WIN32) && !defined(HAVE_PTHREADS)
 INIT_ONCE once_var = INIT_ONCE_STATIC_INIT;
@@ -37,20 +52,18 @@ static BOOL init_mutex(PINIT_ONCE once_var, PVOID param, PVOID *param2)
 	}
 	return TRUE;
 }
-#else
-pthread_once_t once_var = PTHREAD_ONCE_INIT;
-static void init_mutex(void)
-{
-	int ret = pthread_mutex_init(&global_logging_settings.global_logs_lock, NULL);
-	//we cannot log or fail graciously here, and it should "never" happen anyway, so an
-	//assert is OK here (it will get compiled away if NDEBUG is undefined)
-	assert(ret == 0);
-}
 #endif
-static inline void rist_log_impl(struct rist_logging_settings *log_settings, enum rist_log_level level, intptr_t sender_id, intptr_t receiver_id, const char *format, va_list argp) {
-	if (level > log_settings->log_level || (!log_settings->log_cb && !log_settings->log_socket && !log_settings->log_stream)) {
+
+static inline void rist_log_impl(struct rist_logging_settings *log_settings,
+				 enum rist_log_level level, intptr_t sender_id,
+				 intptr_t receiver_id, const char *format,
+				 va_list argp)
+{
+	if (level > log_settings->log_level ||
+	    (!log_settings->log_cb && (log_settings->log_socket < 0) &&
+	     !log_settings->log_stream))
 		return;
-	}
+
 	char *msg;
 	int ret = vasprintf(&msg, format, argp);
 	if (ret <= 0) {
@@ -139,20 +152,16 @@ void rist_log(struct rist_logging_settings *logging_settings, enum rist_log_leve
 //Where we don't have access to either logging settings or common ctx (i.e.: udpsocket)
 void rist_log_priv3(enum rist_log_level level, const char *format, ...)
 {
-	if (RIST_UNLIKELY(!global_logging_settings.logs_set))
-		return;
 	va_list argp;
 	va_start(argp, format);
 	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
-	rist_log_impl(&global_logging_settings.settings, level, 0, 0, format, argp);
-	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
-	va_end(argp);
-}
-
-struct rist_logging_settings *rist_get_global_logging_settings() {
-	if (global_logging_settings.logs_set)
-		return &global_logging_settings.settings;
-	return NULL;
+    if (RIST_LIKELY(global_logging_settings.logs_set))
+    {
+        rist_log_impl(&global_logging_settings.settings, level, 0, 0, format,
+                      argp);
+    }
+    pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
+    va_end(argp);
 }
 
 static int init_once_global()
@@ -163,9 +172,24 @@ static int init_once_global()
 	{
 		return -1;
 	}
-	#else
-	pthread_once(&once_var, init_mutex);
 	#endif
+	return 0;
+}
+
+static int
+logging_set_global_unlocked(struct rist_logging_settings *logging_settings)
+{
+	if (global_logging_settings.settings.log_socket >= 0)
+	{
+		udpsocket_close(global_logging_settings.settings.log_socket);
+	}
+	global_logging_settings.settings = *logging_settings;
+	if (logging_settings->log_socket >= 0)
+	{
+		global_logging_settings.settings.log_socket =
+			dup(logging_settings->log_socket);
+	}
+	global_logging_settings.logs_set = true;
 	return 0;
 }
 
@@ -180,21 +204,9 @@ int rist_logging_set_global(struct rist_logging_settings *logging_settings)
 		return -1;
 	}
 	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
-	global_logging_settings.settings.log_cb = logging_settings->log_cb;
-	global_logging_settings.settings.log_cb_arg = logging_settings->log_cb_arg;
-	global_logging_settings.settings.log_level = logging_settings->log_level;
-	if (global_logging_settings.settings.log_socket)
-	{
-		udpsocket_close(global_logging_settings.settings.log_socket);
-	}
-	if (logging_settings->log_socket)
-	{
-		global_logging_settings.settings.log_socket = dup(logging_settings->log_socket);
-	}
-	global_logging_settings.settings.log_stream = logging_settings->log_stream;
-	global_logging_settings.logs_set = true;
+	int ret = logging_set_global_unlocked(logging_settings);
 	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
-	return 0;
+	return ret;
 }
 
 void rist_logging_unset_global(void)
@@ -204,11 +216,12 @@ void rist_logging_unset_global(void)
 		return;
 	}
 	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
-	if (global_logging_settings.settings.log_socket)
+	if (global_logging_settings.settings.log_socket >= 0)
 	{
 		udpsocket_close(global_logging_settings.settings.log_socket);
 	}
-	memset(&global_logging_settings.settings, 0, sizeof(global_logging_settings.settings));
+	global_logging_settings.settings =
+		(struct rist_logging_settings)LOGGING_SETTINGS_INITIALIZER;
 	global_logging_settings.logs_set = false;
 	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
 }
@@ -218,9 +231,13 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	if (!logging_settings)
 		return -1;
 	struct rist_logging_settings *settings = *logging_settings;
+	bool alloc = false;
 	if (!settings) {
-		settings = calloc(1, sizeof(*settings));
+		settings = malloc(sizeof(*settings));
+		*settings = (struct rist_logging_settings)
+			LOGGING_SETTINGS_INITIALIZER;
 		*logging_settings = settings;
+		alloc = true;
 	}
 
 	settings->log_level = log_level;
@@ -228,34 +245,47 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	settings->log_cb_arg = cb_arg;
 	settings->log_stream = logfp;
 	if (address && address[0] != '\0') {
-		if (settings->log_socket) {
+		if (settings->log_socket >= 0) {
 			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 			udpsocket_close(settings->log_socket);
-			settings->log_socket = 0;
+			settings->log_socket = -1;
 		}
 		char host[200];
 		uint16_t port;
 		int local;
-		if (udpsocket_parse_url(address, host, 200, &port, &local) != 0 || local == 1) {
+		if (udpsocket_parse_url(address, host, sizeof(host), &port, &local) != 0 || local == 1) {
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to parse logsocket address\n");
-			return -1;
+			goto err;
 		}
 		settings->log_socket = udpsocket_open_connect(host, port, NULL);
-		if (settings->log_socket <= 0) {
-			settings->log_socket = 0;
+		if (settings->log_socket < 0) {
 			rist_log_priv3(RIST_LOG_ERROR, "Failed to open logsocket\n");
-			return -1;
+			goto err;
 		}
 		udpsocket_set_nonblocking(settings->log_socket);
 		return 0;
-	} else if (settings->log_socket) {
+	} else if (settings->log_socket >= 0) {
 		rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 		udpsocket_close(settings->log_socket);
-		settings->log_socket = 0;
+		settings->log_socket = -1;
 	}
+
+	if (init_once_global() != 0)
+		goto err;
+
+	int ret = 0;
+	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
 	if (!global_logging_settings.logs_set)
-	{
-		rist_logging_set_global(settings);
-	}
+		ret = logging_set_global_unlocked(settings);
+	pthread_mutex_unlock(&global_logging_settings.global_logs_lock);
+	if (ret)
+		goto err;
 	return 0;
+
+err:
+	if (alloc) {
+		free(settings);
+		*logging_settings = NULL;
+	}
+	return -1;
 }
