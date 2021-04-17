@@ -60,10 +60,6 @@ build-macos:
                       -Ddefault_library=both
                       -Duse_mbedtls=false
         - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
 
 
 build-freebsd:
@@ -115,6 +111,10 @@ test-macos:
         - macos
     needs: ["build-macos"]
     script:
+        - meson build --buildtype release
+                      --werror
+                      -Ddefault_library=both
+                      -Duse_mbedtls=false
         - cd build && MESON_TESTTHREADS=4 meson test --suite unicast --print-errorlogs --timeout-multiplier=10
     dependencies:
         - build-macos
