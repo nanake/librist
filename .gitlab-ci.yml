@@ -68,7 +68,7 @@ build-macos:
 
 build-freebsd:
     stage: build
-    except: [merge_requests]
+    only: [branches@rist/librist]
     tags:
         - freebsd
     script:
@@ -121,7 +121,7 @@ test-macos:
 
 test-freebsd:
     stage: test
-    except: [merge_requests]
+    only: [branches@rist/librist]
     tags:
         - freebsd
     needs: ["build-freebsd"]
