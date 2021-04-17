@@ -68,6 +68,7 @@ build-macos:
 
 build-freebsd:
     stage: build
+    except: [merge_requests]
     tags:
         - freebsd
     script:
@@ -120,6 +121,7 @@ test-macos:
 
 test-freebsd:
     stage: test
+    except: [merge_requests]
     tags:
         - freebsd
     needs: ["build-freebsd"]
