@@ -157,7 +157,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	struct rist_flow *current_flow = *prev_flow;
 	while (current_flow)
 	{
-		if (current_flow->flow_id == f->flow_id) {
+		if (current_flow == f) {
 			*prev_flow = current_flow->next;
 			free(current_flow);
 			current_flow = NULL;
