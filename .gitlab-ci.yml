@@ -27,10 +27,6 @@ build-ubuntu:
     script:
         - meson build --buildtype release --werror
         - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
 
 build-win64:
     extends: .debian-amd64-common
@@ -44,11 +40,6 @@ build-win64:
                       -Duse_mbedtls=false
                       -Dhave_mingw_pthreads=true
         - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
-
 
 build-macos:
     stage: build
@@ -70,11 +61,6 @@ build-freebsd:
     script:
         - LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include" meson build --buildtype release --werror
         - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
-
 
 analyze-ubuntu:
     stage: analyze
@@ -92,6 +78,7 @@ test-ubuntu:
         - .ubuntu-amd64-bionic
     needs: ["build-ubuntu"]
     script:
+        - CC="clang" meson build --buildtype release --werror -Db_sanitize=address
         - cd build && meson test --print-errorlogs
     dependencies:
         - build-ubuntu
@@ -115,6 +102,7 @@ test-macos:
                       --werror
                       -Ddefault_library=both
                       -Duse_mbedtls=false
+                      -Db_sanitize=address
         - cd build && MESON_TESTTHREADS=4 meson test --suite unicast --print-errorlogs --timeout-multiplier=10
     dependencies:
         - build-macos
@@ -126,6 +114,7 @@ test-freebsd:
         - freebsd
     needs: ["build-freebsd"]
     script:
+        - LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include" meson build --buildtype release --werror -Db_sanitize=address
         - cd build && meson test --suite unicast --print-errorlogs
     dependencies:
         - build-freebsd
