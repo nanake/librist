@@ -711,7 +711,6 @@ shutdown:
 		free(oobtun);
 	if (shared_secret)
 		free(shared_secret);
-	rist_logging_settings_free((const struct rist_logging_settings **)&logging_settings);
 
 	return 0;
 }

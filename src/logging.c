@@ -244,12 +244,12 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	settings->log_cb = log_cb;
 	settings->log_cb_arg = cb_arg;
 	settings->log_stream = logfp;
+	if (settings->log_socket >= 0) {
+		rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
+		udpsocket_close(settings->log_socket);
+		settings->log_socket = -1;
+	}
 	if (address && address[0] != '\0') {
-		if (settings->log_socket >= 0) {
-			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
-			udpsocket_close(settings->log_socket);
-			settings->log_socket = -1;
-		}
 		char host[200];
 		uint16_t port;
 		int local;
@@ -264,9 +264,7 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 		}
 		udpsocket_set_nonblocking(settings->log_socket);
 		return 0;
-	} else if (settings->log_socket >= 0) {
-		rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
-		udpsocket_close(settings->log_socket);
+	} else {
 		settings->log_socket = -1;
 	}
 
