@@ -10,6 +10,13 @@ stages:
         - docker
         - amd64
 
+.ubuntu-amd64-jammy:
+    image: registry.videolan.org/libplacebo-ubuntu-jammy:20230730213642
+    stage: build
+    tags:
+        - docker
+        - amd64
+
 .debian-amd64-common:
     image: registry.videolan.org/dav1d-debian-unstable:20200306210534
     stage: build
@@ -26,10 +33,6 @@ build-ubuntu:
     script:
         - meson build --buildtype release --werror -Duse_tun=true
         - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
 
 build-win64:
     extends: .debian-amd64-common
@@ -61,9 +64,10 @@ analyze-ubuntu:
 test-ubuntu:
     stage: test
     extends:
-        - .ubuntu-amd64-bionic
+        - .ubuntu-amd64-jammy
     needs: ["build-ubuntu"]
     script:
+        - meson build --buildtype release -Db_sanitize=address,undefined
         - cd build && meson test --print-errorlogs
     dependencies:
         - build-ubuntu
