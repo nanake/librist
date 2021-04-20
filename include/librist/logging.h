@@ -14,7 +14,7 @@
 
 /**
  * The recommended way to use the logging settings is to stack/heap alloc
- * and 0 initialize the rist_logging_settings struct, and set it's members.
+ * and initialize via LOGGING_SETTINGS_INITIALIZER, and set it's members.
  *
  * Then call rist_logging_set_global to have the settings copied in for the
  * global log settings (used by udpsocket_ functions).
@@ -24,6 +24,15 @@
  * resources are going to be freed, to prevent a use after free, or on exit
  * when using UDP logging to prevent fd's leaking.
  **/
+
+#define LOGGING_SETTINGS_INITIALIZER        \
+	{                                       \
+		.log_level = RIST_LOG_DISABLE,      \
+        .log_cb = NULL,                     \
+		.log_cb_arg = NULL,                 \
+        .log_socket = -1,                   \
+        .log_stream = NULL,                 \
+	}
 
 struct rist_logging_settings {
 	enum rist_log_level log_level;///<minimum log level

@@ -40,7 +40,7 @@
 
 static int signalReceived = 0;
 static int peer_connected_count = 0;
-static struct rist_logging_settings logging_settings;
+static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALIZER;
 
 struct rist_callback_object {
 	int sd;

@@ -41,7 +41,7 @@
 #define DATA_READ_MODE_API 2
 
 static int signalReceived = 0;
-static struct rist_logging_settings logging_settings;
+static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALIZER;
 enum rist_profile profile = RIST_PROFILE_MAIN;
 static int peer_connected_count = 0;
 
