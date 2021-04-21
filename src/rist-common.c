@@ -1745,11 +1745,15 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			// We do multiple ifs to make these checks stateless
 			if (!peer->flow->receiver_thread) {
 				// Make sure this data out thread is created only once per flow
+				pthread_mutex_lock(&peer->flow->mutex);
 				if (pthread_create(&(peer->flow->receiver_thread), NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Could not created receiver data output thread.\n");
 					return false;
+					pthread_mutex_unlock(&peer->flow->mutex);
 				}
+				peer->flow->receiver_thread_running = true;
+				pthread_mutex_unlock(&peer->flow->mutex);
 				if (pthread_detach(peer->flow->receiver_thread) != 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Failed to detach from flow thread\n");
 				}
@@ -2502,7 +2506,7 @@ protocol_bypass:
 					//Only used on main profile
 					++p->parent->child_alive_count;
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-							"Peer %d was dead for %"PRIu64" ms and it is now alive again\n", 
+							"Peer %d was dead for %"PRIu64" ms and it is now alive again\n",
 								dead_time / RIST_CLOCK, p->adv_peer_id);
 				}
 				p->last_rtcp_received = now;
@@ -2936,9 +2940,8 @@ protocol_bypass:
 		int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
 		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
 
-		//uint64_t now = timestampNTP_u64();
 		while (!flow->shutdown) {
-			pthread_mutex_lock(&(flow->mutex));
+			pthread_mutex_lock(&flow->mutex);
 			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
 			}
@@ -2953,6 +2956,9 @@ protocol_bypass:
 		}
 		flow->shutdown = 2;
 
+ 		pthread_mutex_lock(&flow->mutex);
+		flow->receiver_thread_running = false;
+		pthread_mutex_unlock(&flow->mutex);
 		return 0;
 	}
 

@@ -236,6 +236,7 @@ struct rist_flow {
 
 	/* Receiver thread variables */
 	pthread_t receiver_thread;
+	bool receiver_thread_running;
 	/* data out thread signaling */
 	pthread_cond_t condition;
 	pthread_mutex_t mutex;

@@ -80,7 +80,10 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering data output thread termination\n");
 	f->shutdown = 1;
-	if (f->receiver_thread)
+	pthread_mutex_lock(&f->mutex);
+	bool running = f->receiver_thread_running;
+	pthread_mutex_unlock(&f->mutex);
+	if (running)
 	{
 		uint64_t start_time = timestampNTP_u64();
 		while (f->shutdown != 2) {
