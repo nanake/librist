@@ -2229,7 +2229,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	{
 		bool current_state = peer->dead;
 		peer->dead = true;
-		if (current_state != peer->peer_data->dead && peer->peer_data->parent)
+		if (peer->peer_data && (current_state != peer->peer_data->dead && peer->peer_data->parent))
 			--peer->peer_data->parent->child_alive_count;
 		peer->dead_since = timestampNTP_u64();
 	}
