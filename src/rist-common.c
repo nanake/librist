@@ -645,6 +645,8 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
+	if (out_of_order)
+		f->stats_instant.reordered++;
 	f->stats_instant.received++;
 
 	// Check for missing data and queue retries
@@ -658,7 +660,7 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (!out_of_order && missing_seq != f->last_seq_found)
 		{
 			receiver_mark_missing(f, peer, seq, rtt);
-		} else if (RIST_LIKELY(!f->rtc_timing_mode))
+		} else if (RIST_LIKELY(!f->rtc_timing_mode && !out_of_order))
 		{
 			//packet received in order, use it's offset as a sample in calculation to
 			//correct clock drift
@@ -1053,7 +1055,6 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 					f->stats_instant.recovered++;
 				switch(mb->nack_count) {
 					case 0:
-						f->stats_instant.reordered++;
 						break;
 					case 1:
 						f->stats_instant.recovered_0nack++;
