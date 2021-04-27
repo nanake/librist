@@ -159,7 +159,7 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 
 }
 
-size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port)
+size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool retry)
 {
 	struct rist_common_ctx *ctx = get_cctx(p);
 	struct rist_key *k = &p->key_tx;
@@ -227,7 +227,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 				SET_BIT(hdr->rtp.flags, 4);
 			hdr->rtp.ssrc = htobe32(p->adv_flow_id);
 			hdr->rtp.seq = htobe16(seq_rtp);
-			if ((seq_rtp + 1) != ctx->seq_rtp)
+			if (retry)
 			{
 				// This is a retransmission
 				//rist_log_priv(&ctx->common, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"/%"PRIu32"\n", seq, seq_rtp, ctx->seq);
@@ -326,7 +326,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL) && !p->receiver_mode)
 		source_time = timestampNTP_u64();
 
-	size_t ret = rist_send_seq_rtcp(p, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port);
+	size_t ret = rist_send_seq_rtcp(p, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port, false);
 
 	if ((!p->compression && ret < payload_len) || ret <= 0)
 	{
@@ -1109,7 +1109,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		uint16_t src_port = buffer->src_port;
 		if (src_port == 0)
 			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port);
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port, true);
 		// update bandwidth value
 		rist_calculate_bitrate(ret, retry_bw);
 	}
