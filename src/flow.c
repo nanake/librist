@@ -22,7 +22,7 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t 
 	m->seq = seq;
 	m->insertion_time = nack_time;
 
-	m->next_nack = nack_time + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
+	m->next_nack = now + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
 	m->peer = peer;
 
 	if (get_cctx(peer)->debug)
