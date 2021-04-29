@@ -305,8 +305,7 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		if (f->stats_report_time == f->recovery_buffer_ticks)
 			f->stats_report_time = p->recovery_buffer_ticks;
 		f->recovery_buffer_ticks = p->recovery_buffer_ticks;
-		// This only happens when the buffer is greater than 60 seconds
-		if (f->recovery_buffer_ticks > f->session_timeout)
+		if ((f->recovery_buffer_ticks *2ULL) > f->session_timeout)
 			f->session_timeout = 2ULL * f->recovery_buffer_ticks;
 	}
 	// Set the flow timeout as the buffer size for the flow
