@@ -26,7 +26,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	{
 		return;
 	}
-
+	pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 	struct rist_stats *stats_container = malloc(sizeof(struct rist_stats));
 	stats_container->stats_type = RIST_STATS_SENDER_PEER;
 	stats_container->version = RIST_STATS_VERSION;
@@ -104,13 +104,14 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 		rist_stats_free(stats_container);
 
 	memset(&peer->stats_sender_instant, 0, sizeof(peer->stats_sender_instant));
+	pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 }
 
 void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow)
 {
 	if (!flow)
 		return;
-
+	pthread_mutex_lock(&ctx->common.stats_lock);
 	//Log errors that used to be packet
 	if (flow->stats_instant.dropped_full)
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Dropped %u packets due to buffers being full\n", flow->stats_instant.dropped_full );
@@ -272,5 +273,5 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	memset(&flow->stats_instant, 0, sizeof(flow->stats_instant));
 	flow->stats_instant.min_ips = 0xFFFFFFFFFFFFFFFFULL;
-
+	pthread_mutex_unlock(&ctx->common.stats_lock);
 }

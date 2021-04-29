@@ -278,6 +278,7 @@ struct rist_common_ctx {
 
 	/* Flows */
 	struct rist_flow *FLOWS;
+	pthread_mutex_t flows_lock;
 
 	/* evsocket */
 	struct evsocket_ctx *evctx;
@@ -329,6 +330,7 @@ struct rist_common_ctx {
 
 	int (*stats_callback)(void *arg, const struct rist_stats *stats_container);
 	void *stats_callback_argument;
+	pthread_mutex_t stats_lock;
 
 	pthread_rwlock_t oob_queue_lock;
 	struct rist_buffer *oob_queue[RIST_OOB_QUEUE_BUFFERS]; /* oob queue */

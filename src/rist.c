@@ -114,7 +114,8 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 	// Select the flow with highest queue count
 	ssize_t num_loop = 0;
 	struct rist_flow *f = NULL;
-	struct rist_flow *f_loop = ctx->common.FLOWS;
+	pthread_mutex_lock(&ctx->common.flows_lock);
+	struct rist_flow *f_loop = ctx->common.FLOWS;	
 	while (f_loop) {
 		struct rist_flow *nextflow = f_loop->next;
 		unsigned long reader_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_read_index, memory_order_relaxed);
@@ -128,6 +129,7 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 		}
 		f_loop = nextflow;
 	}
+	pthread_mutex_unlock(&ctx->common.flows_lock);
 	return f;
 }
 
@@ -656,6 +658,7 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 		return -1;
 	}
 	struct rist_common_ctx *cctx = rist_struct_get_common(ctx);
+	pthread_mutex_lock(&cctx->stats_lock);
 	if (RIST_UNLIKELY(!cctx))
 		return -1;
 
@@ -674,7 +677,7 @@ int rist_stats_callback_set(struct rist_ctx *ctx, int statsinterval, int (*stats
 			}
 		}
 	}
-
+	pthread_mutex_unlock(&cctx->stats_lock);
 	return 0;
 }
 
@@ -926,8 +929,9 @@ static int rist_sender_start(struct rist_sender *ctx)
 		ctx->weight_counter = ctx->total_weight;
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Total weight: %lu\n", ctx->total_weight);
 	}
-
+	pthread_mutex_lock(&ctx->mutex);
 	ctx->common.startup_complete = true;
+	pthread_mutex_unlock(&ctx->mutex);
 	return 0;
 }
 

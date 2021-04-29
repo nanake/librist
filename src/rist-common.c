@@ -541,7 +541,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		atomic_store_explicit(&f->receiver_queue_output_idx, idx_initial, memory_order_release);
 
 		/* reset stats */
+		pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 		memset(&f->stats_instant, 0, sizeof(f->stats_instant));
+		pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 		f->receiver_queue_has_items = true;
 		pthread_mutex_unlock(&f->mutex);
 		return 0; // not a dupe
@@ -598,7 +600,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		if (now > (packet_time + (f->recovery_buffer_ticks *1.1)))
 		{
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
+			pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 			f->stats_instant.dropped_late++;
+			pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 			return -1;
 		}
 		if (!retry) {
@@ -615,7 +619,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Buffer is full, dropping packet %"PRIu32"/%zu\n", seq, idx);
 		if (packet_time > f->last_packet_ts)
 			f->last_seq_found  = seq;
+		pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 		f->stats_instant.dropped_full++;
+		pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 		//Something is wrong, and we should reset
 		if (f->stats_instant.dropped_full > 100) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Buffer is full, resetting buffer\n");
@@ -628,7 +634,9 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		struct rist_buffer *b = f->receiver_queue[idx];
 		if (b->source_time == source_time) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Dupe! %"PRIu32"/%zu\n", seq, idx);
+			pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 			f->stats_instant.dupe++;
+			pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 			return 1;
 		}
 		else {
@@ -645,10 +653,11 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const 
 		// only error is OOM, safe to exit here ...
 		return 0;
 	}
+	pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 	if (out_of_order)
 		f->stats_instant.reordered++;
 	f->stats_instant.received++;
-
+	pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 	// Check for missing data and queue retries
 	if (!retry) {
 		/* check for missing packets */
@@ -713,7 +722,9 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			}
 			if (b->nack_count == 0) {
 				f->missing_counter++;
+				pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 				f->stats_instant.missing++;
+				pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 			}
 
 			// TODO: make this 10% overhead configurable?
@@ -734,7 +745,9 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			// update peer information
 			f->nacks.array[f->nacks.counter] = b->seq;
 			f->nacks.counter++;
+			pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 			f->stats_instant.retries++;
+			pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 		}
 	}
 
@@ -845,7 +858,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					break;
 				}
 			}
+			pthread_mutex_lock(&ctx->common.stats_lock);
 			f->stats_instant.lost += holes;
+			pthread_mutex_unlock(&ctx->common.stats_lock);
 			output_idx = counter;
 			rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Empty buffer element, flushing %"PRIu32" hole(s), now at index %zu, size is %zu\n",
@@ -890,7 +905,9 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Discontinuity, expected %" PRIu32 " got %" PRIu32 "\n",
 							f->last_seq_output + 1, b->seq);
+					pthread_mutex_lock(&ctx->common.stats_lock);
 					f->stats_instant.lost++;
+					pthread_mutex_unlock(&ctx->common.stats_lock);
 					holes = 1;
 				}
 				if (b->type == RIST_PAYLOAD_TYPE_DATA_RAW) {
@@ -936,11 +953,13 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							}
 						}
 					}
+					pthread_mutex_lock(&ctx->common.stats_lock);
 					if (f->stats_instant.buffer_duration_count < 2048)
 					{
 						f->stats_instant.buffer_duration[f->stats_instant.buffer_duration_count] = (uint32_t)(delay_rtc / RIST_CLOCK);
 						f->stats_instant.buffer_duration_count++;
 					}
+					pthread_mutex_unlock(&ctx->common.stats_lock);
 					if (pthread_cond_signal(&(ctx->condition)))
 						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
 				}
@@ -1049,6 +1068,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 			goto nack_loop_continue;
 		} else if (f->receiver_queue[idx]) {
 			if (f->receiver_queue[idx]->seq == mb->seq) {
+				pthread_mutex_lock(&ctx->common.stats_lock);
 				// We filled in the hole already ... packet has been recovered
 				remove_from_queue_reason = 3;
 				if (mb->nack_count > 0)
@@ -1073,6 +1093,7 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 						break;
 				}
 				f->stats_instant.recovered_sum += mb->nack_count;
+				pthread_mutex_unlock(&ctx->common.stats_lock);
 			}
 			else {
 				// Message with wrong seq!!!
@@ -1080,7 +1101,9 @@ void receiver_nack_output(struct rist_receiver *ctx, struct rist_flow *f)
 						"Retry queue has the wrong seq %"PRIu32" != %"PRIu32", removing ...\n",
 						f->receiver_queue[idx]->seq, mb->seq);
 				remove_from_queue_reason = 4;
+				pthread_mutex_lock(&ctx->common.stats_lock);
 				f->stats_instant.missing--;
+				pthread_mutex_unlock(&ctx->common.stats_lock);
 				goto nack_loop_continue;
 			}
 		} else if (peer->buffer_bloat_active) {
@@ -1825,9 +1848,11 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	// Wake up output thread when data comes in
 	if (pthread_cond_signal(&(peer->flow->condition)))
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
-
 	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
+		pthread_mutex_lock(&ctx->common.stats_lock);
 		rist_calculate_flow_bitrate(peer->flow, payload->size, &peer->flow->bw); // update bitrate only if not a dupe
+		pthread_mutex_unlock(&ctx->common.stats_lock);
+
 	}
 }
 
@@ -3042,13 +3067,13 @@ protocol_bypass:
 			// Conditional 5ms sleep that is woken by data coming in
 			pthread_mutex_lock(&(ctx->mutex));
 			int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
+			if (RIST_UNLIKELY(!ctx->common.startup_complete)) {
+				pthread_mutex_unlock(&(ctx->mutex));
+				continue;
+			}
 			pthread_mutex_unlock(&(ctx->mutex));
 			if (ret && ret != ETIMEDOUT)
 				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d in sender protocol loop, loop time was %d us\n", ret, (timestampNTP_u64() - now));
-
-			if (RIST_UNLIKELY(!ctx->common.startup_complete)) {
-				continue;
-			}
 
 			now  = timestampNTP_u64();
 
@@ -3086,7 +3111,9 @@ protocol_bypass:
 			// keepalive timer
 			sender_peer_events(ctx, now);
 
+
 			// Send data and process nacks
+			pthread_mutex_lock(&ctx->queue_lock);
 			if (ctx->sender_queue_bytesize > 0) {
 				sender_send_data(ctx, max_dataperloop);
 				// Group nacks and send them all at rist_max_jitter intervals
@@ -3097,6 +3124,7 @@ protocol_bypass:
 				/* perform queue cleanup */
 				rist_clean_sender_enqueue(ctx);
 			}
+			pthread_mutex_unlock(&ctx->queue_lock);
 			// Send oob data
 			if (ctx->common.oob_queue_bytesize > 0)
 				rist_oob_dequeue(&ctx->common, max_oobperloop);
@@ -3145,6 +3173,14 @@ protocol_bypass:
 		}
 		if (pthread_mutex_init(&ctx->rist_free_buffer_mutex, NULL) != 0) {
 			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->rist_free_buffer_mutex\n");
+			return -1;
+		}
+		if (pthread_mutex_init(&ctx->flows_lock, NULL) != 0) {
+			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->flows_lock\n");
+			return -1;
+		}
+		if (pthread_mutex_init(&ctx->stats_lock, NULL) != 0) {
+			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->stats_lock\n");
 			return -1;
 		}
 		return 0;

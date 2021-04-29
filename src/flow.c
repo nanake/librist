@@ -227,7 +227,9 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	f->flow_timeout = 250 * RIST_CLOCK;
 
 	/* Append flow to list */
+	pthread_mutex_lock(&ctx->common.flows_lock);
 	rist_flow_append(&ctx->common.FLOWS, f);
+	pthread_mutex_unlock(&ctx->common.flows_lock);
 	f->logging_settings = ctx->common.logging_settings;
 
 	return f;
