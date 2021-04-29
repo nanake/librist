@@ -79,22 +79,13 @@ void rist_flush_missing_flow_queue(struct rist_flow *flow)
 void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering data output thread termination\n");
-	f->shutdown = 1;
 	pthread_mutex_lock(&f->mutex);
+	f->shutdown = 1;
 	bool running = f->receiver_thread_running;
 	pthread_mutex_unlock(&f->mutex);
 	if (running)
 	{
-		uint64_t start_time = timestampNTP_u64();
-		while (f->shutdown != 2) {
-			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for data output thread to exit\n");
-			usleep(5000);
-			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
-			{
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Data out exit loop took more than 10 seconds to exit. Something is wrong!\n");
-				assert(0);
-			}
-		}
+		pthread_join(f->receiver_thread, NULL);
 	}
 	struct rist_peer *p = NULL;
 	for (size_t i = 0; i <f->peer_lst_len; i++)

@@ -29,6 +29,7 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout,arg);
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer);
 static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
 										struct rist_receiver *receiver_ctx);
+void remove_peer_from_flow(struct rist_peer *peer);
 
 int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_config)
 {
@@ -1668,20 +1669,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 	if (peer->flow && (flow_id != peer->flow->flow_id)) {
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Updating peer's flowid %"PRIu32"->%"PRIu32" (%zu)\n", peer->flow->flow_id, flow_id, peer->flow->peer_lst_len);
 		if (peer->flow->peer_lst_len > 1) {
-			// Remove it from the old flow list but leave the flow intact
-			uint32_t i = 0;
-			for (size_t j = 0; j < peer->flow->peer_lst_len; j++) {
-				if (peer->flow->peer_lst[j] == peer) {
-					rist_log_priv(&ctx->common, RIST_LOG_INFO, "Removing peer from old flow (%"PRIu32")\n",
-							peer->flow->flow_id);
-				} else {
-					i++;
-				}
-				peer->flow->peer_lst[i] = peer->flow->peer_lst[j];
-			}
-			peer->flow->peer_lst = realloc(peer->flow->peer_lst,
-					(peer->flow->peer_lst_len - 1) * sizeof(*peer->flow->peer_lst));
-			peer->flow->peer_lst_len--;
+			remove_peer_from_flow(peer);
 		}
 		else {
 			// Delete the flow and all of its resources
@@ -1777,9 +1765,6 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 				}
 				peer->flow->receiver_thread_running = true;
 				pthread_mutex_unlock(&peer->flow->mutex);
-				if (pthread_detach(peer->flow->receiver_thread) != 0) {
-					rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Failed to detach from flow thread\n");
-				}
 			}
 			rist_peer_authenticate(peer);
 			peer->flow->authenticated = true;
@@ -2965,7 +2950,7 @@ protocol_bypass:
 		int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
 		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
 
-		while (!flow->shutdown) {
+		while (true) {
 			pthread_mutex_lock(&flow->mutex);
 			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
@@ -2973,15 +2958,20 @@ protocol_bypass:
 			pthread_mutex_unlock(&(flow->mutex));
 			pthread_mutex_lock(&(flow->mutex));
 			int ret = pthread_cond_timedwait_ms(&(flow->condition), &(flow->mutex), max_output_jitter_ms);
+			if (flow->shutdown)
+			{
+				pthread_mutex_unlock(&(flow->mutex));
+				break;
+			}
 			pthread_mutex_unlock(&(flow->mutex));
 			if (ret && ret != ETIMEDOUT)
 				rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
 			//rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "LOOP TIME is %"PRIu64" us\n", (timestampNTP_u64() - now) * 1000 / RIST_CLOCK);
 			//now = timestampNTP_u64();
 		}
-		flow->shutdown = 2;
 
  		pthread_mutex_lock(&flow->mutex);
+		flow->shutdown = 2;
 		flow->receiver_thread_running = false;
 		pthread_mutex_unlock(&flow->mutex);
 		return 0;
@@ -3213,6 +3203,34 @@ static inline void peer_remove_linked_list(struct rist_peer *peer) {
 	return;
 }
 
+
+void remove_peer_from_flow(struct rist_peer *peer)
+{
+	bool found = false;
+	for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
+	{
+		if (peer->flow->peer_lst[i] == peer)
+		{
+			peer->flow->peer_lst[i] = peer->flow->peer_lst[(peer->flow->peer_lst_len -1)];
+			found = true;
+			break;
+		}
+	}
+	if (found)
+	{
+		if (peer->flow->peer_lst_len > 1)
+		{
+			peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
+			peer->flow->peer_lst_len--;
+		} else
+		{
+			free(peer->flow->peer_lst);
+			peer->flow->peer_lst_len = 0;
+			peer->flow->peer_lst = NULL;
+		}
+	}
+}
+
 int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct rist_peer **next)
 {
 	if (peer == NULL) {
@@ -3248,30 +3266,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	peer_remove_linked_list(peer);
 
 	if (peer->parent && peer->flow && peer->flow->peer_lst_len > 0 && peer->flow->peer_lst != NULL) {
-		bool found = false;
-		for (size_t i = 0; i < peer->flow->peer_lst_len; i++)
-		{
-			if (peer->flow->peer_lst[i] == peer)
-			{
-				peer->flow->peer_lst[i] = peer->flow->peer_lst[(peer->flow->peer_lst_len -1)];
-				found = true;
-				break;
-			}
-		}
-		if (found)
-		{
-			if (peer->flow->peer_lst_len > 1)
-			{
-				peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
-				peer->flow->peer_lst_len--;
-			} else
-			{
-				free(peer->flow->peer_lst);
-				peer->flow->peer_lst_len = 0;
-				peer->flow->peer_lst = NULL;
-			}
-
-		}
+		remove_peer_from_flow(peer);
 	}
 
 	if (peer->sender_ctx && peer->sender_ctx->peer_lst_len > 0) {

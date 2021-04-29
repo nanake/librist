@@ -40,6 +40,7 @@
 #define DATA_READ_MODE_POLL 1
 #define DATA_READ_MODE_API 2
 
+pthread_mutex_t signal_lock;
 static int signalReceived = 0;
 static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALIZER;
 enum rist_profile profile = RIST_PROFILE_MAIN;
@@ -187,8 +188,9 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 }
 
 static void intHandler(int signal) {
-	rist_log(&logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+	pthread_mutex_lock(&signal_lock);
 	signalReceived = signal;
+	pthread_mutex_unlock(&signal_lock);
 }
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
@@ -284,6 +286,11 @@ int main(int argc, char *argv[])
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 	char *remote_log_address = NULL;
+	if (pthread_mutex_init(&signal_lock, NULL) != 0)
+	{
+		fprintf(stderr, "Could not initialize signal lock\n");
+		exit(1);
+	}
 #ifndef _WIN32
 	/* Receiver pipe handle */
 	int receiver_pipe[2];
@@ -298,18 +305,19 @@ int main(int argc, char *argv[])
 		callback_object.mpeg[i] = 0;
 		callback_object.udp_config[i] = NULL;
 	}
-
+	if (data_read_mode != DATA_READ_MODE_CALLBACK)
+	{
 #ifdef _WIN32
 #define STDERR_FILENO 2
-    signal(SIGINT, intHandler);
-    signal(SIGTERM, intHandler);
-    signal(SIGABRT, intHandler);
+		signal(SIGINT, intHandler);
+		signal(SIGTERM, intHandler);
+		signal(SIGABRT, intHandler);
 #else
-	struct sigaction act = { {0} };
-	act.sa_handler = intHandler;
-	sigaction(SIGINT, &act, NULL);
+		struct sigaction act = { {0} };
+		act.sa_handler = intHandler;
+		sigaction(SIGINT, &act, NULL);
 #endif
-
+	}
 	// Default log settings
     struct rist_logging_settings *log_ptr = &logging_settings;
     if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, NULL,
@@ -530,9 +538,6 @@ next:
 		exit(1);
 	}
 
-	// callback is best unless you are using the timestamps passed with the buffer
-	data_read_mode = DATA_READ_MODE_CALLBACK;
-
 	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
 		{
@@ -588,7 +593,7 @@ next:
 		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 #endif
 		// Master loop
-		while (!signalReceived)
+		while (true)
 		{
 			const struct rist_data_block *b = NULL;
 			int queue_size = rist_receiver_data_read(ctx, &b, 5);
@@ -600,6 +605,13 @@ next:
 				}
 				if (b && b->payload) cb_recv(&callback_object, b);
 			}
+			pthread_mutex_lock(&signal_lock);
+			if (signalReceived)
+			{
+				rist_log(&logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+				break;
+			}
+			pthread_mutex_unlock(&signal_lock);
 		}
 	}
 #ifndef _WIN32
@@ -609,7 +621,7 @@ next:
 		struct timeval timeout;
 		timeout.tv_sec = 0;
 		timeout.tv_usec = 5000;
-		while (!signalReceived) {
+		while (true) {
 			FD_ZERO(&readfds);
 			FD_SET(receiver_pipe[ReadEnd], &readfds);
 			int ret = select(FD_SETSIZE, &readfds, NULL, NULL, &timeout);
@@ -645,6 +657,13 @@ next:
 				else
 					break;
 			}
+			pthread_mutex_lock(&signal_lock);
+			if (signalReceived)
+			{
+				rist_log(&logging_settings, RIST_LOG_INFO, "Signal %d received\n", signal);
+				break;
+			}
+			pthread_mutex_unlock(&signal_lock);
 		}
 	}
 #endif
