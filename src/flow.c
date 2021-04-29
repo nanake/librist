@@ -153,7 +153,7 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 			free_data_block(&f->dataout_fifo_queue[i]);
 		}
 	}
-
+	free(f->dataout_fifo_queue);
 	// Delete flow
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Deleting flow\n");
 	struct rist_flow **prev_flow = &ctx->common.FLOWS;
