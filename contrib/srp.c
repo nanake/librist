@@ -172,7 +172,14 @@ static NGConstant * new_ng( SRP_NGType ng_type, const char * n_hex, const char *
     mbedtls_mpi_init(ng->g);
 
     if( !ng || !ng->N || !ng->g )
-       return 0;
+    {
+        if (ng->N)
+            mbedtls_mpi_free(ng->N);
+        if (ng->g)
+            mbedtls_mpi_free(ng->g);
+        free(ng);
+        return 0;        
+    }
 
     if ( ng_type != SRP_NG_CUSTOM )
     {
@@ -418,10 +425,10 @@ static void hash_num( SRP_HashAlgorithm alg, const BIGNUM * n, unsigned char * d
 static void calculate_M( SRP_HashAlgorithm alg, NGConstant *ng, unsigned char * dest, const char * I, const BIGNUM * s,
                          const BIGNUM * A, const BIGNUM * B, const unsigned char * K )
 {
-    unsigned char H_N[ SHA512_DIGEST_LENGTH ];
-    unsigned char H_g[ SHA512_DIGEST_LENGTH ];
-    unsigned char H_I[ SHA512_DIGEST_LENGTH ];
-    unsigned char H_xor[ SHA512_DIGEST_LENGTH ];
+    unsigned char H_N[ SHA512_DIGEST_LENGTH ] = { '\0' };
+    unsigned char H_g[ SHA512_DIGEST_LENGTH ] = { '\0' };
+    unsigned char H_I[ SHA512_DIGEST_LENGTH ] = { '\0' };
+    unsigned char H_xor[ SHA512_DIGEST_LENGTH ] = { '\0' };
     HashCTX       ctx;
     int           i = 0;
     int           hash_len = hash_length(alg);

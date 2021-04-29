@@ -249,7 +249,7 @@ static void rebuild_poll(struct evsocket_ctx *ctx)
 
 	if (ctx->n_events > 0) {
 		ctx->pfd = malloc(sizeof(struct pollfd) * ctx->n_events);
-		ctx->_array = malloc(sizeof(struct evsocket_event) * ctx->n_events);
+		ctx->_array = calloc(sizeof(struct evsocket_event), ctx->n_events);
 	}
 
 	if ((!ctx->pfd) || (!ctx->_array)) {
@@ -298,7 +298,7 @@ static void serve_event(struct evsocket_ctx *ctx, int n)
 		ctx->last_served = n;
 		if ((ctx->pfd[n].revents & (POLLHUP | POLLERR)) && e->err_callback)
 			e->err_callback(ctx, e->fd, ctx->pfd[n].revents, e->arg);
-		else {
+		else if (e->callback) {
 			e->callback(ctx, e->fd, ctx->pfd[n].revents, e->arg);
 		}
 	}

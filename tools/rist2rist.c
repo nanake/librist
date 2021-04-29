@@ -300,24 +300,34 @@ int main (int argc, char **argv) {
 	while ((c = getopt_long(argc, argv, "r:i:o:s:e:N:v:S:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
+			if (inputurl != NULL)
+				goto usage;
 			inputurl = strdup(optarg); 
 			break;
 		case 'o':
+			if (outputurl != NULL)
+				goto usage;
 			outputurl = strdup(optarg); 
 			break;
 		case 's':
+			if (client_args.shared_secret != NULL)
+				goto usage;
 			client_args.shared_secret = strdup(optarg); 
 			break;
 		case 'e':
 			client_args.encryption_type =atoi(optarg);
 			break;
 		case 'N':
+			if (cname != NULL)
+				goto usage;
 			cname = strdup(optarg); 
 			break;
 		case 'v':
 			loglevel = (enum rist_log_level) atoi(optarg);
 			break;
 		case 'r':
+			if (remote_log_address != NULL)
+				goto usage;
 			remote_log_address = strdup(optarg);
 		break;
 #ifdef USE_MBEDTLS
@@ -339,6 +349,7 @@ int main (int argc, char **argv) {
 		case 'h':
 			//
 		default:
+usage:
 			usage(argv[0]);
 			break;
 		}
