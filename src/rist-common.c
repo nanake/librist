@@ -1284,7 +1284,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 
 	/* Initialize socket */
 	rist_create_socket(p);
-	if (p->sd <= 0) {
+	if (p->sd < 0) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create socket\n");
 		free(p);
 		return NULL;
@@ -3444,7 +3444,7 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 	/* Initialize socket */
 	rist_create_socket(newpeer);
-	if (newpeer->sd <= 0) {
+	if (newpeer->sd < 0) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create socket\n");
 		free(newpeer);
 		return NULL;
