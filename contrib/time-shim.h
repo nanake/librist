@@ -8,7 +8,7 @@
 #ifndef __TIME_SHIM_H
 #define __TIME_SHIM_H
 
-# include "../../config.h"
+# include "config.h"
 
 #if defined(_WIN32)
 #define usleep(a)	Sleep((a)/1000)

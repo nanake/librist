@@ -28,7 +28,7 @@ deps = []
 platform_files = []
 contrib_libs = []
 inc = []
-inc += include_directories('src', 'include/librist', 'include', 'contrib')
+inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
 
 #builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
