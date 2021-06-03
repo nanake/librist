@@ -87,7 +87,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 
 	stats_container->stats_json = stats_string;
 	stats_container->json_size = sizeof(stats_string);
-
+	stats_container->stats.sender_peer.cname[0] = '\0';
 	strncpy(stats_container->stats.sender_peer.cname, peer->receiver_name, RIST_MAX_STRING_SHORT);
 	stats_container->stats.sender_peer.peer_id = peer->adv_peer_id;
 	stats_container->stats.sender_peer.bandwidth = bitrate;
@@ -248,10 +248,12 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 
 	stats_container->stats.receiver_flow.peer_count = (uint32_t)flow->peer_lst_len;
 	// TODO: populate stats_receiver_flow->cname
+	stats_container->stats.receiver_flow.cname[0] = '\0';
 	stats_container->stats.receiver_flow.flow_id = flow->flow_id;
 	stats_container->stats.receiver_flow.status = flow->dead;
 	stats_container->stats.receiver_flow.bandwidth = flow->bw.bitrate;
 	//TODO: populate retry_bandwidth;
+	stats_container->stats.receiver_flow.retry_bandwidth = 0;
 	stats_container->stats.receiver_flow.sent = flow->peer_lst_len ? flow_sent_instant / flow->peer_lst_len : 0;
 	stats_container->stats.receiver_flow.received = flow->stats_instant.received;
 	stats_container->stats.receiver_flow.missing = flow->stats_instant.missing;
