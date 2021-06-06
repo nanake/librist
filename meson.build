@@ -70,7 +70,7 @@ if host_machine.system() == 'windows'
 			cdata.set('HAVE_CLOCK_GETTIME', 1)
 		endif
 		if cc.has_header('pthread.h')
-			threads = cc.find_library('winpthread', static: true)
+			threads = dependency('threads')
 			deps += threads
 			add_project_arguments(['-DHAVE_PTHREAD_H'], language: 'c')
 			cdata.set('HAVE_PTHREADS', 1)
