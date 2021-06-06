@@ -632,7 +632,7 @@ int rist_peer_config_free(struct rist_peer_config **peer_config)
 	return 0;
 }
 
-int rist_logging_settings_free(const struct rist_logging_settings **logging_settings)
+int rist_logging_settings_free(struct rist_logging_settings **logging_settings)
 {
 	if (*logging_settings) {
 		free((void *)*logging_settings);
