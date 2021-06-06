@@ -86,7 +86,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON_Delete(stats);
 
 	stats_container->stats_json = stats_string;
-	stats_container->json_size = sizeof(stats_string);
+	stats_container->json_size = (uint32_t)strlen(stats_string);
 	stats_container->stats.sender_peer.cname[0] = '\0';
 	strncpy(stats_container->stats.sender_peer.cname, peer->receiver_name, RIST_MAX_STRING_SHORT);
 	stats_container->stats.sender_peer.peer_id = peer->adv_peer_id;
@@ -244,7 +244,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_Delete(stats);
 
 	stats_container->stats_json = stats_string;
-	stats_container->json_size = sizeof(stats_string);
+	stats_container->json_size = (uint32_t)strlen(stats_string);
 
 	stats_container->stats.receiver_flow.peer_count = (uint32_t)flow->peer_lst_len;
 	// TODO: populate stats_receiver_flow->cname
