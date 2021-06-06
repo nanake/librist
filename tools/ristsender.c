@@ -47,14 +47,14 @@ struct rist_callback_object {
 	struct evsocket_ctx *evctx;
 	struct rist_ctx *receiver_ctx;
 	struct rist_ctx *sender_ctx;
-	const struct rist_udp_config *udp_config;
+	struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE];
 };
 
 struct receive_thread_object {
 	int sd;
 	struct rist_ctx *ctx[MAX_OUTPUT_COUNT];
-	const struct rist_udp_config *udp_config;
+	struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE];
 };
 
@@ -305,7 +305,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 	}
 
 	// Rely on the library to parse the url
-	const struct rist_peer_config *peer_config_link = NULL;
+	struct rist_peer_config *peer_config_link = NULL;
 	if (rist_parse_address(setup->token, (void *)&peer_config_link))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender: %s\n", setup->token);
@@ -550,7 +550,7 @@ int main(int argc, char *argv[])
 			break;
 
 		// First parse extra url and parameters
-		const struct rist_udp_config *udp_config = NULL;
+		struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address(inputtoken, &udp_config)) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;

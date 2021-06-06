@@ -194,7 +194,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	}
 
 	// URL overrides (also cleans up the URL)
-	const struct rist_peer_config *peer_config = &app_peer_config;
+	struct rist_peer_config *peer_config = &app_peer_config;
 	if (rist_parse_address(setup->outputurl, &peer_config))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
@@ -414,7 +414,7 @@ usage:
 	}
 
 	// URL overrides (also cleans up the URL)
-	const struct rist_peer_config *peer_config = &app_peer_config;
+	struct rist_peer_config *peer_config = &app_peer_config;
 	if (rist_parse_address(inputurl, &peer_config))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver \n");

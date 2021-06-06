@@ -96,7 +96,7 @@ static void usage(char *cmd)
 
 struct rist_callback_object {
 	int mpeg[MAX_OUTPUT_COUNT];
-	const struct rist_udp_config *udp_config[MAX_OUTPUT_COUNT];
+	struct rist_udp_config *udp_config[MAX_OUTPUT_COUNT];
 	uint16_t i_seqnum[MAX_OUTPUT_COUNT];
 };
 
@@ -143,7 +143,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		if (!callback_object->udp_config[i])
 			continue;
-		const struct rist_udp_config *udp_config = callback_object->udp_config[i];
+		struct rist_udp_config *udp_config = callback_object->udp_config[i];
 		// The stream-id on the udp url gets translated into the virtual destination port of the GRE tunnel
 		uint16_t virt_dst_port = udp_config->stream_id;
 		// look for the correct mapping of destination port to output
@@ -432,15 +432,15 @@ int main(int argc, char *argv[])
 			break;
 
 		// Rely on the library to parse the url
-		const struct rist_peer_config *peer_config = NULL;
-		if (rist_parse_address(inputtoken, (void *)&peer_config))
+		struct rist_peer_config *peer_config = NULL;
+		if (rist_parse_address(inputtoken, &peer_config))
 		{
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
 		}
 
 		/* Process overrides */
-		struct rist_peer_config *overrides_peer_config = (void *)peer_config;
+		struct rist_peer_config *overrides_peer_config = peer_config;
 		if (shared_secret && peer_config->secret[0] == 0) {
 			strncpy(overrides_peer_config->secret, shared_secret, RIST_MAX_STRING_SHORT -1);
 			if (encryption_type)
@@ -503,7 +503,7 @@ int main(int argc, char *argv[])
 		// We are using the rist_parse_address function to create a config object that does not really
 		// belong to the udp output. We do this only to avoid writing another parser for the two url
 		// parameters available to the udp input/output url
-		const struct rist_udp_config *udp_config = NULL;
+		struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address(outputtoken, &udp_config)) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
