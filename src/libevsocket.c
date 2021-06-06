@@ -134,7 +134,7 @@ struct evsocket_ctx {
 	struct evsocket_ctx *next;
 };
 
-static pthread_mutex_t ctx_list_mutex;
+static pthread_mutex_t ctx_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 static struct evsocket_ctx *CTX_LIST = NULL;
 
 static void ctx_add(struct evsocket_ctx *c)
@@ -147,23 +147,23 @@ static void ctx_add(struct evsocket_ctx *c)
 
 static void ctx_del(struct evsocket_ctx *delme)
 {
+	pthread_mutex_lock(&ctx_list_mutex);
 	struct evsocket_ctx *p = NULL, *c  = CTX_LIST;
 	while(c) {
 		if (c == delme) {
-			pthread_mutex_lock(&ctx_list_mutex);
 			if (p) {
 				p->next = c->next;
 			} else {
 				CTX_LIST = NULL;
 			}
-
-			pthread_mutex_unlock(&ctx_list_mutex);
-			return;
+			goto out;
 		}
 
 		p = c;
 		c = c->next;
 	}
+out:
+    pthread_mutex_unlock(&ctx_list_mutex);
 }
 
 struct evsocket_event *evsocket_addevent(struct evsocket_ctx *ctx, int fd, short events,
