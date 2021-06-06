@@ -134,7 +134,7 @@ static void connection_status_callback(void *arg, struct rist_peer *peer, enum r
 				peer, peer_connection_status, peer_connected_count);
 }
 
-static int cb_recv(void *arg, const struct rist_data_block *b)
+static int cb_recv(void *arg, struct rist_data_block *b)
 {
 	struct rist_callback_object *callback_object = (void *) arg;
 
@@ -183,7 +183,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
 		return -1;
 	}
-	rist_receiver_data_block_free((struct rist_data_block **const) &b);
+	rist_receiver_data_block_free(&b);
 	return 0;
 }
 
@@ -595,7 +595,7 @@ next:
 		// Master loop
 		while (true)
 		{
-			const struct rist_data_block *b = NULL;
+			struct rist_data_block *b = NULL;
 			int queue_size = rist_receiver_data_read(ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50) {
@@ -642,7 +642,7 @@ next:
 				}
 			}
 			/* Consume data from library */
-			const struct rist_data_block *b = NULL;
+			struct rist_data_block *b = NULL;
 			int queue_size = 0;
 			for (;;) {
 				queue_size = rist_receiver_data_read(ctx, &b, 0);

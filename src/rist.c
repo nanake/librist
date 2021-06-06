@@ -133,7 +133,7 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 	return f;
 }
 
-int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_block **data_buffer, int timeout)
+int rist_receiver_data_read(struct rist_ctx *rist_ctx, struct rist_data_block **data_buffer, int timeout)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
@@ -148,7 +148,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, const struct rist_data_bl
 
 	struct rist_receiver *ctx = rist_ctx->receiver_ctx;
 
-	const struct rist_data_block *data_block = NULL;
+	struct rist_data_block *data_block = NULL;
 	/* We could enter the lock now, to read the counter. However performance penalties apply.
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
@@ -250,7 +250,7 @@ int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_
 }
 
 int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
-									int (*data_callback)(void *arg, const struct rist_data_block *data_block),
+									receiver_data_callback_t data_callback,
 									void *arg)
 {
 	if (RIST_UNLIKELY(!rist_ctx))

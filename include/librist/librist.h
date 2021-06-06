@@ -64,7 +64,7 @@ RIST_API int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t d
  * @param timeout How long to wait for queue data (ms), 0 for no wait
  * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
  */
-RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_data_block **data_block, int timeout);
+RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, struct rist_data_block **data_block, int timeout);
 
 
 /**
@@ -79,7 +79,7 @@ RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_dat
  * @param data_block reference counted data_block structure MUST be freed via rist_receiver_data_block_free
  * @return int, ignored.
  */
-typedef int (*receiver_data_callback_t)(void *arg, const struct rist_data_block *data_block);
+typedef int (*receiver_data_callback_t)(void *arg, struct rist_data_block *data_block);
 
 /**
  * @brief Enable data callback channel
@@ -104,7 +104,7 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
  * @param block double pointer to rist_data_block, containing pointer will be set to NULL
  */
 
-RIST_API void rist_receiver_data_block_free(struct rist_data_block **const block);
+RIST_API void rist_receiver_data_block_free(struct rist_data_block **block);
 
 /**
  * @brief Set data ready signalling fd

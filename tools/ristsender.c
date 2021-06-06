@@ -381,7 +381,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 		if (callback_object->receiver_ctx)
 		{
 			// RIST receiver
-			const struct rist_data_block *b;
+			struct rist_data_block *b = NULL;
 			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50)
@@ -392,7 +392,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 						// TODO: report error?
 						(void) w;
 					}
-					rist_receiver_data_block_free((struct rist_data_block **const)&b);
+					rist_receiver_data_block_free(&b);
 				}
 			}
 		}

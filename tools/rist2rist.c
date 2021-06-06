@@ -234,7 +234,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	return ctx;
 }
 
-static int cb_recv(void *arg, const struct rist_data_block *b)
+static int cb_recv(void *arg, struct rist_data_block *b)
 {
 	struct rist_cb_arg *cb_arg = (struct rist_cb_arg *) arg;
 	struct rist_data_block *block = (struct rist_data_block*)b;
@@ -248,7 +248,7 @@ static int cb_recv(void *arg, const struct rist_data_block *b)
 	//b->virt_dst_port = cb_arg->dst_port; 
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
 	int ret = rist_sender_data_write(cb_arg->sender_ctx, b);
-	rist_receiver_data_block_free((struct rist_data_block **const) &b);
+	rist_receiver_data_block_free(&b);
 	return ret;
 }
 
@@ -459,7 +459,7 @@ usage:
 		// Master loop
 		while (keep_running)
 		{
-			const struct rist_data_block *b;
+			struct rist_data_block *b;
 			int ret = rist_receiver_data_read(receiver_ctx, &b, 5);
 			if (ret && b && b->payload) cb_recv(&cb_arg, b);
 		}

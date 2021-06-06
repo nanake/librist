@@ -45,7 +45,7 @@ struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
 		return NULL;
 	}
     // Rely on the library to parse the url
-    const struct rist_peer_config *peer_config = NULL;
+    struct rist_peer_config *peer_config = NULL;
     if (rist_parse_address(url, (void *)&peer_config))
     {
 		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not parse peer options for receiver\n");
@@ -187,7 +187,7 @@ int main(int argc, char *argv[]) {
 		goto out;
 	}
 
-    const struct rist_data_block *b = NULL;
+    struct rist_data_block *b = NULL;
     char rcompare[1316];
     int receive_count = 1;
     bool got_first = false;
