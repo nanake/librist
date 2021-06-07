@@ -3595,6 +3595,14 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 
 	while (!ctx->common.shutdown) {
 		now  = timestampNTP_u64();
+		pthread_mutex_lock(&ctx->common.peerlist_lock);
+		if (ctx->common.PEERS == NULL) {
+			pthread_mutex_unlock(&ctx->common.peerlist_lock);
+			usleep(5000);
+			continue;
+		}
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
+
 		// Limit scope of `struct rist_flow *f` for clarity since it is used again later in this loop.
 		{
 			// stats and session timeout timer
@@ -3662,7 +3670,6 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		evsocket_loop_single(ctx->common.evctx, max_jitter_ms, 100);
 		pthread_mutex_unlock(&ctx->common.peerlist_lock);
-
 		// keepalive timer
 		receiver_peer_events(ctx, now);
 
