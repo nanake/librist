@@ -19,6 +19,7 @@
 #include <errno.h>
 #include <stdint.h>
 #include <assert.h>
+#include <fcntl.h>
 
 uint64_t timestampNTP_u64(void)
 {
@@ -545,7 +546,13 @@ void rist_create_socket(struct rist_peer *peer)
 	if (peer->cname[0] == 0)
 		rist_populate_cname(peer);
 	rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Peer cname is %s\n", peer->cname);
-
+#ifndef _WIN32
+	if (fcntl(peer->sd, F_SETFD, FD_CLOEXEC) == -1) {
+		udpsocket_close(peer->sd);
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not set close-on-exec\n");
+		peer->sd = -1;
+	}
+#endif
 }
 
 static inline void rist_rtcp_write_empty_rr(uint8_t *buf, int *offset, const uint32_t flow_id) {
