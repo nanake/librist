@@ -490,7 +490,7 @@ void rist_create_socket(struct rist_peer *peer)
 		}
 
 		peer->sd = udpsocket_open_bind(host, port, &peer->miface[0]);
-		if (peer->sd >= 0) {
+		if (peer->sd > -1) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not start in URL listening mode. %s\n", strerror(errno));
@@ -516,7 +516,7 @@ void rist_create_socket(struct rist_peer *peer)
 		// We use sendto ... so, no need to connect directly here
 		peer->sd = udpsocket_open(peer->address_family);
 		// TODO : set max hops
-		if (peer->sd >= 0)
+		if (peer->sd > -1)
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL connect mode (%d)\n", peer->sd);
 		else {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not start in URL connect mode. %s\n", strerror(errno));
