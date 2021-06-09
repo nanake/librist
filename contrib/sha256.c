@@ -50,7 +50,7 @@ static const uint32_t k[64] = {
 };
 
 /*********************** FUNCTION DEFINITIONS ***********************/
-void SHA256_Transform(SHA256_CTX *ctx, const uint8_t data[])
+void _librist_SHA256_Transform(SHA256_CTX *ctx, const uint8_t data[])
 {
 	uint32_t a, b, c, d, e, f, g, h, i, j, t1, t2, m[64];
 
@@ -91,7 +91,7 @@ void SHA256_Transform(SHA256_CTX *ctx, const uint8_t data[])
 	ctx->state[7] += h;
 }
 
-void SHA256_Init(SHA256_CTX *ctx)
+void _librist_SHA256_Init(SHA256_CTX *ctx)
 {
 	ctx->datalen = 0;
 	ctx->bitlen = 0;
@@ -105,7 +105,7 @@ void SHA256_Init(SHA256_CTX *ctx)
 	ctx->state[7] = 0x5be0cd19;
 }
 
-void SHA256_Update(SHA256_CTX *ctx, const uint8_t data[], size_t len)
+void _librist_SHA256_Update(SHA256_CTX *ctx, const uint8_t data[], size_t len)
 {
 	uint32_t i;
 
@@ -113,14 +113,14 @@ void SHA256_Update(SHA256_CTX *ctx, const uint8_t data[], size_t len)
 		ctx->data[ctx->datalen] = data[i];
 		ctx->datalen++;
 		if (ctx->datalen == 64) {
-			SHA256_Transform(ctx, ctx->data);
+			_librist_SHA256_Transform(ctx, ctx->data);
 			ctx->bitlen += 512;
 			ctx->datalen = 0;
 		}
 	}
 }
 
-void SHA256_Final(SHA256_CTX *ctx, uint8_t hash[])
+void _librist_SHA256_Final(SHA256_CTX *ctx, uint8_t hash[])
 {
 	uint32_t i;
 
@@ -136,7 +136,7 @@ void SHA256_Final(SHA256_CTX *ctx, uint8_t hash[])
 		ctx->data[i++] = 0x80;
 		while (i < 64)
 			ctx->data[i++] = 0x00;
-		SHA256_Transform(ctx, ctx->data);
+		_librist_SHA256_Transform(ctx, ctx->data);
 		memset(ctx->data, 0, 56);
 	}
 
@@ -150,7 +150,7 @@ void SHA256_Final(SHA256_CTX *ctx, uint8_t hash[])
 	ctx->data[58] = ctx->bitlen >> 40;
 	ctx->data[57] = ctx->bitlen >> 48;
 	ctx->data[56] = ctx->bitlen >> 56;
-	SHA256_Transform(ctx, ctx->data);
+	_librist_SHA256_Transform(ctx, ctx->data);
 
 	// Since this implementation uses little endian byte ordering and SHA uses big endian,
 	// reverse all the bytes when copying the final state to the output hash.

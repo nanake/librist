@@ -25,15 +25,15 @@ uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase)
 		return 0;
 	}
 
-	SHA256_Init(&ctx);
-	SHA256_Update(&ctx, (void *) &birthtime, sizeof(birthtime));
-	SHA256_Update(&ctx, (void *) &seq, sizeof(seq));
+	_librist_SHA256_Init(&ctx);
+	_librist_SHA256_Update(&ctx, (void *) &birthtime, sizeof(birthtime));
+	_librist_SHA256_Update(&ctx, (void *) &seq, sizeof(seq));
 
 	if ((phrase != NULL) && strlen(phrase)) {
-		SHA256_Update(&ctx, (const void *) phrase, strlen(phrase));
+		_librist_SHA256_Update(&ctx, (const void *) phrase, strlen(phrase));
 	}
 
-	SHA256_Final(&ctx, tmp);
+	_librist_SHA256_Final(&ctx, tmp);
 
 	memcpy(&out, tmp, sizeof(out));
 

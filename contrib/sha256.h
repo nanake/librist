@@ -33,9 +33,9 @@ typedef struct {
 } SHA256_CTX;
 
 /*********************** FUNCTION DECLARATIONS **********************/
-void SHA256_Transform(SHA256_CTX *ctx, const uint8_t data[]);
-void SHA256_Init(SHA256_CTX *ctx);
-void SHA256_Update(SHA256_CTX *ctx, const uint8_t data[], size_t len);
-void SHA256_Final(SHA256_CTX *ctx, uint8_t hash[]);
+void _librist_SHA256_Transform(SHA256_CTX *ctx, const uint8_t data[]);
+void _librist_SHA256_Init(SHA256_CTX *ctx);
+void _librist_SHA256_Update(SHA256_CTX *ctx, const uint8_t data[], size_t len);
+void _librist_SHA256_Final(SHA256_CTX *ctx, uint8_t hash[]);
 
 #endif   // SHA256_H
