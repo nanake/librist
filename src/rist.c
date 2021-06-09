@@ -18,6 +18,8 @@
 #include <processthreadsapi.h>
 #endif
 
+#undef RIST_DEPRECATED
+
 /* Receiver functions */
 
 int rist_receiver_create(struct rist_ctx **_ctx, enum rist_profile profile,
@@ -115,7 +117,7 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 	ssize_t num_loop = 0;
 	struct rist_flow *f = NULL;
 	pthread_mutex_lock(&ctx->common.flows_lock);
-	struct rist_flow *f_loop = ctx->common.FLOWS;	
+	struct rist_flow *f_loop = ctx->common.FLOWS;
 	while (f_loop) {
 		struct rist_flow *nextflow = f_loop->next;
 		unsigned long reader_index = atomic_load_explicit(&f_loop->dataout_fifo_queue_read_index, memory_order_relaxed);
@@ -133,7 +135,12 @@ static struct rist_flow *rist_get_longest_flow(struct rist_receiver *ctx, ssize_
 	return f;
 }
 
-int rist_receiver_data_read(struct rist_ctx *rist_ctx, struct rist_data_block **data_buffer, int timeout)
+int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_data_block **data_block, int timeout)
+{
+	return rist_receiver_data_read2(ctx, (struct rist_data_block **)data_block, timeout);
+}
+
+int rist_receiver_data_read2(struct rist_ctx *rist_ctx, struct rist_data_block **data_buffer, int timeout)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
@@ -153,7 +160,7 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, struct rist_data_block **
 	   The risks for not entering the lock are either sleeping too much (a packet gets added while we read)
 	   or not at all when we should (i.e.: the calling application is reading from multiple threads). Both
 	   risks are tolerable */
-	
+
 	ssize_t num = 0;
 	// Select the flow with highest queue count to minimize jitter for calling app
 	struct rist_flow *f = rist_get_longest_flow(ctx, &num);
@@ -193,7 +200,12 @@ int rist_receiver_data_read(struct rist_ctx *rist_ctx, struct rist_data_block **
 	return (int)num;
 }
 
-void rist_receiver_data_block_free(struct rist_data_block **block)
+void rist_receiver_data_block_free(struct rist_data_block **const block)
+{
+	rist_receiver_data_block_free2((struct rist_data_block **)block);
+}
+
+void rist_receiver_data_block_free2(struct rist_data_block **block)
 {
 	struct rist_data_block *b = *block;
 	if (b->ref != NULL)
@@ -249,24 +261,30 @@ int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_
 	return 0;
 }
 
-int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,
-									receiver_data_callback_t data_callback,
-									void *arg)
+int rist_receiver_data_callback_set(struct rist_ctx *rist_ctx,receiver_data_callback_t data_callback, void *arg)
 {
-	if (RIST_UNLIKELY(!rist_ctx))
-	{
-		rist_log_priv3(RIST_LOG_ERROR, "ctx is null on rist_receiver_data_callback_set call!\n");
-		return -1;
-	}
-	if (RIST_UNLIKELY(rist_ctx->mode != RIST_RECEIVER_MODE || !rist_ctx->receiver_ctx))
-	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_callback_set call with CTX not set up for receiving\n");
-		return -1;
-	}
-	struct rist_receiver *ctx = rist_ctx->receiver_ctx;
-	ctx->receiver_data_callback = data_callback;
-	ctx->receiver_data_callback_argument = arg;
-	return 0;
+  return rist_receiver_data_callback_set2(
+      rist_ctx, (receiver_data_callback2_t)data_callback, arg);
+}
+
+int rist_receiver_data_callback_set2(struct rist_ctx *rist_ctx,
+                                     receiver_data_callback2_t data_callback,
+                                     void *arg) {
+  if (RIST_UNLIKELY(!rist_ctx)) {
+    rist_log_priv3(RIST_LOG_ERROR,
+                   "ctx is null on rist_receiver_data_callback_set call!\n");
+    return -1;
+  }
+  if (RIST_UNLIKELY(rist_ctx->mode != RIST_RECEIVER_MODE ||
+                    !rist_ctx->receiver_ctx)) {
+    rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_data_callback_set call with "
+                                   "CTX not set up for receiving\n");
+    return -1;
+  }
+  struct rist_receiver *ctx = rist_ctx->receiver_ctx;
+  ctx->receiver_data_callback = data_callback;
+  ctx->receiver_data_callback_argument = arg;
+  return 0;
 }
 
 /* Sender functions */
@@ -623,7 +641,12 @@ int rist_stats_free(const struct rist_stats *stats_container)
 	return 0;
 }
 
-int rist_peer_config_free(struct rist_peer_config **peer_config)
+int rist_peer_config_free(const struct rist_peer_config **peer_config)
+{
+  return rist_peer_config_free2((struct rist_peer_config **)peer_config);
+}
+
+int rist_peer_config_free2(struct rist_peer_config **peer_config)
 {
 	if (*peer_config) {
 		free((void *)*peer_config);
@@ -632,7 +655,12 @@ int rist_peer_config_free(struct rist_peer_config **peer_config)
 	return 0;
 }
 
-int rist_logging_settings_free(struct rist_logging_settings **logging_settings)
+int rist_logging_settings_free(const struct rist_logging_settings **logging_settings)
+{
+	return rist_logging_settings_free2((struct rist_logging_settings **)logging_settings);
+}
+
+int rist_logging_settings_free2(struct rist_logging_settings **logging_settings)
 {
 	if (*logging_settings) {
 		free((void *)*logging_settings);
@@ -641,7 +669,12 @@ int rist_logging_settings_free(struct rist_logging_settings **logging_settings)
 	return 0;
 }
 
-int rist_udp_config_free(struct rist_udp_config **udp_config)
+int rist_udp_config_free(const struct rist_udp_config **udp_config)
+{
+	return rist_udp_config_free2((struct rist_udp_config **)udp_config);
+}
+
+int rist_udp_config_free2(struct rist_udp_config **udp_config)
 {
 	if (*udp_config) {
 		free((void *)*udp_config);
@@ -692,7 +725,12 @@ const char *librist_api_version(void)
 	return STR(LIBRIST_API_VERSION_MAJOR)"."STR(LIBRIST_API_VERSION_MINOR)"."STR(LIBRIST_API_VERSION_PATCH);
 }
 
-int rist_parse_udp_address(const char *url, struct rist_udp_config **udp_config)
+int rist_parse_udp_address(const char *url, const struct rist_udp_config **udp_config)
+{
+  	return rist_parse_udp_address2(url, (struct rist_udp_config **)udp_config);
+}
+
+int rist_parse_udp_address2(const char *url, struct rist_udp_config **udp_config)
 {
 
 	int ret = 0;
@@ -739,7 +777,12 @@ int rist_peer_config_defaults_set(struct rist_peer_config *peer_config)
 		return -1;
 }
 
-int rist_parse_address(const char *url, struct rist_peer_config **peer_config)
+int rist_parse_address(const char *url, const struct rist_peer_config **peer_config)
+{
+	return rist_parse_address2(url, (struct rist_peer_config **)peer_config);
+}
+
+int rist_parse_address2(const char *url, struct rist_peer_config **peer_config)
 {
 
 	char * url_local = strdup(url);

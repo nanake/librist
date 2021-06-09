@@ -306,7 +306,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 
 	// Rely on the library to parse the url
 	struct rist_peer_config *peer_config_link = NULL;
-	if (rist_parse_address(setup->token, (void *)&peer_config_link))
+	if (rist_parse_address2(setup->token, (void *)&peer_config_link))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender: %s\n", setup->token);
 		return NULL;
@@ -368,7 +368,7 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 		rist_log(&logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
-	rist_peer_config_free(&peer_config_link);
+	rist_peer_config_free2(&peer_config_link);
 
 	return peer;
 }
@@ -382,7 +382,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 		{
 			// RIST receiver
 			struct rist_data_block *b = NULL;
-			int queue_size = rist_receiver_data_read(callback_object->receiver_ctx, &b, 5);
+			int queue_size = rist_receiver_data_read2(callback_object->receiver_ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50)
 					rist_log(&logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
@@ -392,7 +392,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 						// TODO: report error?
 						(void) w;
 					}
-					rist_receiver_data_block_free(&b);
+					rist_receiver_data_block_free2(&b);
 				}
 			}
 		}
@@ -551,7 +551,7 @@ int main(int argc, char *argv[])
 
 		// First parse extra url and parameters
 		struct rist_udp_config *udp_config = NULL;
-		if (rist_parse_udp_address(inputtoken, &udp_config)) {
+		if (rist_parse_udp_address2(inputtoken, &udp_config)) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
 		}
@@ -688,7 +688,7 @@ shutdown:
 			evsocket_delevent(callback_object[i].evctx, event[i]);
 		// Free udp_config object
 		if ((void *)callback_object[i].udp_config)
-			rist_udp_config_free(&callback_object[i].udp_config);
+			rist_udp_config_free2(&callback_object[i].udp_config);
 		// Cleanup rist listeners
 		if (callback_object[i].receiver_ctx)
 			rist_destroy(callback_object[i].receiver_ctx);

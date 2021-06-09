@@ -195,7 +195,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 
 	// URL overrides (also cleans up the URL)
 	struct rist_peer_config *peer_config = &app_peer_config;
-	if (rist_parse_address(setup->outputurl, &peer_config))
+	if (rist_parse_address2(setup->outputurl, &peer_config))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
 		exit(1);
@@ -248,7 +248,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 	//b->virt_dst_port = cb_arg->dst_port; 
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
 	int ret = rist_sender_data_write(cb_arg->sender_ctx, b);
-	rist_receiver_data_block_free(&b);
+	rist_receiver_data_block_free2(&b);
 	return ret;
 }
 
@@ -415,7 +415,7 @@ usage:
 
 	// URL overrides (also cleans up the URL)
 	struct rist_peer_config *peer_config = &app_peer_config;
-	if (rist_parse_address(inputurl, &peer_config))
+	if (rist_parse_address2(inputurl, &peer_config))
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver \n");
 		exitcode = 1;
@@ -434,7 +434,7 @@ usage:
 	int enable_data_callback = 0;
 
 	if (enable_data_callback == 1) {
-		if (rist_receiver_data_callback_set(receiver_ctx, cb_recv, &cb_arg))
+		if (rist_receiver_data_callback_set2(receiver_ctx, cb_recv, &cb_arg))
 		{
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer");
 			exitcode = 1;
@@ -460,7 +460,7 @@ usage:
 		while (keep_running)
 		{
 			struct rist_data_block *b;
-			int ret = rist_receiver_data_read(receiver_ctx, &b, 5);
+			int ret = rist_receiver_data_read2(receiver_ctx, &b, 5);
 			if (ret && b && b->payload) cb_recv(&cb_arg, b);
 		}
 	}

@@ -46,7 +46,7 @@ struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
 	}
     // Rely on the library to parse the url
     struct rist_peer_config *peer_config = NULL;
-    if (rist_parse_address(url, (void *)&peer_config))
+    if (rist_parse_address2(url, (void *)&peer_config))
     {
 		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not parse peer options for receiver\n");
 		return NULL;
@@ -73,7 +73,7 @@ struct rist_ctx *setup_rist_sender(int profile, const char *url) {
 	}
 
     const struct rist_peer_config *peer_config_link = NULL;
-    if (rist_parse_address(url, (void *)&peer_config_link))
+    if (rist_parse_address2(url, (void *)&peer_config_link))
     {
 		rist_log(logging_settings_sender, RIST_LOG_ERROR, "Could not parse peer options for sender\n");
 		return NULL;
@@ -194,7 +194,7 @@ int main(int argc, char *argv[]) {
     while (receive_count < 16000) {
         if (atomic_load(&stop))
             break;
-        int queue_length = rist_receiver_data_read(receiver_ctx, &b, 5);
+        int queue_length = rist_receiver_data_read2(receiver_ctx, &b, 5);
         if (queue_length > 0) {
             if (!got_first) {
                 receive_count = (int)b->seq;
@@ -210,7 +210,7 @@ int main(int argc, char *argv[]) {
                 break;
             }
             receive_count++;
-            rist_receiver_data_block_free((struct rist_data_block **const)&b);
+            rist_receiver_data_block_free2((struct rist_data_block **const)&b);
         }
     }
 	if (!got_first || receive_count < 12500)

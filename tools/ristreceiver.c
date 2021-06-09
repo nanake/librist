@@ -183,7 +183,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
 		return -1;
 	}
-	rist_receiver_data_block_free(&b);
+	rist_receiver_data_block_free2(&b);
 	return 0;
 }
 
@@ -433,7 +433,7 @@ int main(int argc, char *argv[])
 
 		// Rely on the library to parse the url
 		struct rist_peer_config *peer_config = NULL;
-		if (rist_parse_address(inputtoken, &peer_config))
+		if (rist_parse_address2(inputtoken, &peer_config))
 		{
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse peer options for receiver #%d\n", (int)(i + 1));
 			exit(1);
@@ -486,7 +486,7 @@ int main(int argc, char *argv[])
 			rist_log(&logging_settings, RIST_LOG_WARN, "SRP Authentication is not available for Rist Simple Profile\n");
 #endif
 
-		rist_peer_config_free(&peer_config);
+		rist_peer_config_free2(&peer_config);
 		inputtoken = strtok_r(NULL, ",", &saveptr1);
 	}
 
@@ -504,7 +504,7 @@ int main(int argc, char *argv[])
 		// belong to the udp output. We do this only to avoid writing another parser for the two url
 		// parameters available to the udp input/output url
 		struct rist_udp_config *udp_config = NULL;
-		if (rist_parse_udp_address(outputtoken, &udp_config)) {
+		if (rist_parse_udp_address2(outputtoken, &udp_config)) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
 		}
@@ -539,7 +539,7 @@ next:
 	}
 
 	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
-		if (rist_receiver_data_callback_set(ctx, cb_recv, &callback_object))
+		if (rist_receiver_data_callback_set2(ctx, cb_recv, &callback_object))
 		{
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not set data_callback pointer\n");
 			exit(1);
@@ -596,7 +596,7 @@ next:
 		while (true)
 		{
 			struct rist_data_block *b = NULL;
-			int queue_size = rist_receiver_data_read(ctx, &b, 5);
+			int queue_size = rist_receiver_data_read2(ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50) {
 					// We need a better way to report on this
@@ -645,7 +645,7 @@ next:
 			struct rist_data_block *b = NULL;
 			int queue_size = 0;
 			for (;;) {
-				queue_size = rist_receiver_data_read(ctx, &b, 0);
+				queue_size = rist_receiver_data_read2(ctx, &b, 0);
 				if (queue_size > 0) {
 					if (queue_size % 10 == 0 || queue_size > 50) {
 						// We need a better way to report on this
@@ -673,7 +673,7 @@ next:
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		// Free udp_config object
 		if ((void *)callback_object.udp_config[i])
-			rist_udp_config_free(&callback_object.udp_config[i]);
+			rist_udp_config_free2(&callback_object.udp_config[i]);
 	}
 
 	rist_logging_unset_global();

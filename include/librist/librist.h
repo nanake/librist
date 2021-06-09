@@ -64,7 +64,8 @@ RIST_API int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t d
  * @param timeout How long to wait for queue data (ms), 0 for no wait
  * @return num buffers remaining on queue +1 (0 if no buffer returned), -1 on error
  */
-RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, struct rist_data_block **data_block, int timeout);
+RIST_DEPRECATED RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, const struct rist_data_block **data_block, int timeout);
+RIST_API int rist_receiver_data_read2(struct rist_ctx *ctx, struct rist_data_block **data_block, int timeout);
 
 
 /**
@@ -79,7 +80,8 @@ RIST_API int rist_receiver_data_read(struct rist_ctx *ctx, struct rist_data_bloc
  * @param data_block reference counted data_block structure MUST be freed via rist_receiver_data_block_free
  * @return int, ignored.
  */
-typedef int (*receiver_data_callback_t)(void *arg, struct rist_data_block *data_block);
+typedef int (*receiver_data_callback_t)(void *arg, const struct rist_data_block *data_block);
+typedef int (*receiver_data_callback2_t)(void *arg, struct rist_data_block *data_block);
 
 /**
  * @brief Enable data callback channel
@@ -92,9 +94,8 @@ typedef int (*receiver_data_callback_t)(void *arg, struct rist_data_block *data_
  * @param arg the extra argument passed to the `data_callback`
  * @return 0 on success, -1 on error
  */
-RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
-	receiver_data_callback_t,
-	void *arg);
+RIST_DEPRECATED RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx, receiver_data_callback_t, void *arg);
+RIST_API int rist_receiver_data_callback_set2(struct rist_ctx *ctx, receiver_data_callback2_t, void *arg);
 
 /**
  * @brief Free rist data block
@@ -103,8 +104,8 @@ RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ctx,
  *
  * @param block double pointer to rist_data_block, containing pointer will be set to NULL
  */
-
-RIST_API void rist_receiver_data_block_free(struct rist_data_block **block);
+RIST_DEPRECATED RIST_API void rist_receiver_data_block_free(struct rist_data_block **const block);
+RIST_API void rist_receiver_data_block_free2(struct rist_data_block **block);
 
 /**
  * @brief Set data ready signalling fd
@@ -330,7 +331,8 @@ RIST_API int rist_destroy(struct rist_ctx *ctx);
  * @return 0 on success or non-zero on error. The value returned is actually the number
  * of parameters that are valid
  */
-RIST_API int rist_parse_address(const char *url, struct rist_peer_config **peer_config);
+RIST_DEPRECATED RIST_API int rist_parse_address(const char *url, const struct rist_peer_config **peer_config);
+RIST_API int rist_parse_address2(const char *url, struct rist_peer_config **peer_config);
 
 /**
  * @brief Parses udp url for udp config data (multicast interface, stream-id, prefix, etc)
@@ -344,7 +346,8 @@ RIST_API int rist_parse_address(const char *url, struct rist_peer_config **peer_
  * @return 0 on success or non-zero on error. The value returned is actually the number
  * of parameters that are valid
  */
-RIST_API int rist_parse_udp_address(const char *url, struct rist_udp_config **peer_config);
+RIST_DEPRECATED RIST_API int rist_parse_udp_address(const char *url, const struct rist_udp_config **peer_config);
+RIST_API int rist_parse_udp_address2(const char *url, struct rist_udp_config **peer_config);
 
 /**
  * @brief Set callback for receiving stats structs
@@ -368,7 +371,8 @@ RIST_API int rist_stats_free(const struct rist_stats *stats_container);
  *
  * @return 0 on success or non-zero on error.
  */
-RIST_API int rist_peer_config_free(struct rist_peer_config **peer_config);
+RIST_DEPRECATED RIST_API int rist_peer_config_free(const struct rist_peer_config **peer_config);
+RIST_API int rist_peer_config_free2(struct rist_peer_config **peer_config);
 
 /**
  * @brief Populate a preallocated peer_config structure with library default values
@@ -382,14 +386,16 @@ RIST_API int rist_peer_config_defaults_set(struct rist_peer_config *peer_config)
  *
  * @return 0 on success or non-zero on error.
  */
-RIST_API int rist_logging_settings_free(struct rist_logging_settings **logging_settings);
+RIST_DEPRECATED RIST_API int rist_logging_settings_free(const struct rist_logging_settings **logging_settings);
+RIST_API int rist_logging_settings_free2(struct rist_logging_settings **logging_settings);
 
 /**
  * @brief Free the rist_udp_config structure memory allocation
  *
  * @return 0 on success or non-zero on error.
  */
-RIST_API int rist_udp_config_free(struct rist_udp_config **udp_config);
+RIST_DEPRECATED RIST_API int rist_udp_config_free(const struct rist_udp_config **udp_config);
+RIST_API int rist_udp_config_free2(struct rist_udp_config **udp_config);
 
 /**
  * @brief Connection status callback function

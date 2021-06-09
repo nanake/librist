@@ -32,6 +32,8 @@
 #include <stdatomic.h>
 #include "librist/logging.h"
 
+#undef RIST_DEPRECATED
+
 #define UINT16_SIZE (UINT16_MAX + 1)
 // These 4 control the memory footprint and buffer capacity of the lib
 // They MUST be a power of two or wrap-around index calculations will break
@@ -352,7 +354,7 @@ struct rist_receiver {
 	pthread_mutex_t mutex;
 
 	/* Receiver data callback */
-	receiver_data_callback_t receiver_data_callback;
+	receiver_data_callback2_t receiver_data_callback;
 	void *receiver_data_callback_argument;
 	int receiver_data_ready_notify_fd;
 

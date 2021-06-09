@@ -23,4 +23,12 @@
     #endif
 #endif
 
+#if defined(__GNUC__)
+	#define RIST_DEPRECATED __attribute__((deprecated))
+#elif defined(_MSC_VER)
+	#define RIST_DEPRECATED __declspec(deprecated)
+#else
+	#define RIST_DEPRECATED
+#endif
+
 #endif
