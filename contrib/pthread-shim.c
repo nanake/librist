@@ -7,6 +7,7 @@
 
 #include "time-shim.h"
 #include "pthread-shim.h"
+#include <stdio.h>
 #ifdef _WIN32
 #ifdef HAVE_PTHREADS
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
@@ -21,6 +22,25 @@ int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint
 }
 #else
 #include <errno.h>
+
+static BOOL init_mutex_impl(PINIT_ONCE once_var, PVOID mutex, PVOID *param2) {
+  RIST_MARK_UNUSED(once_var);
+  RIST_MARK_UNUSED(param2);
+  if (pthread_mutex_init((pthread_mutex_t *)mutex, NULL) !=
+      0) {
+    return FALSE;
+  }
+  return TRUE;
+}
+
+int init_mutex_once(pthread_mutex_t *mutex, PINIT_ONCE once_var)
+{
+  BOOL success = InitOnceExecuteOnce(once_var, init_mutex_impl, mutex, NULL);
+  if (!success) {
+    return -1;
+  }
+  return 0;
+}
 
 int pthread_create(pthread_t *thread, pthread_attr_t *attr, DWORD (__stdcall *start_routine)(LPVOID), void *arg)
 {

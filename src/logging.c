@@ -31,18 +31,7 @@ static struct {
 };
 
 #if defined(_WIN32) && !defined(HAVE_PTHREADS)
-INIT_ONCE once_var = INIT_ONCE_STATIC_INIT;
-static BOOL init_mutex(PINIT_ONCE once_var, PVOID param, PVOID *param2)
-{
-	RIST_MARK_UNUSED(once_var);
-	RIST_MARK_UNUSED(param);
-    RIST_MARK_UNUSED(param2);
-	if (pthread_mutex_init(&global_logging_settings.global_logs_lock, NULL) != 0)
-	{
-		return FALSE;
-	}
-	return TRUE;
-}
+static INIT_ONCE once_var = INIT_ONCE_STATIC_INIT;
 #endif
 
 static inline void rist_log_impl(struct rist_logging_settings *log_settings,
@@ -158,11 +147,7 @@ void rist_log_priv3(enum rist_log_level level, const char *format, ...)
 static int init_once_global()
 {
 	#if defined(_WIN32) && !defined(HAVE_PTHREADS)
-	BOOL success = InitOnceExecuteOnce(&once_var, init_mutex, NULL, NULL);
-	if (!success)
-	{
-		return -1;
-	}
+	return init_mutex_once(&global_logging_settings.global_logs_lock, &once_var);
 	#endif
 	return 0;
 }
