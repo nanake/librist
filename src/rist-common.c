@@ -3020,7 +3020,7 @@ protocol_bypass:
 			{
 				if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
 				{
-					if (cctx->connection_status_callback)
+					if (cctx->connection_status_callback && (cctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
 						cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
 					rist_peer_remove(cctx, peer, NULL);
