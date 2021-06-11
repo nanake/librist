@@ -3015,18 +3015,13 @@ protocol_bypass:
 							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CLIENT_TIMED_OUT);
 						kill_peer(peer);
 					}
-					else if (!peer->timed_out)
-					{
-						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Peer %u timed out\n", peer->adv_peer_id);
-						if (cctx->connection_status_callback)
-							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
-						peer->timed_out = 1;
-					}
 				}
 			} else if (peer->dead && peer->parent)
 			{
 				if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
 				{
+					if (cctx->connection_status_callback)
+						cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
 					rist_peer_remove(cctx, peer, NULL);
 				}
