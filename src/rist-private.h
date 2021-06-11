@@ -574,6 +574,7 @@ struct rist_peer {
 
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];
+	bool send_first_connection_event;
 };
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {

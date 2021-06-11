@@ -2084,13 +2084,11 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 								"buffer of %u bytes.\n", name_length, bytes_left);
 						return;
 					}
-					bool new_peer = false;
 					if (memcmp(pkt + RTCP_SDES_SIZE, peer->receiver_name, name_length) != 0)
 					{
 						memcpy(peer->receiver_name, pkt + RTCP_SDES_SIZE, name_length);
 						rist_log_priv(ctx, RIST_LOG_INFO, "Peer %"PRIu32" receiver name is now: %s\n",
 								peer->adv_peer_id, peer->receiver_name);
-						new_peer = true;
 					}
 					bool peer_authenticated = peer->authenticated;
 					int connection_message = 0;
@@ -2107,11 +2105,12 @@ static void rist_recv_rtcp(struct rist_peer *peer, uint32_t seq,
 					else {
 						connection_message = RIST_CONNECTION_ESTABLISHED;
 					}
-					if (peer->timed_out || new_peer || (!peer_authenticated && peer->authenticated)) {
-						if (!new_peer)
+					if (peer->timed_out || !peer->send_first_connection_event || (!peer_authenticated && peer->authenticated)) {
+						if (!peer->send_first_connection_event)
 							rist_log_priv(ctx, RIST_LOG_INFO, "Peer %"PRIu32" receiver with name %s reconnected\n",
 								peer->adv_peer_id, peer->receiver_name);
 						peer->timed_out = 0;
+						peer->send_first_connection_event = true;
 						if (ctx->connection_status_callback)
 							ctx->connection_status_callback(ctx->connection_status_callback_argument, peer, connection_message);
 					}
