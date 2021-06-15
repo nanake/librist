@@ -11,16 +11,27 @@ project('libRIST', 'c',
 cc = meson.get_compiler('c')
 # Configuration data for config.h
 cdata = configuration_data()
+
+#librist ABI verion, libtool rules (taken from https://github.com/pvanhoof/dir-examples)
+#If the library source code has changed at all since the last update, then increment revision (‘c:r:a’ becomes ‘c:r+1:a’).
+#If any interfaces have been added, removed, or changed since the last update, increment current, and set revision to 0.
+#If any interfaces have been added since the last public release, then increment age.
+#If any interfaces have been removed or changed since the last public release, then set age to 0.
+librist_abi_current = 5
+librist_abi_revision = 0
+librist_abi_age = 1
+librist_soversion = librist_abi_current - librist_abi_age
+librist_version = '@0@.@1@.@2@'.format(librist_abi_current, librist_abi_revision, librist_abi_age)
+
 # libRIST version
-#If the internal source has changed, increase minor
-#If any interfaces have been added, removed, or changed since the last update, increment major and minor to 0.
-#If any interfaces have been added since the last public release, then increment minor.
-#If any interfaces have been removed or changed since the last public release, then set micro to 0.
+#API follows semver rules:
+#MAJOR version when you make incompatible API changes,
+#MINOR version when you add functionality in a backwards-compatible manner, and
+#PATCH version when you make backwards-compatible bug fixes.
+
 librist_api_version_major = 4
 librist_api_version_minor = 1
-librist_api_version_patch = 0
-librist_version = '@0@.@1@.@2@'.format(librist_api_version_major, librist_api_version_minor, librist_api_version_patch)
-librist_soversion = librist_api_version_major - librist_api_version_patch
+librist_api_version_patch = 1
 
 librist_src_root = meson.current_source_dir()
 
