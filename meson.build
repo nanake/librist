@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 project('libRIST', 'c',
-	version: '0.2.1',
+	version: '0.2.2',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
         meson_version: '>= 0.51.0')
 
