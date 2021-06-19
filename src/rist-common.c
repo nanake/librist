@@ -2574,7 +2574,6 @@ protocol_bypass:
 #ifdef USE_MBEDTLS
 						if (p->eap_ctx == NULL) {
 							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
-							failed_eap = true;
 						}
 						else {
 							int eapret = 0;
