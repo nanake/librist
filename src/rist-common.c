@@ -2366,7 +2366,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				//Read H bit and set keysize accordingly
 				if (p->rist_gre_version)
 				{
-					int bits = (CHECK_BIT(gre->flags2, 7))? 256 : 128;
+					int bits = (CHECK_BIT(gre->flags2, 6))? 256 : 128;
 					k->key_size = bits;
 				}
 				p = peer;
