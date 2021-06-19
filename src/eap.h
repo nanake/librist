@@ -69,6 +69,11 @@ RIST_PACKED_STRUCT(eap_srp_hdr, {
 #define EAP_ROLE_AUTHENTICATEE 0
 #define EAP_ROLE_AUTHENTICATOR 1
 
+#define EAP_AUTH_STATE_FAILED -1
+#define EAP_AUTH_STATE_UNAUTH 0
+#define EAP_AUTH_STATE_SUCCESS 1
+#define EAP_AUTH_STATE_REAUTH 2
+
 struct eapsrp_ctx
 {
 	uint_fast8_t role;
@@ -80,6 +85,7 @@ struct eapsrp_ctx
 	size_t last_pkt_size;
 	uint8_t timeout_retries;
 	uint64_t last_timestamp;
+	uint64_t last_auth_timestamp;
 
 	char username[256];
 	char password[256];

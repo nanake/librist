@@ -26,6 +26,7 @@
 #define EAP_AUTH_RETRY_MAX 3
 #define EAP_AUTH_TIMEOUT_RETRY_MAX 5
 #define EAP_AUTH_TIMEOUT 500//ms
+#define EAP_REAUTH_PERIOD 3000 // ms
 
 void eap_reset_data(struct eapsrp_ctx *ctx)
 {
@@ -202,7 +203,7 @@ static int process_eap_request_srp_server_key(struct eapsrp_ctx *ctx, uint8_t id
 	srp_user_process_challenge(ctx->srp_user, (const unsigned char *)ctx->salt, ctx->salt_len,(const unsigned char *) bytes_B, len_B, (const unsigned char**)&bytes_M, &len_M);
 	if (!bytes_M)
 	{
-		ctx->authentication_state = -1;
+		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		//"must disconnect immediately, set tries past limit"
 		ctx->tries = 255;
 		return -255;
@@ -229,8 +230,10 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 	srp_user_verify_session(ctx->srp_user, &pkt[4]);
 	if (srp_user_is_authenticated(ctx->srp_user))
 	{
-		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated\n");
-		ctx->authentication_state = 1;
+		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated\n");
+		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
+		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
 		uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr))];
 		struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
@@ -239,7 +242,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 		return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(hdr), outpkt);
 	}
 	//perm failure
-	ctx->authentication_state = -1;
+	ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 	ctx->tries = 255;
 
 	return -1;
@@ -363,7 +366,7 @@ static int process_eap_response_client_key(struct eapsrp_ctx *ctx, size_t len, u
 	if (!bytes_B)
 	{
 		//perm failure set tries to max
-		ctx->authentication_state = -1;
+		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		ctx->tries = 255;
 		return -255;
 	}
@@ -387,7 +390,7 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 	if (!bytes_HAMK)
 	{
 		rist_log_priv2(ctx->logging_settings, RIST_LOG_WARN, EAP_LOG_PREFIX"Authentication failed for %s@%s\n", ctx->username, ctx->ip_string);
-		ctx->authentication_state = -1;
+		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		ctx->tries++;
 		int ret = -254;
 		if (ctx->tries > EAP_AUTH_RETRY_MAX) {
@@ -412,8 +415,10 @@ static int process_eap_response_srp_server_validator(struct eapsrp_ctx *ctx)
 {
 	if (srp_verifier_is_authenticated(ctx->srp_verifier))
 	{
-		rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated %s@%s\n", ctx->username, ctx->ip_string);
-		ctx->authentication_state = 1;
+		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated %s@%s\n", ctx->username, ctx->ip_string);
+		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
+		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
 		ctx->last_identifier++;
 		uint8_t buf[EAPOL_EAP_HDRS_OFFSET];
@@ -460,7 +465,7 @@ static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len)
 {
 	if (ctx == NULL)
 		return -1;
-	if (ctx->authentication_state == -1 && ctx->tries >EAP_AUTH_RETRY_MAX)
+	if (ctx->authentication_state == EAP_AUTH_STATE_FAILED && ctx->tries >EAP_AUTH_RETRY_MAX)
 		return -255;
 	struct eap_hdr *hdr = (struct eap_hdr *)pkt;
 	uint8_t code = hdr->code;
@@ -589,7 +594,7 @@ int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len)
 			return 0;
 			break;
 		case EAPOL_TYPE_LOGOFF:
-			ctx->authentication_state = 0;
+			ctx->authentication_state = EAP_AUTH_STATE_UNAUTH;
 			break;
 		default:
 			break;
@@ -601,7 +606,7 @@ bool eap_is_authenticated(struct eapsrp_ctx *ctx)
 {
 	if (ctx == NULL)
 		return true;
-	return (ctx->authentication_state == 1);
+	return (ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS);
 }
 
 void eap_periodic(struct eapsrp_ctx *ctx)
@@ -610,6 +615,7 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 		return;
 	uint64_t now = timestampNTP_u64();
 	uint64_t retry_period = EAP_AUTH_TIMEOUT * RIST_CLOCK;
+	uint64_t reauth_period = EAP_REAUTH_PERIOD * RIST_CLOCK;//3 seconds
 
 	if (ctx->role == EAP_ROLE_AUTHENTICATOR && ctx->authentication_state != 1 && ctx->last_timestamp + retry_period < now &&
 		ctx->timeout_retries < EAP_AUTH_TIMEOUT_RETRY_MAX && ctx->tries <= EAP_AUTH_RETRY_MAX)
@@ -620,9 +626,29 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 			//check
 			ctx->timeout_retries++;
 			ctx->last_timestamp = now;
-		} else
+			return;
+		} else {
 			eap_request_identity(ctx);
+			return;
+		}
+	} else if (ctx->role == EAP_ROLE_AUTHENTICATOR && ctx->authentication_state == EAP_AUTH_STATE_SUCCESS &&
+	           now > ctx->last_auth_timestamp + reauth_period) {
+		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
+		eap_request_identity(ctx);
+		return;
 	}
+	else if (ctx->role == EAP_ROLE_AUTHENTICATEE && ctx->authentication_state ==  EAP_AUTH_STATE_SUCCESS &&
+			 now > ctx->last_auth_timestamp + reauth_period) {
+		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
+		eap_start(ctx);
+		return;
+	}
+	uint64_t reauth_time_out = ctx->last_auth_timestamp + reauth_period + EAP_AUTH_RETRY_MAX * retry_period;
+	if (ctx->authentication_state == EAP_AUTH_STATE_REAUTH && now > reauth_time_out) {
+		ctx->authentication_state = EAP_AUTH_STATE_UNAUTH;
+		return;
+	}
+
 
 }
 

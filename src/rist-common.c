@@ -2529,7 +2529,7 @@ protocol_bypass:
 				}
 				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
 #ifdef USE_MBEDTLS
-				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state != 1)
+				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 				{
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
 					// Do not process non EAP packets until the peer has been authenticated!
@@ -2587,7 +2587,8 @@ protocol_bypass:
 							else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
 								rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 									"Peer %d EAP Authentication suceeded\n", peer->adv_peer_id);
-								peer->eap_authentication_state = 2;
+								p->eap_authentication_state = 2;
+
 							}
 						}
 #else
@@ -2597,7 +2598,7 @@ protocol_bypass:
 						}
 #endif
 						if (failed_eap) {
-							peer->eap_authentication_state = 1;
+							p->eap_authentication_state = 1;
 							kill_peer(p);
 						}
 						// Never create new peers using EAP packets (exit loop here)
@@ -2987,7 +2988,7 @@ protocol_bypass:
 				}
 			}
 #ifdef USE_MBEDTLS
-			if (!peer->listening && peer->parent)
+			if (!peer->listening || peer->parent)
 				eap_periodic(peer->eap_ctx);
 #endif
 		}
