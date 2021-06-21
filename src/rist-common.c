@@ -1482,7 +1482,6 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 	RIST_MARK_UNUSED(dst_port);
 
 	assert(payload_len >= sizeof(struct rist_rtcp_hdr));
-	assert(peer->sender_ctx != NULL);
 
 	if (peer->receiver_mode) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
@@ -1493,6 +1492,7 @@ static void rist_sender_recv_nack(struct rist_peer *peer,
 				"Received nack packet but handshake is still pending, ignoring ...\n");
 		return;
 	}
+	assert(peer->sender_ctx != NULL);
 
 	struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *) payload;
 	uint32_t i,j;
