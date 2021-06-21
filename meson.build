@@ -21,7 +21,7 @@ librist_abi_current = 5
 librist_abi_revision = 0
 librist_abi_age = 1
 librist_soversion = librist_abi_current - librist_abi_age
-librist_version = '@0@.@1@.@2@'.format(librist_abi_current, librist_abi_revision, librist_abi_age)
+librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
 
 # libRIST version
 #API follows semver rules:
