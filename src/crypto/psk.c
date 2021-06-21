@@ -144,6 +144,8 @@ void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t 
     if (nonce != key->gre_nonce) {
         key->gre_nonce = nonce;
         _librist_crypto_aes_key(key);
+        key->bad_decryption = false;
+        key->bad_count = 0;
     }
     if (key->used_times > RIST_AES_KEY_REUSE_TIMES)
         return;

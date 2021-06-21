@@ -2385,6 +2385,8 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 					gre_size -= 4;
 				}
 				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
+				if (k->bad_decryption)
+					return;
 			} else if (has_seq) {
 				// Key bit is not set, that means the other side does not want to send
 				//  encrypted data
@@ -2452,6 +2454,13 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		{
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
 					proto_hdr->rtp.flags);
+
+			if (k && k->key_size > 0) {
+				if (k->bad_count++ > 5) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
+					k->bad_decryption = true;
+				}
+			}
 			return;
 		}
 

@@ -16,6 +16,7 @@
 #endif
 #include <stdint.h>
 #include <string.h>
+#include <stdbool.h>
 
 struct rist_key {
 	uint32_t key_size;
@@ -29,6 +30,8 @@ struct rist_key {
 	uint32_t key_rotation;
     uint64_t used_times;
     char password[128];
+    bool bad_decryption;
+    int bad_count;
 };
 
 RIST_PRIV int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, uint32_t rotation, const char *password);
