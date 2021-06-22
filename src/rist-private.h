@@ -47,6 +47,8 @@
 #define RIST_RTT_MIN (3)
 // this value is UINT32_MAX 4294967.296
 #define RIST_CLOCK (4294967LL)
+#define ONE_SECOND (1000 * RIST_CLOCK)
+#define RIST_LOG_QUIESCE_TIMER  ONE_SECOND
 /* nack requests are sent every time a data packet is received. */
 /* this timer will be triggered to ensure we output nacks even when there is no data coming in */
 #define RIST_MAX_JITTER (5) /* In milliseconds */
@@ -60,7 +62,6 @@
 // Maximum offset before the payload that the code can use to put in headers
 //#define RIST_MAX_PAYLOAD_OFFSET (sizeof(struct rist_gre_key_seq) + sizeof(struct rist_protocol_hdr))
 #define RIST_MAX_HEADER_SIZE 32
-
 #define CHECK_BIT(var,pos) !!((var) & (1<<(pos)))
 
 #define BYTE_TO_BINARY_PATTERN "%c%c%c%c%c%c%c%c"
@@ -575,6 +576,8 @@ struct rist_peer {
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];
 	bool send_first_connection_event;
+
+	uint64_t log_repeat_timer;
 };
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {

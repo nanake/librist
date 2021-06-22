@@ -492,14 +492,14 @@ static void recalculate_clock_offset(struct rist_flow *flow)
 }
 
 
-static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
+static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, uint64_t packet_recv_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
 {
 	struct rist_flow *f = peer->flow;
 
 	//	fprintf(stderr,"receiver enqueue seq is %"PRIu32", source_time %"PRIu64"\n",
 	//	seq, source_time);
 	uint64_t now;
-	uint64_t now_monotonic = timestampNTP_u64();
+	uint64_t now_monotonic = packet_recv_time;
 	if (RIST_LIKELY(!f->rtc_timing_mode))
 		now = now_monotonic;
 	else
@@ -1563,7 +1563,7 @@ static bool address_compare(struct sockaddr* addr1, struct sockaddr* addr2) {
 	return false;
 }
 
-static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flow_id)
+static bool rist_receiver_data_authenticate(struct rist_peer *peer,uint64_t packet_recv_time, uint32_t flow_id)
 {
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
@@ -1615,9 +1615,12 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer, uint32_t flo
 				"Authenticated RTP peer %d and ssrc %"PRIu32" for connection with flowid %"PRIu32"\n",
 					peer->adv_peer_id, peer->adv_flow_id, peer->flow->flow_id);
 		} else {
-			rist_log_priv(&ctx->common, RIST_LOG_WARN,
-				"Received data packet (%"PRIu32") but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n",
-					flow_id);
+			if (packet_recv_time > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(&ctx->common, RIST_LOG_WARN,
+					"Received data packet (%"PRIu32") but handshake is still pending (waiting for an RTCP packet with SDES on it), ignoring ...\n",
+						flow_id);
+					peer->log_repeat_timer = packet_recv_time;
+			}
 			return false;
 		}
 	}
@@ -1791,12 +1794,12 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 }
 
 static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32_t flow_id,
-		uint64_t source_time, struct rist_buffer *payload, uint8_t retry, uint8_t payload_type)
+		uint64_t source_time, uint64_t packet_recv_time, struct rist_buffer *payload, uint8_t retry, uint8_t payload_type)
 {
 	assert(peer->receiver_ctx != NULL);
 	struct rist_receiver *ctx = peer->receiver_ctx;
 
-	if (!rist_receiver_data_authenticate(peer, flow_id)) {
+	if (!rist_receiver_data_authenticate(peer, packet_recv_time, flow_id)) {
 		// Error logging happens inside the function
 		return;
 	}
@@ -1833,7 +1836,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	// Wake up output thread when data comes in
 	if (pthread_cond_signal(&(peer->flow->condition)))
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");
-	if (!receiver_enqueue(peer, source_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
+	if (!receiver_enqueue(peer, source_time, packet_recv_time, payload->data, payload->size, seq, rtt, retry, payload->src_port, payload->dst_port, payload_type)) {
 		pthread_mutex_lock(&ctx->common.stats_lock);
 		rist_calculate_flow_bitrate(peer->flow, payload->size, &peer->flow->bw); // update bitrate only if not a dupe
 		pthread_mutex_unlock(&ctx->common.stats_lock);
@@ -2259,6 +2262,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			return;
 		}
 
+		uint64_t now = timestampNTP_u64();
 		struct rist_common_ctx *cctx = get_cctx(peer);
 
 		socklen_t addrlen = peer->address_len;
@@ -2330,7 +2334,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				}
 				else
 				{
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Protocol %d not supported (wrong profile?)\n", gre->prot_type);
+					if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Protocol %d not supported (wrong profile?)\n", gre->prot_type);
+						peer->log_repeat_timer = now;
+					}
+					return;
 				}
 				goto protocol_bypass;
 			}
@@ -2346,7 +2354,10 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				//
 				// make sure we have a key before attempting to decrypt
 				if (!k->key_size) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receiving encrypted data, but configured without keysize!\n");
+					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receiving encrypted data, but configured without keysize!\n");
+						p->log_repeat_timer = now;
+					}
 					return;
 				}
 
@@ -2394,8 +2405,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				// make sure we do not have a key
 				// (ie also interested in unencrypted communication)
 				if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
+					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+								"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
+						p->log_repeat_timer = now;
+					}
 					return;
 				}
 
@@ -2452,8 +2466,11 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		/* Double check for a valid rtp header */
 		if ((proto_hdr->rtp.flags & 0xc0) != 0x80)
 		{
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
-					proto_hdr->rtp.flags);
+			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
+						proto_hdr->rtp.flags);
+						p->log_repeat_timer = now;
+			}
 
 			if (k && k->key_size > 0) {
 				if (k->bad_count++ > 5) {
@@ -2517,7 +2534,6 @@ protocol_bypass:
 		bool failed_eap = false;
 		while (p) {
 			if (equal_address(family, addr, p)) {
-				uint64_t now = timestampNTP_u64();
 				if (p->eap_authentication_state != 1 && p->dead) {
 					uint64_t dead_time = (now - p->last_rtcp_received);
 					p->dead = false;
@@ -2540,7 +2556,10 @@ protocol_bypass:
 #ifdef USE_MBEDTLS
 				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 				{
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
+					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
+						p->log_repeat_timer = now;
+					}
 					// Do not process non EAP packets until the peer has been authenticated!
 					return;
 				}
@@ -2576,7 +2595,7 @@ protocol_bypass:
 									"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 						else {
 							rist_calculate_bitrate((recv_bufsize - gre_size - sizeof(*proto_hdr)), &p->bw);//use the unexpanded size to show real BW
-							rist_receiver_recv_data(p, seq, flow_id, source_time, &payload, retry, proto_hdr->rtp.payload_type);
+							rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, proto_hdr->rtp.payload_type);
 						}
 						break;
 					case RIST_PAYLOAD_TYPE_EAPOL:
