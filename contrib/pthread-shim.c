@@ -35,8 +35,7 @@ static BOOL init_mutex_impl(PINIT_ONCE once_var, PVOID mutex, PVOID *param2) {
 
 int init_mutex_once(pthread_mutex_t *mutex, PINIT_ONCE once_var)
 {
-  BOOL success = InitOnceExecuteOnce(once_var, init_mutex_impl, mutex, NULL);
-  if (!success) {
+  if (!InitOnceExecuteOnce(once_var, (PINIT_ONCE)init_mutex_impl, mutex, NULL)) {
     return -1;
   }
   return 0;
