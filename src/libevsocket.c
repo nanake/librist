@@ -22,87 +22,36 @@
 #endif
 
 #include <winsock2.h>
-#include <ws2tcpip.h>
-#include "log-private.h"
 
-static int poll(struct pollfd *fds, unsigned nfds, int timeout)
-{
-	size_t setsize = sizeof(fd_set) + nfds * sizeof(SOCKET);
-	fd_set *rdset = malloc(setsize);
-	fd_set *wrset = malloc(setsize);
-	fd_set *exset = malloc(setsize);
-	struct timeval tv = { 0, 0 };
-	int val;
+/* Type used for the number of file descriptors. */
+typedef unsigned long int nfds_t;
 
-	if (RIST_UNLIKELY(rdset == NULL || wrset == NULL || exset == NULL)) {
-		free(rdset);
-		free(wrset);
-		free(exset);
-		errno = ENOMEM;
-		return -1;
-	}
+#if !defined(_WIN32_WINNT) || (_WIN32_WINNT < 0x0600)
+/* Data structure describing a polling request. */
+struct pollfd {
+	int fd; /* file descriptor */
+	short events; /* requested events */
+	short revents; /* returned events */
+};
 
-	resume:
-		val = -1;
+/* Event types that can be polled */
+#define POLLIN 0x001 /* There is data to read. */
+#define POLLPRI 0x002 /* There is urgent data to read. */
+#define POLLOUT 0x004 /* Writing now will not block. */
 
-		FD_ZERO(rdset);
-		FD_ZERO(wrset);
-		FD_ZERO(exset);
-		for (unsigned i = 0; i < nfds; i++) {
-			int fd = fds[i].fd;
-			if (val < fd) {
-				val = fd;
-			}
+# define POLLRDNORM 0x040 /* Normal data may be read. */
+# define POLLRDBAND 0x080 /* Priority data may be read. */
+# define POLLWRNORM 0x100 /* Writing now will not block. */
+# define POLLWRBAND 0x200 /* Priority data may be written. */
 
-			if (fds[i].events & POLLIN) {
-				FD_SET((SOCKET)fd, rdset);
-			}
+/* Event types always implicitly polled. */
+#define POLLERR 0x008 /* Error condition. */
+#define POLLHUP 0x010 /* Hung up. */
+#define POLLNVAL 0x020 /* Invalid polling request. */
 
-			if (fds[i].events & POLLOUT) {
-				FD_SET((SOCKET)fd, wrset);
-			}
+#endif
 
-			if (fds[i].events & POLLPRI) {
-				FD_SET((SOCKET)fd, exset);
-			}
-		}
-
-		if ((timeout < 0) || (timeout > 50)) {
-			tv.tv_sec = 0;
-			tv.tv_usec = 50000;
-		} else if (timeout >= 0) {
-			div_t d = div(timeout, 1000);
-			tv.tv_sec = d.quot;
-			tv.tv_usec = d.rem * 1000;
-		}
-
-		val = select(val + 1, rdset, wrset, exset, /*(timeout >= 0) ?*/ &tv /*: NULL*/);
-
-		if (val == 0) {
-			if (timeout > 0) {
-				timeout -= (timeout > 50) ? 50 : timeout;
-			}
-
-			if (timeout != 0) {
-				goto resume;
-			}
-		}
-
-		if (val == -1) {
-			return -1;
-		}
-
-		for (unsigned i = 0; i < nfds; i++) {
-			int fd = fds[i].fd;
-			fds[i].revents = (FD_ISSET(fd, rdset) ? POLLIN : 0)
-					| (FD_ISSET(fd, wrset) ? POLLOUT : 0)
-					| (FD_ISSET(fd, exset) ? POLLPRI : 0);
-		}
-		free(exset);
-		free(wrset);
-		free(rdset);
-		return val;
-}
+#include "contrib/poll_win.c"
 
 #else
 # include <poll.h>
