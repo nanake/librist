@@ -10,11 +10,16 @@
  * Dongsheng Song <dongsheng.song@gmail.com>
  * Brent Cook <bcook@openbsd.org>
  */
+ /* librist. Copyright © 2019 SipRadius LLC. All right reserved.
+ * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
+ * Adapted for librist
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
 
 #include <conio.h>
 #include <errno.h>
 #include <io.h>
-#include <poll.h>
 #include <ws2tcpip.h>
 
 static int
@@ -95,7 +100,7 @@ compute_wait_revents(HANDLE h, short events, int object, int wait_rc)
 	/*
 	 * Check if this handle was signaled by WaitForMultipleObjects
 	 */
-	if (wait_rc >= WAIT_OBJECT_0 && (object == (wait_rc - WAIT_OBJECT_0))
+	if ((object == (int)(wait_rc - WAIT_OBJECT_0))
 	    && (events & (POLLIN | POLLRDNORM))) {
 
 		/*
@@ -280,8 +285,7 @@ poll(struct pollfd *pfds, nfds_t nfds, int timeout_ms)
 		/*
 		 * If we signaled on a file handle, don't wait on the sockets.
 		 */
-		if (wait_rc >= WAIT_OBJECT_0 &&
-		    (wait_rc <= WAIT_OBJECT_0 + num_handles - 1)) {
+		if ((wait_rc <= WAIT_OBJECT_0 + num_handles - 1)) {
 			tv.tv_usec = 0;
 			handle_signaled = 1;
 		}

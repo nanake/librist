@@ -22,6 +22,7 @@
 #endif
 
 #include <winsock2.h>
+#include "log-private.h"
 
 /* Type used for the number of file descriptors. */
 typedef unsigned long int nfds_t;
