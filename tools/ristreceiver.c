@@ -4,9 +4,10 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "config.h"
+#include "librist/version.h"
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
-#include "librist/version.h"
 #ifdef USE_MBEDTLS
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
@@ -243,7 +244,9 @@ struct ristreceiver_flow_cumulative_stats *stats_list;
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
+#if HAVE_CJSON
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
+#endif
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
 	{
 		struct ristreceiver_flow_cumulative_stats *stats = stats_list;

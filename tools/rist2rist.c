@@ -7,6 +7,7 @@
 
 /* rist2rist receive simple profile rist and expose it as main profile */
 
+#include "config.h"
 #include <librist/librist.h>
 #include "librist/version.h"
 #include "risturlhelp.h"
@@ -132,7 +133,9 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	(void)arg;
+#if HAVE_CJSON
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+#endif
 	rist_stats_free(stats_container);
 	return 0;
 }

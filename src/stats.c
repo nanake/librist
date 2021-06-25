@@ -6,13 +6,14 @@
  *
  * SPDX-License-Identifier: BSD-2-Clause
  */
-
+#include "config.h"
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
 #include <string.h>
+#if HAVE_CJSON
 #include "cjson/cJSON.h"
-
+#endif
 static double round_two_digits(double number)
 {
 	long new_number = (long)(number * 100);
@@ -60,7 +61,8 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	uint32_t avg_rtt = (peer->eight_times_rtt / 8);
 
 	struct rist_common_ctx *cctx = get_cctx(peer);
-
+	char *stats_string = NULL;
+#if HAVE_CJSON
 	cJSON *stats = cJSON_CreateObject();
 	cJSON *rist_sender_stats = cJSON_AddObjectToObject(stats, "sender-stats");
 	cJSON *peer_obj = cJSON_AddObjectToObject(rist_sender_stats, "peer");
@@ -82,9 +84,13 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	cJSON_AddNumberToObject(json_stats, "avg_rtt", (double)avg_rtt);
 	cJSON_AddNumberToObject(json_stats, "retry_buffer_size", (double)retry_buf_size);
 	cJSON_AddNumberToObject(json_stats, "cooldown_time", (double)time_left);
-	char *stats_string = cJSON_PrintUnformatted(stats);
+	stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
-
+#else
+	char json[1];
+	json[0] = '\0';
+	stats_string = json;
+#endif
 	stats_container->stats_json = stats_string;
 	stats_container->json_size = (uint32_t)strlen(stats_string);
 	stats_container->stats.sender_peer.cname[0] = '\0';
@@ -129,6 +135,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		flow->stats_instant.cur_ips = (flow->stats_instant.total_ips / flow->stats_instant.avg_count);
 	}
 
+#if HAVE_CJSON
 	cJSON *stats = cJSON_CreateObject();
 	cJSON *stats_obj = cJSON_AddObjectToObject(stats, "receiver-stats");
 	cJSON *flow_obj = cJSON_AddObjectToObject(stats_obj, "flowinstant");
@@ -136,6 +143,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(flow_obj, "dead",  flow->dead);
 	cJSON *json_stats = cJSON_AddObjectToObject(flow_obj, "stats");
 	cJSON *peers = cJSON_AddArrayToObject(flow_obj, "peers");
+#endif
 	uint32_t flow_rtt = 0;
 	uint32_t flow_sent_instant = 0;
 	for (size_t i = 0; i < flow->peer_lst_len; i++)
@@ -149,7 +157,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		size_t avg_bitrate = peer->bw.eight_times_bitrate / 8;
 		flow_sent_instant += peer->stats_receiver_instant.sent_rtcp;
 		flow_rtt =+ peer->eight_times_rtt / 8;
-
+#if HAVE_CJSON
 		cJSON *peer_obj = cJSON_CreateObject();
 		cJSON_AddNumberToObject(peer_obj, "id", peer->adv_peer_id);
 		cJSON_AddNumberToObject(peer_obj, "dead", peer->dead);
@@ -162,6 +170,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		cJSON_AddNumberToObject(peer_stats, "bitrate", (double)bitrate);
 		cJSON_AddNumberToObject(peer_stats, "avg_bitrate", (double)avg_bitrate);
 		cJSON_AddItemToArray(peers, peer_obj);
+#endif
 		// Clear peer instant stats
 		memset(&peer->stats_receiver_instant, 0, sizeof(peer->stats_receiver_instant));
 	}
@@ -217,6 +226,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		avg_buffer_duration /= flow->stats_instant.buffer_duration_count;
 		flow->stats_instant.buffer_duration_count = 0;
 	}
+	char *stats_string = NULL;
+#if HAVE_CJSON
 	cJSON_AddNumberToObject(json_stats, "quality", Q);
 	cJSON_AddNumberToObject(json_stats, "received", (double)flow->stats_instant.received);
 	cJSON_AddNumberToObject(json_stats, "dropped_late", (double)flow->stats_instant.dropped_late);
@@ -240,10 +251,14 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	cJSON_AddNumberToObject(json_stats, "max_inter_packet_spacing", (double)flow->stats_instant.max_ips);
 	cJSON_AddNumberToObject(json_stats, "bitrate", (double)flow->bw.bitrate);
 
-	char *stats_string = cJSON_PrintUnformatted(stats);
+	stats_string = cJSON_PrintUnformatted(stats);
 	cJSON_Delete(stats);
-
-	stats_container->stats_json = stats_string;
+#else
+	char json[1];
+	json[0] = '\0';
+    stats_string = json;
+#endif
+        stats_container->stats_json = stats_string;
 	stats_container->json_size = (uint32_t)strlen(stats_string);
 
 	stats_container->stats.receiver_flow.peer_count = (uint32_t)flow->peer_lst_len;

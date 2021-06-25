@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "config.h"
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
@@ -628,8 +629,10 @@ int rist_stats_free(const struct rist_stats *stats_container)
 {
 	if (!stats_container)
 		return -1;
+#if HAVE_CJSON
 	if (stats_container->stats_json)
 		free(stats_container->stats_json);
+#endif
 	free((void *)stats_container);
 	return 0;
 }
