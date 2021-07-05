@@ -160,28 +160,24 @@ if builtin_cjson
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
-#if not builtin_lz4
-#	lz4_lib = dependency('liblz4', required: required_library)
-#	if not lz4_lib.found()
-#		builtin_lz4 = true
-#	endif
-#endif
-#if builtin_lz4
-#	message('Using builtin lz4 library')
-#	lz4_lib = declare_dependency( compile_args : [ '-DLZ4LIB_VISIBILITY=',  '-DLZ4FLIB_API='],
-#								  sources: ['contrib/lz4/lz4.c',
-#											'contrib/lz4/lz4frame.c',
-#											'contrib/lz4/lz4hc.c',
-#											'contrib/lz4/xxhash.c',],
-#								  include_directories: include_directories('contrib/lz4'))
-#endif
-
 if use_mbedtls
 	message('Building mbedtls')
 	subdir('contrib/mbedtls')
 endif
 
 subdir('include')
+
+filter_obj = false
+objcopy = find_program('objcopy', native: true, required: false)
+
+if get_option('allow_obj_filter') and get_option('default_library') != 'shared' and not get_option('b_lto')
+	if objcopy.found()
+		message('Using objcopy to localize symbols in static library')
+		filter_obj = true
+	else
+		warning('objcopy not found, unable to localize symbols in static library')
+	endif
+endif
 
 librist = library('librist',
 	'src/crypto/crypto.c',
@@ -209,20 +205,36 @@ librist = library('librist',
 		deps,
 		stdatomic_dependency,
 		cjson_lib,
-#		lz4_lib
 	],
 	name_prefix : '',
 	version: librist_version,
 	soversion: librist_soversion,
+	prelink: filter_obj,
 	install: true)
 
-if get_option('built_tools')
-	message('Building tools')
-	subdir('tools')
-endif
-
-if get_option('test')
-	subdir('test')
+objcopy_fake_file = ''
+if filter_obj
+	lib_target = librist
+	if get_option('default_library') == 'both'
+		lib_target = librist.get_static_lib()
+	endif
+	objcopy_fake_file = custom_target('librist',
+		input: lib_target,
+		output: 'librist.is-stripped',
+		capture: true,
+		command: [
+			objcopy,
+			'--localize-hidden',
+			'-w',
+			'--localize-symbol=!rist*',
+			'--localize-symbol=!librist*',
+			'--localize-symbol=!udpsocket*',
+			'--localize-symbol=!evsocket*',
+			'--localize-symbol=*',
+			'@INPUT@',
+		],
+		build_by_default: true,
+	)
 endif
 
 pkg_mod = import('pkgconfig')
@@ -247,3 +259,12 @@ librist_dep = declare_dependency(include_directories: inc, link_with : librist)
 
 # Generate config.h
 config_h_target = configure_file(output: 'config.h', configuration: cdata)
+
+if get_option('built_tools')
+	message('Building tools')
+	subdir('tools')
+endif
+
+if get_option('test')
+	subdir('test')
+endif

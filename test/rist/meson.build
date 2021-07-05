@@ -4,6 +4,7 @@
 risttest_sources = [
     'example-test.c'
 ]
+
 cmocka = meson.get_compiler('c').find_library('cmocka', required: false)
 risttest_deps = [
     cmocka
@@ -14,7 +15,6 @@ risttest_lib_deps = [
 ]
 comockatests = cmocka.found()
 if cmocka.found()
-
     risttest = executable('risttest',
                             risttest_sources,
                             include_directories : inc,
@@ -23,10 +23,16 @@ if cmocka.found()
 
 endif
 
+extra_sources = ['../../contrib/time-shim.c','../../contrib/pthread-shim.c']
+
+if filter_obj
+	extra_sources += [objcopy_fake_file ]
+endif
+
+
 test_send_receive = executable('test_send_receive',
                                 'test_send_receive.c',
-				'../../contrib/time-shim.c',
-				'../../contrib/pthread-shim.c',
+                                extra_sources,
                                 include_directories: inc,
                                 link_with: librist,
                                 dependencies: [

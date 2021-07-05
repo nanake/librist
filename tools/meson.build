@@ -12,6 +12,10 @@ endif
 tools_deps += [	'../contrib/time-shim.c']
 tools_deps += [	'../contrib/pthread-shim.c']
 
+if filter_obj
+	tools_deps += [objcopy_fake_file ]
+endif
+
 srp_shared = []
 if use_mbedtls
 	srp_shared += 'srp_shared.c'
@@ -20,8 +24,8 @@ endif
 
 executable('ristsender',
 	['ristsender.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
-	link_with : [librist],
 	dependencies: [
+		librist_dep,
 		threads,
 		stdatomic_dependency,
 		tools_dependencies
@@ -31,25 +35,31 @@ executable('ristsender',
 
 executable('ristreceiver',
 	['ristreceiver.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
-	link_with : [librist],
 	dependencies: [
+		librist_dep,
 		tools_dependencies,
-		threads],
+		threads,
+	],
 	include_directories: inc,
 	install: true)
 
 executable('rist2rist',
 	['rist2rist.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
-	link_with : [librist],
-	dependencies: [tools_dependencies, threads],
+	dependencies: [
+		tools_dependencies,
+		threads,
+		librist_dep,
+	],
 	include_directories: inc,
 	install: true)
 
 if use_mbedtls
 	executable('ristsrppasswd',
 			['ristsrppasswd.c', '../contrib/srp.c', tools_deps],
-			link_with : [librist],
-			dependencies: [mbedcrypto_lib],
+			dependencies: [
+				mbedcrypto_lib,
+				librist_dep,
+			],
 			include_directories: inc,
 			install: true)
 endif
