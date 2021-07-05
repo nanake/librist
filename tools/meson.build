@@ -31,7 +31,7 @@ executable('ristsender',
 		tools_dependencies
 	],
 	include_directories: inc,
-	install: true)
+	install: should_install)
 
 executable('ristreceiver',
 	['ristreceiver.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
@@ -41,7 +41,7 @@ executable('ristreceiver',
 		threads,
 	],
 	include_directories: inc,
-	install: true)
+	install: should_install)
 
 executable('rist2rist',
 	['rist2rist.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
@@ -51,7 +51,7 @@ executable('rist2rist',
 		librist_dep,
 	],
 	include_directories: inc,
-	install: true)
+	install: should_install)
 
 if use_mbedtls
 	executable('ristsrppasswd',
@@ -61,6 +61,6 @@ if use_mbedtls
 				librist_dep,
 			],
 			include_directories: inc,
-			install: true)
+			install: should_install)
 endif
 

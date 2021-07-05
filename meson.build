@@ -52,6 +52,11 @@ if not get_option('fallback_builtin')
 	required_library = true
 endif
 
+should_install = true
+if meson.is_subproject()
+	should_install = false
+endif
+
 threads = []
 test_args = []
 if host_machine.system() == 'windows'
@@ -210,7 +215,7 @@ librist = library('librist',
 	version: librist_version,
 	soversion: librist_soversion,
 	prelink: filter_obj,
-	install: true)
+	install: should_install)
 
 objcopy_fake_file = ''
 if filter_obj

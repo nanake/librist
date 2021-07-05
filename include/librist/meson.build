@@ -10,13 +10,15 @@ version_h_target = configure_file(input: 'version.h.in',
 								  output: 'version.h',
 								  configuration: version_h_data)
 
-install_headers('librist.h', 
-				'udpsocket.h',
-				'common.h',
-				'headers.h',
-				'logging.h',
-				 version_h_target, subdir: 'librist')
+if should_install
+	install_headers('librist.h', 
+					'udpsocket.h',
+					'common.h',
+					'headers.h',
+					'logging.h',
+					version_h_target, subdir: 'librist')
 
-if use_mbedtls
-	install_headers('librist_srp.h', subdir: 'librist')
+	if use_mbedtls
+		install_headers('librist_srp.h', subdir: 'librist')
+	endif
 endif
