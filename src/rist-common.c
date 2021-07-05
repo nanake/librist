@@ -3039,8 +3039,6 @@ protocol_bypass:
 					{
 						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
 							(now - peer->last_rtcp_received)/ RIST_CLOCK);
-						if (cctx->connection_status_callback)
-							cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CLIENT_TIMED_OUT);
 						kill_peer(peer);
 					}
 				}
@@ -3048,8 +3046,6 @@ protocol_bypass:
 			{
 				if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
 				{
-					if (peer->send_first_connection_event && cctx->connection_status_callback && (cctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
-						cctx->connection_status_callback(cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
 					rist_peer_remove(cctx, peer, NULL);
 				}
@@ -3261,7 +3257,8 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 			*next = NULL;
 	}
 	peer->shutdown = true;
-
+	if (peer->send_first_connection_event && ctx->connection_status_callback && (ctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
+		ctx->connection_status_callback(ctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 	if (peer->child)
 	{
 		while (peer->child) {
