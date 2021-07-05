@@ -971,11 +971,9 @@ peer_select:
 		peer = ctx->common.PEERS;
 		ctx->weight_counter = ctx->total_weight;
 		for (; peer; peer = peer->next) {
-			if (peer->listening || !peer->is_data)
-				continue;
 			peer->w_count = peer->config.weight;
 		}
-		if (!selected_peer_by_weight && peercnt > 0)
+		if (!looped && !selected_peer_by_weight && peercnt > 0)
 			goto peer_select;
 	}
 }
