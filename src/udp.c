@@ -1114,7 +1114,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		uint16_t src_port = buffer->src_port;
 		if (src_port == 0)
 			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, retry->peer->peer_data->config.virt_dst_port, true);
+		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
 		// update bandwidth value
 		rist_calculate_bitrate(ret, retry_bw);
 	}
