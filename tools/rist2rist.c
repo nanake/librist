@@ -166,7 +166,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 	int keysize =  setup->encryption_type * 128;
 	struct rist_peer_config app_peer_config = {
 		.version = RIST_PEER_CONFIG_VERSION,
-		.virt_dst_port = 1969,
+		.virt_dst_port = 1968,
 		.recovery_mode = RIST_DEFAULT_RECOVERY_MODE,
 		.recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE,
 		.recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN,
@@ -182,7 +182,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		.key_size = 0,
 	};
 
-	app_peer_config.virt_dst_port = setup->dst_port + 1;
+	app_peer_config.virt_dst_port = setup->dst_port;
 	app_peer_config.key_size = keysize;
 
 	if (setup->shared_secret != NULL) {
