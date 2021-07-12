@@ -2544,7 +2544,8 @@ protocol_bypass:
 					uint64_t dead_time = (now - p->last_rtcp_received);
 					p->dead = false;
 					//Only used on main profile
-					++p->parent->child_alive_count;
+					if (p->parent)
+						++p->parent->child_alive_count;
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 							"Peer %d was dead for %"PRIu64" ms and it is now alive again\n",
 								dead_time / RIST_CLOCK, p->adv_peer_id);
@@ -3035,12 +3036,9 @@ protocol_bypass:
 			{
 				if ((now - peer->last_rtcp_received) > peer->session_timeout)
 				{
-					if (peer->parent)
-					{
-						rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
-							(now - peer->last_rtcp_received)/ RIST_CLOCK);
-						kill_peer(peer);
-					}
+					rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
+						(now - peer->last_rtcp_received)/ RIST_CLOCK);
+					kill_peer(peer);
 				}
 			} else if (peer->dead && peer->parent)
 			{

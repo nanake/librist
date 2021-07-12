@@ -881,6 +881,7 @@ void rist_sender_send_data_balanced(struct rist_sender *ctx, struct rist_buffer 
 
 	//We can do it safely here, since this function is only to be called once per packet
 	buffer->seq = ctx->common.seq++;
+	uint64_t now = timestampNTP_u64();
 
 peer_select:
 
@@ -920,13 +921,13 @@ peer_select:
 						//do nothing
 					} else
 #endif
-					if (child->is_data && !child->dead) {
-					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
+					if (child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
+						uint8_t *payload = buffer->data;
+						rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 					}
 					child = child->sibling_next;
 				}
-			} else {
+			} else if (!peer->dead || (peer->dead && (peer->dead_since + peer->recovery_buffer_ticks) < now)) {
 				uint8_t *payload = buffer->data;
 				rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			}
@@ -953,13 +954,13 @@ peer_select:
 						//do nothing
 					} else
 #endif
-				if (child->is_data && !child->dead) {
+				if (child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
 					uint8_t *payload = buffer->data;
 					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port,  buffer->seq_rtp);
 				}
 				child = child->sibling_next;
 			}
-		} else {
+		} else if (!peer->dead || (peer->dead && (peer->dead_since + peer->recovery_buffer_ticks) < now)) {
 			uint8_t *payload = buffer->data;
 			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 			ctx->weight_counter--;
