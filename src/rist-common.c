@@ -1757,10 +1757,10 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 
 		if (peer->flow) {
 			// We do multiple ifs to make these checks stateless
+			pthread_mutex_lock(&peer->flow->mutex);
 			if (!peer->flow->receiver_thread) {
 				// Make sure this data out thread is created only once per flow
-				pthread_mutex_lock(&peer->flow->mutex);
-				if (pthread_create(&(peer->flow->receiver_thread), NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
+				if (pthread_create(&peer->flow->receiver_thread, NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Could not created receiver data output thread.\n");
 					return false;
@@ -2975,31 +2975,25 @@ protocol_bypass:
 #endif
 		// Default max jitter is 5ms
 		int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
+		if (max_output_jitter_ms > 100)
+			max_output_jitter_ms = 100;
+
 		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
 
 		while (true) {
-			pthread_mutex_lock(&flow->mutex);
+			pthread_mutex_lock(&(flow->mutex));
+			int ret = pthread_cond_timedwait_ms(&flow->condition, &flow->mutex, max_output_jitter_ms);
+			if (ret && ret != ETIMEDOUT)
+				rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
+			if (flow->shutdown > 0)
+				break;
 			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
 			}
 			pthread_mutex_unlock(&(flow->mutex));
-			pthread_mutex_lock(&(flow->mutex));
-			int ret = pthread_cond_timedwait_ms(&(flow->condition), &(flow->mutex), max_output_jitter_ms);
-			if (flow->shutdown)
-			{
-				pthread_mutex_unlock(&(flow->mutex));
-				break;
-			}
-			pthread_mutex_unlock(&(flow->mutex));
-			if (ret && ret != ETIMEDOUT)
-				rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
-			//rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "LOOP TIME is %"PRIu64" us\n", (timestampNTP_u64() - now) * 1000 / RIST_CLOCK);
-			//now = timestampNTP_u64();
 		}
-
- 		pthread_mutex_lock(&flow->mutex);
+		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Data output thread shutting down\n");
 		flow->shutdown = 2;
-		flow->receiver_thread_running = false;
 		pthread_mutex_unlock(&flow->mutex);
 		return 0;
 	}

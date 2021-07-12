@@ -83,10 +83,10 @@ void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 	f->shutdown = 1;
 	bool running = f->receiver_thread_running;
 	pthread_mutex_unlock(&f->mutex);
+	pthread_cond_signal(&f->condition);
 	if (running)
-	{
 		pthread_join(f->receiver_thread, NULL);
-	}
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Resetting peer states\n");
 	struct rist_peer *p = NULL;
 	for (size_t i = 0; i <f->peer_lst_len; i++)
 	{

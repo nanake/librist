@@ -401,13 +401,6 @@ int rist_sender_create(struct rist_ctx **_ctx, enum rist_profile profile,
 
 	ctx->sender_initialized = true;
 
-	if (pthread_create(&ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created sender thread.\n");
-		ret = -3;
-		goto free_ctx_and_ret;
-	}
-
 	*_ctx = rist_ctx;
 	return 0;
 
@@ -962,34 +955,53 @@ int rist_peer_destroy(struct rist_ctx *ctx, struct rist_peer *peer) {
 
 static int rist_sender_start(struct rist_sender *ctx)
 {
-	if (!ctx->sender_initialized)
-	{
-		return -1;
+	pthread_mutex_lock(&ctx->mutex);
+	if (!ctx->protocol_running) {
+		if (pthread_create(&ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)
+		{
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created sender thread.\n");
+			goto unlock_failed;
+		}
+		ctx->protocol_running = true;
+	} else {
+		goto unlock_failed;
 	}
-
 	if (ctx->total_weight > 0)
 	{
 		ctx->weight_counter = ctx->total_weight;
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Total weight: %lu\n", ctx->total_weight);
 	}
-	pthread_mutex_lock(&ctx->mutex);
 	ctx->common.startup_complete = true;
+
 	pthread_mutex_unlock(&ctx->mutex);
 	return 0;
+
+unlock_failed:
+	pthread_mutex_unlock(&ctx->mutex);
+	return -1;
 }
 
 static int rist_receiver_start(struct rist_receiver *ctx)
 {
-	if (!ctx->receiver_thread)
+	pthread_mutex_lock(&ctx->mutex);
+	if (!ctx->protocol_running)
 	{
 		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0)
 		{
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create receiver protocol thread.\n");
-			return -1;
+			goto unlock_failed;
 		}
+		ctx->protocol_running = true;
+	} else {
+		goto unlock_failed;
 	}
 
+	pthread_mutex_unlock(&ctx->mutex);
 	return 0;
+
+unlock_failed:
+	pthread_mutex_unlock(&ctx->mutex);
+	return -1;
 }
 
 int rist_start(struct rist_ctx *ctx) {
@@ -1013,19 +1025,12 @@ static int rist_sender_destroy(struct rist_sender *ctx)
 	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	pthread_mutex_lock(&ctx->mutex);
 	ctx->common.shutdown = 1;
-	uint64_t start_time = timestampNTP_u64();
-	while (ctx->sender_thread && ctx->common.shutdown != 2)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
-		usleep(5000);
-		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
-		{
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
-			assert(0);
-		}
-	}
-	pthread_join(ctx->sender_thread, NULL);
+	bool running = ctx->protocol_running;
+	pthread_mutex_unlock(&ctx->mutex);
+	if (running)
+		pthread_join(ctx->sender_thread, NULL);
 	rist_sender_destroy_local(ctx);
 
 	return 0;
@@ -1039,19 +1044,12 @@ static int rist_receiver_destroy(struct rist_receiver *ctx)
 	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	pthread_mutex_lock(&ctx->mutex);
 	ctx->common.shutdown = 1;
-	uint64_t start_time = timestampNTP_u64();
-	while (ctx->receiver_thread && ctx->common.shutdown != 2)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Waiting for protocol loop to exit\n");
-		usleep(5000);
-		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 10000)
-		{
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Protocol loop took more than 10 seconds to exit. Something is wrong!\n");
-			assert(0);
-		}
-	}
-	pthread_join(ctx->receiver_thread, NULL);
+	bool running = ctx->protocol_running;
+	pthread_mutex_unlock(&ctx->mutex);
+	if (running)
+		pthread_join(ctx->receiver_thread, NULL);
 	rist_receiver_destroy_local(ctx);
 
 	return 0;

@@ -360,6 +360,7 @@ struct rist_receiver {
 	int receiver_data_ready_notify_fd;
 
 	/* Receiver thread variables */
+	bool protocol_running;
 	pthread_t receiver_thread;
 
 	/* Reporting id */
@@ -385,6 +386,7 @@ struct rist_sender {
 	bool null_packet_suppression;
 
 	/* Sender thread variables */
+	bool protocol_running;
 	pthread_t sender_thread;
 	/* data/nacks out thread signaling */
 	pthread_cond_t condition;
