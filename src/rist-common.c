@@ -1270,7 +1270,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 	}
 
 	if (config->session_timeout > 0) {
-		if (p->session_timeout < 250) {
+		if (config->session_timeout < 250) {
 			rist_log_priv(&ctx->common, RIST_LOG_WARN, "The configured (%d ms) peer session timeout is too small, using %d ms instead\n",
 				config->session_timeout, 250);
 			p->session_timeout = 250 * RIST_CLOCK;
