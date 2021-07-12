@@ -1833,6 +1833,12 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 		rtt = peer->config.recovery_reorder_buffer;
 	}
 
+	if (peer->flow->flow_id_actual != flow_id) {
+		rist_log_priv(&ctx->common, RIST_LOG_NOTICE, "Detected flow id change, old flow id: %u new id: %u, resetting state\n", peer->flow->flow_id_actual, flow_id);
+		peer->flow->receiver_queue_has_items = false;
+		peer->flow->flow_id_actual = flow_id;
+	}
+
 	// Wake up output thread when data comes in
 	if (pthread_cond_signal(&(peer->flow->condition)))
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Call to pthread_cond_signal failed.\n");

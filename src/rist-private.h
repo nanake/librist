@@ -212,6 +212,7 @@ struct rist_flow {
 	uint32_t missing_counter_max;
 
 	uint32_t flow_id;
+	uint32_t flow_id_actual;
 	int dead;
 	struct rist_flow *next;
 	struct rist_peer **peer_lst;
