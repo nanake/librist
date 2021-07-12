@@ -305,19 +305,16 @@ int main(int argc, char *argv[])
 		callback_object.mpeg[i] = 0;
 		callback_object.udp_config[i] = NULL;
 	}
-	if (data_read_mode != DATA_READ_MODE_CALLBACK)
-	{
 #ifdef _WIN32
 #define STDERR_FILENO 2
-		signal(SIGINT, intHandler);
-		signal(SIGTERM, intHandler);
-		signal(SIGABRT, intHandler);
+	signal(SIGINT, intHandler);
+	signal(SIGTERM, intHandler);
+	signal(SIGABRT, intHandler);
 #else
-		struct sigaction act = { {0} };
-		act.sa_handler = intHandler;
-		sigaction(SIGINT, &act, NULL);
+	struct sigaction act = { {0} };
+	act.sa_handler = intHandler;
+	sigaction(SIGINT, &act, NULL);
 #endif
-	}
 	// Default log settings
     struct rist_logging_settings *log_ptr = &logging_settings;
     if (rist_logging_set(&log_ptr, loglevel, NULL, NULL, NULL,
@@ -667,7 +664,7 @@ next:
 		}
 	}
 #endif
-
+	fprintf(stderr, "DESTROY\n");
 	rist_destroy(ctx);
 
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
