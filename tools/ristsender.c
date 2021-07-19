@@ -424,6 +424,8 @@ int main(int argc, char *argv[])
 	int faststart = 0;
 	struct rist_sender_args peer_args;
 	char *remote_log_address = NULL;
+	bool thread_started[MAX_INPUT_COUNT +1] = {false};
+	pthread_t thread_main_loop[MAX_INPUT_COUNT+1] = { 0 };
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
@@ -654,13 +656,12 @@ next:
 		goto shutdown;
 	}
 
-	pthread_t thread_main_loop[MAX_INPUT_COUNT+1] = { 0 };
-
 	if (evctx && pthread_create(&thread_main_loop[0], NULL, input_loop, (void *)callback_object) != 0)
 	{
 		fprintf(stderr, "Could not start udp receiver thread\n");
 		goto shutdown;
 	}
+	thread_started[0] = true;
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
@@ -676,6 +677,7 @@ next:
 			fprintf(stderr, "Could not start send rist receiver thread\n");
 			goto shutdown;
 		}
+		thread_started[i+1] = true;
 	}
 
 #ifdef _WIN32
@@ -704,7 +706,7 @@ shutdown:
 	}
 
 	for (size_t i = 0; i <= MAX_INPUT_COUNT; i++) {
-		if (thread_main_loop[i])
+		if (thread_started[i])
 			pthread_join(thread_main_loop[i], NULL);
 	}
 
