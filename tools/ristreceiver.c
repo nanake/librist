@@ -518,7 +518,7 @@ int main(int argc, char *argv[])
 
 		// Open the output socket
 		callback_object.mpeg[i] = udpsocket_open_connect(hostname, outputport, udp_config->miface);
-		if (callback_object.mpeg[i] <= 0) {
+		if (callback_object.mpeg[i] < 0) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not connect to: Host %s, Port %d\n", (char *) hostname, outputport);
 			goto next;
 		} else {

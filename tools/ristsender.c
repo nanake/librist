@@ -630,7 +630,7 @@ int main(int argc, char *argv[])
 			rist_log(&logging_settings, RIST_LOG_INFO, "URL parsed successfully: Host %s, Port %d\n", (char *) hostname, inputport);
 
 			callback_object[i].sd = udpsocket_open_bind(hostname, inputport, udp_config->miface);
-			if (callback_object[i].sd <= 0) {
+			if (callback_object[i].sd < 0) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not bind to: Host %s, Port %d, miface %s.\n",
 					(char *) hostname, inputport, udp_config->miface);
 				goto next;
