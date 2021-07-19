@@ -545,23 +545,24 @@ int main(int argc, char *argv[])
 	bool atleast_one_socket_opened = false;
 	char *saveptrinput;
 	char *inputtoken = strtok_r(inputurl, ",", &saveptrinput);
+	struct rist_udp_config *udp_config = NULL;
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (!inputtoken)
 			break;
 
 		// First parse extra url and parameters
-		struct rist_udp_config *udp_config = NULL;
 		if (rist_parse_udp_address2(inputtoken, &udp_config)) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse inputurl %s\n", inputtoken);
 			goto next;
 		}
 
 		// Check for duplicate stream-ids and reject the entire config if we have any dups
+		bool found_empty = false;
 		for (size_t j = 0; j < MAX_INPUT_COUNT; j++) {
-			if (stream_id_check[j] == -1) {
+			if (stream_id_check[j] == -1 && !found_empty) {
 				stream_id_check[j] = (int32_t)udp_config->stream_id;
 				rist_log(&logging_settings, RIST_LOG_INFO, "Assigning stream-id %d to this input\n", udp_config->stream_id);
-				break;
+				found_empty = true;
 			} else if ((uint16_t)stream_id_check[j] == udp_config->stream_id) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Every input must have a unique stream-id (%d) when you multiplex\n", udp_config->stream_id);
 				goto shutdown;
@@ -612,6 +613,8 @@ int main(int argc, char *argv[])
 			struct rist_peer *peer = setup_rist_peer(&peer_args);
 			if (peer == NULL)
 				atleast_one_socket_opened = true;
+			rist_udp_config_free2(&udp_config);
+			udp_config = NULL;
 		}
 		else {
 			if(!evctx)
@@ -637,7 +640,7 @@ int main(int argc, char *argv[])
 				atleast_one_socket_opened = true;
 			}
 			callback_object[i].udp_config = udp_config;
-
+			udp_config = NULL;
 			callback_object[i].evctx = evctx;
 			event[i] = evsocket_addevent(callback_object[i].evctx, callback_object[i].sd, EVSOCKET_EV_READ, input_udp_recv, input_udp_sockerr,
 				(void *)&callback_object[i]);
@@ -682,6 +685,9 @@ next:
 #endif
 
 shutdown:
+	if (udp_config) {
+		rist_udp_config_free2(&udp_config);
+	}
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		// Remove socket events
 		if (event[i])
