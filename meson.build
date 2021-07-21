@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 project('libRIST', 'c',
-	version: '0.2.5',
+	version: '0.2.6',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
         meson_version: '>= 0.51.0')
 
@@ -18,7 +18,7 @@ cdata = configuration_data()
 #If any interfaces have been added since the last public release, then increment age.
 #If any interfaces have been removed or changed since the last public release, then set age to 0.
 librist_abi_current = 5
-librist_abi_revision = 3
+librist_abi_revision = 4
 librist_abi_age = 1
 librist_soversion = librist_abi_current - librist_abi_age
 librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
