@@ -1758,17 +1758,16 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 		if (peer->flow) {
 			// We do multiple ifs to make these checks stateless
 			pthread_mutex_lock(&peer->flow->mutex);
-			if (!peer->flow->receiver_thread) {
+			if (!peer->flow->receiver_thread_running) {
 				// Make sure this data out thread is created only once per flow
 				if (pthread_create(&peer->flow->receiver_thread, NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Could not created receiver data output thread.\n");
 					return false;
-					pthread_mutex_unlock(&peer->flow->mutex);
 				}
 				peer->flow->receiver_thread_running = true;
-				pthread_mutex_unlock(&peer->flow->mutex);
 			}
+			pthread_mutex_unlock(&peer->flow->mutex);
 			rist_peer_authenticate(peer);
 			peer->flow->authenticated = true;
 			rist_log_priv(&ctx->common, RIST_LOG_INFO,
