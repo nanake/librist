@@ -942,7 +942,6 @@ peer_select:
 		}
 	}
 	looped = true;
-
 	if (selected_peer_by_weight) {
 		peer = selected_peer_by_weight;
 		if (peer->listening) {
@@ -963,9 +962,9 @@ peer_select:
 		} else if (!peer->dead || (peer->dead && (peer->dead_since + peer->recovery_buffer_ticks) < now)) {
 			uint8_t *payload = buffer->data;
 			rist_send_common_rtcp(peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
-			ctx->weight_counter--;
-			peer->w_count--;
 		}
+		ctx->weight_counter--;
+		peer->w_count--;
 	}
 
 	if (ctx->total_weight > 0 && (ctx->weight_counter == 0 || !selected_peer_by_weight)) {
