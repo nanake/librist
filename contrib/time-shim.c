@@ -9,7 +9,7 @@
 
 #include "time-shim.h"
 
-#ifdef _WIN32
+#if defined(_WIN32) && !defined(HAVE_CLOCK_GETTIME)
 #define _WINSOCKAPI_
 # include <windows.h>
 # include <errno.h>

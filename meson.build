@@ -66,6 +66,9 @@ if host_machine.system() == 'windows'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
 	if get_option('have_mingw_pthreads')
+		if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
+			cdata.set('HAVE_CLOCK_GETTIME', 1)
+		endif
 		if cc.has_header('pthread.h')
 			threads = cc.find_library('winpthread', static: true)
 			deps += threads
@@ -96,7 +99,7 @@ else
 	elif host_machine.system() != 'darwin'
 		lib_rt = cc.find_library('rt', required: false)
 		if not cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : lib_rt)
-		error('clock_gettime not found')
+			error('clock_gettime not found')
 		endif
 		deps += [ lib_rt ]
 		cdata.set('HAVE_CLOCK_GETTIME', 1)

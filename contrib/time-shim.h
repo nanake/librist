@@ -8,9 +8,9 @@
 #ifndef __TIME_SHIM_H
 #define __TIME_SHIM_H
 
-# include "config.h"
+#include "config.h"
 
-#if defined(_WIN32)
+#if defined(_WIN32) && !defined (HAVE_CLOCK_GETTIME)
 #define usleep(a)	Sleep((a)/1000)
 # include <winsock2.h>
 # include <time.h>
