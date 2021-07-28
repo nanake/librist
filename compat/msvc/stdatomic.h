@@ -51,8 +51,12 @@ typedef enum {
 #define atomic_fetch_sub(p_a, dec)    InterlockedExchangeAdd((LPLONG)p_a, -(int)(dec))
 #define atomic_fetch_add_explicit(p_a, inc, mo)   atomic_fetch_add(p_a, inc)
 #define atomic_fetch_sub_explicit(p_a, inc, mo)   atomic_fetch_sub(p_a, inc)
-#define atomic_compare_exchange_weak(object, expected, desired) InterlockedCompareExchange((LONG*)object, expected, desired)
-
+static inline int atomic_compare_exchange_weak(intptr_t *obj, intptr_t *expected, intptr_t desired)
+{
+    intptr_t old = *expected;
+	*expected = (intptr_t)InterlockedCompareExchange((PVOID *)obj,(PVOID) desired, (PVOID)*expected);
+	return old == *expected;
+}
 
 #endif /* ! stdatomic.h */
 
