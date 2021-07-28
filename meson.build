@@ -66,14 +66,14 @@ if host_machine.system() == 'windows'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
 	if get_option('have_mingw_pthreads')
-		if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
-			cdata.set('HAVE_CLOCK_GETTIME', 1)
-		endif
 		if cc.has_header('pthread.h')
 			threads = dependency('threads')
 			deps += threads
 			add_project_arguments(['-DHAVE_PTHREAD_H'], language: 'c')
 			cdata.set('HAVE_PTHREADS', 1)
+					if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies: threads)
+			cdata.set('HAVE_CLOCK_GETTIME', 1)
+		endif
 		endif
 	endif
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')

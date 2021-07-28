@@ -10,10 +10,17 @@
 
 #include "config.h"
 
-#if defined(_WIN32) && !defined (HAVE_CLOCK_GETTIME)
+#if defined(_WIN32)
+#include <winsock2.h>
+#include <time.h>
 #define usleep(a)	Sleep((a)/1000)
-# include <winsock2.h>
-# include <time.h>
+
+#ifdef HAVE_CLOCK_GETTIME
+
+#define gettimeofday mingw_gettimeofday
+typedef struct timespec timespec_t;
+
+#else
 
 #ifndef CLOCK_REALTIME
 #define CLOCK_REALTIME 0
@@ -33,10 +40,9 @@
 
 typedef int clockid_t;
 int gettimeofday(struct timeval *tv, void * not_implemented);
-
-typedef struct timespec timespec_t;
 int clock_gettime(clockid_t clock, timespec_t *tp);
 
+#endif /* HAVE_CLOCK_GETTIME */
 #elif defined(__APPLE__)
 #  define CLOCK_REALTIME_OSX 0
 #  define CLOCK_MONOTONIC_OSX 1
