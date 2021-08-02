@@ -244,8 +244,8 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		assert(cb_arg->sender_ctx != NULL);
 		rist_sender_flow_id_set(cb_arg->sender_ctx, b->flow_id);
 	}
-	//b->virt_src_port = cb_arg->src_port;
-	//b->virt_dst_port = cb_arg->dst_port; 
+	b->virt_src_port = cb_arg->src_port;
+	b->virt_dst_port = cb_arg->dst_port; 
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
 	int ret = rist_sender_data_write(cb_arg->sender_ctx, b);
 	rist_receiver_data_block_free2(&b);
