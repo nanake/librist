@@ -603,6 +603,13 @@ static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, uint64
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Packet %"PRIu32" too late, dropping!\n", seq);
 			pthread_mutex_lock(&(get_cctx(peer)->stats_lock));
 			f->stats_instant.dropped_late++;
+                        if (f->stats_instant.dropped_late > 5 * f->stats_instant.received)
+                            f->receiver_queue_has_items = false;
+			if ((f->stats_instant.dropped_late > (f->stats_instant.received * 5) && f->stats_instant.received > 100) ||
+				(f->stats_instant.dropped_late > 100 && f->stats_instant.received == 0)) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Too many late packets received, resetting flow");
+					f->receiver_queue_has_items = false;
+			}
 			pthread_mutex_unlock(&(get_cctx(peer)->stats_lock));
 			return -1;
 		}
