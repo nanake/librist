@@ -182,7 +182,7 @@ struct nacks {
 };
 
 struct rist_flow {
-	volatile int shutdown;
+	atomic_int shutdown;
 	int max_output_jitter;
 
 	struct rist_buffer *receiver_queue[RIST_SERVER_QUEUE_BUFFERS]; /* output queue */
@@ -271,8 +271,8 @@ struct rist_retry {
 };
 
 struct rist_common_ctx {
-	volatile int shutdown;
-	volatile bool startup_complete;
+	atomic_int shutdown;
+	atomic_bool startup_complete;
 
 	/* Used by logging */
 	intptr_t sender_id;
@@ -566,7 +566,7 @@ struct rist_peer {
 	struct rist_bandwidth_estimation retry_bw;
 
 	/* shutting down flag */
-	volatile bool shutdown;
+	atomic_bool shutdown;
 
 	/* Timers */
 	uint32_t rtcp_keepalive_interval;

@@ -971,7 +971,7 @@ static int rist_sender_start(struct rist_sender *ctx)
 		ctx->weight_counter = ctx->total_weight;
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Total weight: %lu\n", ctx->total_weight);
 	}
-	ctx->common.startup_complete = true;
+	atomic_store_explicit(&ctx->common.startup_complete, true, memory_order_release);
 
 	pthread_mutex_unlock(&ctx->mutex);
 	return 0;
@@ -1025,8 +1025,8 @@ static int rist_sender_destroy(struct rist_sender *ctx)
 	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	atomic_store_explicit(&ctx->common.shutdown, 1, memory_order_release);
 	pthread_mutex_lock(&ctx->mutex);
-	ctx->common.shutdown = 1;
 	bool running = ctx->protocol_running;
 	pthread_mutex_unlock(&ctx->mutex);
 	if (running)
@@ -1044,8 +1044,8 @@ static int rist_receiver_destroy(struct rist_receiver *ctx)
 	}
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering protocol loop termination\n");
+	atomic_store_explicit(&ctx->common.shutdown, 1, memory_order_release);
 	pthread_mutex_lock(&ctx->mutex);
-	ctx->common.shutdown = 1;
 	bool running = ctx->protocol_running;
 	pthread_mutex_unlock(&ctx->mutex);
 	if (running)

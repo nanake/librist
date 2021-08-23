@@ -2165,7 +2165,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	struct rist_peer *peer = (struct rist_peer *)arg;
 	//struct rist_common_ctx *ctx = get_cctx(peer);
 
-	if (!peer || peer->shutdown || !peer->is_rtcp) {
+	if (!peer || atomic_load_explicit(&peer->shutdown, memory_order_acquire) || !peer->is_rtcp) {
 		return;
 	}
 
@@ -2283,7 +2283,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		RIST_MARK_UNUSED(fd);
 
 		struct rist_peer *peer = (struct rist_peer *) arg;
-		if (peer->shutdown) {
+		if (atomic_load_explicit(&peer->shutdown, memory_order_acquire)) {
 			return;
 		}
 
@@ -3011,7 +3011,7 @@ protocol_bypass:
 			int ret = pthread_cond_timedwait_ms(&flow->condition, &flow->mutex, max_output_jitter_ms);
 			if (ret && ret != ETIMEDOUT)
 				rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
-			if (flow->shutdown > 0)
+			if (atomic_load_explicit(&flow->shutdown,memory_order_acquire) > 0)
 				break;
 			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 				receiver_output(receiver_ctx, flow);
@@ -3019,7 +3019,7 @@ protocol_bypass:
 			pthread_mutex_unlock(&(flow->mutex));
 		}
 		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Data output thread shutting down\n");
-		flow->shutdown = 2;
+		atomic_store_explicit(&flow->shutdown, 2, memory_order_release);
 		pthread_mutex_unlock(&flow->mutex);
 		return 0;
 	}
@@ -3088,11 +3088,11 @@ protocol_bypass:
 		ctx->stats_next_time = now;
 		ctx->checks_next_time = now;
 		uint64_t nacks_next_time = now;
-		while(!ctx->common.shutdown) {
+		while(!atomic_load_explicit(&ctx->common.shutdown, memory_order_acquire)) {
 			// Conditional 5ms sleep that is woken by data coming in
 			pthread_mutex_lock(&(ctx->mutex));
 			int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
-			if (RIST_UNLIKELY(!ctx->common.startup_complete)) {
+			if (RIST_UNLIKELY(!atomic_load_explicit(&ctx->common.startup_complete, memory_order_acquire))) {
 				pthread_mutex_unlock(&(ctx->mutex));
 				continue;
 			}
@@ -3160,7 +3160,7 @@ protocol_bypass:
 		WSACleanup();
 #endif
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Exiting master sender loop\n");
-		ctx->common.shutdown = 2;
+		atomic_store_explicit(&ctx->common.shutdown, 2, memory_order_release);
 
 		return 0;
 	}
@@ -3273,7 +3273,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		if (next)
 			*next = NULL;
 	}
-	peer->shutdown = true;
+	atomic_store_explicit(&peer->shutdown, true, memory_order_release);
 	if (peer->send_first_connection_event && ctx->connection_status_callback && (ctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
 		ctx->connection_status_callback(ctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 	if (peer->child)
@@ -3629,7 +3629,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	uint64_t checks_next_time = now;
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting receiver protocol loop with %d ms timer\n", max_jitter_ms);
 
-	while (!ctx->common.shutdown) {
+	while (!atomic_load_explicit(&ctx->common.shutdown, memory_order_acquire)) {
 		now  = timestampNTP_u64();
 		pthread_mutex_lock(&ctx->common.peerlist_lock);
 		if (ctx->common.PEERS == NULL) {
@@ -3736,7 +3736,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	WSACleanup();
 #endif
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Exiting master receiver loop\n");
-	ctx->common.shutdown = 2;
+	atomic_store_explicit(&ctx->common.shutdown, 2, memory_order_release);
 
 	return 0;
 }

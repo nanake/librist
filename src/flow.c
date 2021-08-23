@@ -79,11 +79,12 @@ void rist_flush_missing_flow_queue(struct rist_flow *flow)
 void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f)
 {
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Triggering data output thread termination\n");
+	//This needs to be before the lock, as we may (happens rarely) fail to acquire it at all, due to output thread
+	//locking/unlocking too quickly.
+	atomic_store_explicit(&f->shutdown, 1, memory_order_release);
 	pthread_mutex_lock(&f->mutex);
-	f->shutdown = 1;
 	bool running = f->receiver_thread_running;
 	pthread_mutex_unlock(&f->mutex);
-	pthread_cond_signal(&f->condition);
 	if (running)
 		pthread_join(f->receiver_thread, NULL);
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Resetting peer states\n");
