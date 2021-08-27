@@ -828,7 +828,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 	else
 		now = timestampNTP_RTC_u64();
 	size_t output_idx = atomic_load_explicit(&f->receiver_queue_output_idx, memory_order_acquire);
-	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0) {
+	while (atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire) > 0 && atomic_load_explicit(&f->shutdown, memory_order_acquire) == 0) {
 		// Find the first non-null packet in the queuecounter loop
 		struct rist_buffer *b = f->receiver_queue[output_idx];
 		size_t holes = 0;
