@@ -934,6 +934,46 @@ int rist_peer_create(struct rist_ctx *ctx, struct rist_peer **peer, const struct
 	return ret;
 }
 
+int rist_peer_weight_set(struct rist_ctx *ctx, struct rist_peer *peer, const uint32_t weight)
+{
+	if (!ctx)
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_peer_weight_set call with null ctx\n");
+		return -1;
+	}
+
+	if (peer->parent != NULL)
+	{
+		rist_log_priv3(RIST_LOG_ERROR, "rist_peer_weight_set cannot be applied to peer with parent\n");
+		return -1;
+	}
+
+	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx)
+	{
+		struct rist_receiver *rctx = ctx->receiver_ctx;
+		pthread_mutex_lock(&rctx->common.peerlist_lock);
+		peer->config.weight = weight;
+		peer->w_count = weight;
+		pthread_mutex_unlock(&rctx->common.peerlist_lock);
+	}
+	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx)
+	{
+		struct rist_sender *sctx = ctx->sender_ctx;
+		pthread_mutex_lock(&sctx->mutex);
+		pthread_mutex_lock(&sctx->common.peerlist_lock);
+		sctx->total_weight -= peer->config.weight;
+		peer->config.weight = weight;
+		peer->w_count = weight;
+		sctx->total_weight += weight;
+		pthread_mutex_unlock(&sctx->common.peerlist_lock);
+		pthread_mutex_unlock(&sctx->mutex);
+	}
+	else
+		return -1;
+
+	return 0;
+}
+
 int rist_peer_destroy(struct rist_ctx *ctx, struct rist_peer *peer) {
 	if (!ctx) {
 		rist_log_priv3(RIST_LOG_ERROR, "rist_peer_destroy call with null ctx\n");

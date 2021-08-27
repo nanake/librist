@@ -288,6 +288,16 @@ RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
 		struct rist_peer *peer);
 
 /**
+ * @brief Set the weight of a given peer.
+ * 
+ * @param ctx RIST context
+ * @param peer The peer to set the weight for
+ * @param weight The weight to assign to the peer
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_peer_weight_set(struct rist_ctx *ctx, struct rist_peer *peer, const uint32_t weight);
+
+/**
  * @brief Set RIST max jitter
  *
  * Set max jitter
