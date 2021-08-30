@@ -897,7 +897,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							drop? "dropping" : "releasing");
 					
 				}
-				else if (b->target_output_time >= now) {
+				else if (b->target_output_time > now) {
 					// This is how we keep the buffer at the correct level
 					//rist_log_priv(&ctx->common, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
