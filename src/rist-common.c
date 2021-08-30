@@ -841,19 +841,13 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				holes++;
 				b = f->receiver_queue[counter];
 				if (counter == output_idx) {
-					// TODO: with the check below, this should never happen
+					// This should never happen, if this fires queue size is out of sync with reality.
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Did not find any data after a full counter loop (%zu)\n", atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 					// if the entire buffer is empty, something is very wrong, reset the queue ...
 					f->receiver_queue_has_items = false;
 					atomic_store_explicit(&f->receiver_queue_size, 0, memory_order_release);
 					// exit the function and wait 5ms (max jitter time)
 					return;
-				}
-				if (holes > f->missing_counter_max)
-				{
-					rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Did not find any data after %zu holes (%zu bytes in queue)\n",
-							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
-					break;
 				}
 			}
 			if (b) {
@@ -907,6 +901,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					//rist_log_priv(&ctx->common, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
 					break;
+				}
+				if (holes > 0)
+				{
+					rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Did not find any data after %zu holes (%zu bytes in queue)\n",
+							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 				}
 				//Reset the counter if our delay is correct
 				if (RIST_LIKELY(delay_rtc < recovery_buffer_ticks))
