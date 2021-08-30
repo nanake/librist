@@ -882,6 +882,11 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					if (RIST_UNLIKELY(delay_rtc > (2ULL * recovery_buffer_ticks))) {
 						f->too_late_ctr++;
 						drop = true;
+						if (f->too_late_ctr > 100) {
+							rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Too many old packets, resetting buffer\n");
+							f->receiver_queue_has_items = false;
+							return;
+						}
 						goto next;
 					}
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
@@ -890,11 +895,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							delay_rtc / RIST_CLOCK, delay / RIST_CLOCK,
 							recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK,
 							drop? "dropping" : "releasing");
-					if (f->too_late_ctr > 100) {
-						rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Too many old packets, resetting buffer\n");
-						f->receiver_queue_has_items = false;
-						return;
-					}
+					
 				}
 				else if (b->target_output_time >= now) {
 					// This is how we keep the buffer at the correct level
