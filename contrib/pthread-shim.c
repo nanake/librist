@@ -23,7 +23,7 @@ int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint
 #else
 #include <errno.h>
 
-static BOOL init_mutex_impl(PINIT_ONCE once_var, PVOID mutex, PVOID *param2) {
+static BOOL WINAPI init_mutex_impl(PINIT_ONCE once_var, PVOID mutex, PVOID *param2) {
   RIST_MARK_UNUSED(once_var);
   RIST_MARK_UNUSED(param2);
   if (pthread_mutex_init((pthread_mutex_t *)mutex, NULL) !=
