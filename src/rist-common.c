@@ -908,9 +908,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG, "Did not find any data after %zu holes (%zu bytes in queue)\n",
 							holes, atomic_load_explicit(&f->receiver_queue_size, memory_order_acquire));
 				}
-				//Reset the counter if our delay is correct
-				if (RIST_LIKELY(delay_rtc < recovery_buffer_ticks))
-					f->too_late_ctr = 0;
+				f->too_late_ctr = 0;
 				// Check sequence number and report lost packet
 				uint32_t next_seq = f->last_seq_output + 1;
 				if (f->short_seq)
