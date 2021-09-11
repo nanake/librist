@@ -208,9 +208,9 @@ RIST_API int rist_sender_data_write(struct rist_ctx *ctx, const struct rist_data
 
 /* OOB Specific functions, send and receive IP traffic inband in RIST Main Profile */
 /**
- * @brief Write data directly to a remote receiver peer.
+ * @brief Write data directly to a remote peer.
  *
- * This API is used to transmit out-of-band data to a remote receiver peer
+ * This API is used to transmit out-of-band data to a remote peer
  *
  * @param ctx RIST context
  * @param oob_block a pointer to the struct rist_oob_block
@@ -263,7 +263,7 @@ RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
 		void *arg);
 
 /**
- * @brief Add a peer connector to the existing sender.
+ * @brief Add a peer to the RIST session
  *
  * One sender can send data to multiple peers.
  *
@@ -277,7 +277,7 @@ RIST_API int rist_peer_create(struct rist_ctx *ctx,
 		struct rist_peer **peer, const struct rist_peer_config *config);
 
 /**
- * @brief Remove a peer connector to the existing sender.
+ * @brief Removes a peer from the RIST session.
  *
  * @param ctx RIST context
  * @param peer a pointer to the struct rist_peer, which
@@ -299,10 +299,10 @@ RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
 RIST_API int rist_jitter_max_set(struct rist_ctx *ctx, int t);
 
 /**
- * @brief Kickstart a pre-configured sender
+ * @brief Starts the RIST sender or receiver
  *
  * After all the peers have been added, this function triggers
- * the sender to start
+ * the RIST sender/receiver to start
  *
  * @param ctx RIST context
  * @return 0 on success, -1 in case of error.
@@ -310,9 +310,9 @@ RIST_API int rist_jitter_max_set(struct rist_ctx *ctx, int t);
 RIST_API int rist_start(struct rist_ctx *ctx);
 
 /**
- * @brief Destroy RIST sender
+ * @brief Destroy RIST sender/receiver
  *
- * Destroy the RIST instance
+ * Destroys the RIST instance
  *
  * @param ctx RIST context
  * @return 0 on success, -1 on error
