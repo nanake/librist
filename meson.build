@@ -175,12 +175,16 @@ subdir('include')
 filter_obj = false
 objcopy = find_program('objcopy', native: true, required: false)
 
+if get_option('allow_obj_filter') and cc.get_id() == 'clang'
+	error('allow_obj_filter doesn\'t work with clang due to it not supporting pre-linking')
+endif
+
 if get_option('allow_obj_filter') and get_option('default_library') != 'shared' and not get_option('b_lto')
 	if objcopy.found()
 		message('Using objcopy to localize symbols in static library')
 		filter_obj = true
 	else
-		warning('objcopy not found, unable to localize symbols in static library')
+		error('objcopy not found, unable to localize symbols in static library')
 	endif
 endif
 
