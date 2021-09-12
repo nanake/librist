@@ -15,10 +15,11 @@
 #include <time.h>
 #define usleep(a)	Sleep((a)/1000)
 
+typedef struct timespec timespec_t;
+
 #ifdef HAVE_CLOCK_GETTIME
 
 #define gettimeofday mingw_gettimeofday
-typedef struct timespec timespec_t;
 
 #else
 
