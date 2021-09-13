@@ -961,10 +961,13 @@ int rist_peer_weight_set(struct rist_ctx *ctx, struct rist_peer *peer, const uin
 		struct rist_sender *sctx = ctx->sender_ctx;
 		pthread_mutex_lock(&sctx->mutex);
 		pthread_mutex_lock(&sctx->common.peerlist_lock);
-		sctx->total_weight -= peer->config.weight;
+		uint32_t cur_weight = peer->config.weight;
 		peer->config.weight = weight;
-		peer->w_count = weight;
-		sctx->total_weight += weight;
+		if ((peer->listening && peer->child != NULL) || !peer->listening) {
+			sctx->total_weight -= cur_weight;
+			peer->w_count = peer->config.weight;
+			sctx->total_weight += peer->config.weight;
+		}
 		pthread_mutex_unlock(&sctx->common.peerlist_lock);
 		pthread_mutex_unlock(&sctx->mutex);
 	}

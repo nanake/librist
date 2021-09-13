@@ -654,8 +654,11 @@ static inline void peer_append(struct rist_peer *p)
 	if (p->parent)
 	{
 		struct rist_peer *peer = p->parent;
-		if (!peer->child)
+		if (!peer->child) {
 			peer->child = p;
+			if (peer->sender_ctx)
+				peer->sender_ctx->total_weight += p->config.weight;
+		}
 		else
 		{
 			struct rist_peer *child = peer->child;

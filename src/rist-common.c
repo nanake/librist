@@ -295,7 +295,7 @@ static void init_peer_settings(struct rist_peer *peer)
 			}
 		}
 
-		if (peer->config.weight > 0) {
+		if (!peer->listening && peer->config.weight > 0 && !peer->parent) {
 			ctx->total_weight += peer->config.weight;
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Peer weight: %lu\n", peer->config.weight);
 		}
@@ -2677,6 +2677,7 @@ protocol_bypass:
 			p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
 			p->adv_peer_id = ++cctx->peer_counter;
 			// Copy settings and init/update global variables that depend on settings
+			p->parent = peer;
 			peer_copy_settings(peer, p);
 			if (cctx->profile == RIST_PROFILE_SIMPLE) {
 				if (peer->address_family == AF_INET) {
@@ -2729,7 +2730,6 @@ protocol_bypass:
 				p->peer_data = peer->peer_data;
 			memcpy(&p->u.address, addr, addrlen);
 			p->sd = peer->sd;
-			p->parent = peer;
 			p->authenticated = false;
 			// Copy the event handler reference to prevent the creation of a new one (they are per socket)
 			p->event_recv = peer->event_recv;
@@ -3295,6 +3295,8 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		peer_remove_child(peer);
 		if (peer->parent->child == NULL) {
 			peer->parent->authenticated = false;
+			if (peer->sender_ctx)
+				peer->sender_ctx->total_weight -= peer->parent->config.weight;
 		}
 	}
 	peer_remove_linked_list(peer);
