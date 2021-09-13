@@ -1108,7 +1108,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	if (buffer->transmit_count >= retry->peer->config.max_retries) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
-			buffer->seq, buffer->transmit_count, data_age, buffer->transmit_count);
+			retry->seq, buffer->transmit_count, data_age, buffer->transmit_count);
 	}
 	else {
 		uint16_t src_port = buffer->src_port;
@@ -1121,7 +1121,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	if (ret < buffer->size) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, buffer->seq);
+			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, retry->seq);
 		retry->peer->stats_sender_instant.retrans_skip++;
 	} else {
 		if (retry->peer->peer_data)
@@ -1170,7 +1170,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			if (ctx->common.debug)
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Nack request for seq %" PRIu32 " with age %" PRIu64 "ms and rtt_min %" PRIu32 " for peer #%d\n",
-					buffer->seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id);
+					seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id);
 		} else if (ctx->peer_lst_len == 1) {
 			// Only one peer (faster algorithm with no lookups)
 			if (buffer->last_retry_request != 0)
@@ -1181,7 +1181,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				if (ctx->common.debug)
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms, age %" PRIu64 "ms and rtt_min %" PRIu32 "\n",
-						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
+						seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
 				uint64_t rtt = peer->last_mrtt;
 				if (peer->config.recovery_rtt_min > rtt)
 					rtt = peer->config.recovery_rtt_min;
@@ -1195,7 +1195,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu64 " ms\n",
-						buffer->seq, age_ticks / RIST_CLOCK, delta, rtt);
+						seq, age_ticks / RIST_CLOCK, delta, rtt);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
@@ -1204,7 +1204,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			{
 				if (ctx->common.debug)
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-						"First nack request for seq %"PRIu32", age %"PRIu64"ms\n", buffer->seq, age_ticks / RIST_CLOCK);
+						"First nack request for seq %"PRIu32", age %"PRIu64"ms\n", seq, age_ticks / RIST_CLOCK);
 			}
 		} else {
 			// Multiple peers, we need to search for other retries in the queue for comparison
@@ -1234,7 +1234,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
-						buffer->seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+						seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
@@ -1242,7 +1242,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			if (ctx->common.debug) {
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) and rtt_min %" PRIu32 " for peer #%d '%s'\n",
-					buffer->seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
+					seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
 			}
 		}
 	}
