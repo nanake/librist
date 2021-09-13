@@ -994,17 +994,9 @@ size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx)
 /* This function must return, 0 when there is nothing to send, < 0 on error and > 0 for bytes sent */
 ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 {
-//	rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-//			"\tCurrent read/write index are %zu/%zu \n", ctx->sender_retry_queue_read_index,
-//			ctx->sender_retry_queue_write_index);
-
-	// TODO: Is this logic flawed and we are always one unit behind (look at oob_dequee)
 	size_t sender_retry_queue_read_index = (ctx->sender_retry_queue_read_index + 1)& (ctx->sender_retry_queue_size -1);
 
 	if (sender_retry_queue_read_index == ctx->sender_retry_queue_write_index) {
-		//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-		//	"\t[GOOD] We are all up to date, index is %" PRIu64 "\n",
-		//	ctx->sender_retry_queue_read_index);
 		return 0;
 	}
 
@@ -1013,16 +1005,16 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	// If they request a non-sense seq number, we will catch it when we check the seq number against
 	// the one on that buffer position and it does not match
-
+	
 	size_t idx = rist_sender_index_get(ctx, retry->seq);
-	if (ctx->sender_queue[idx] == NULL) {
+	if (RIST_UNLIKELY(ctx->sender_queue[idx] == NULL)) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			" Couldn't find block %" PRIu32 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), consider increasing the buffer size\n",
 			retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
 			rist_get_sender_retry_queue_size(ctx));
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
-	} else if ((uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp) {
+	} else if (RIST_UNLIKELY((uint16_t)retry->seq != ctx->sender_queue[idx]->seq_rtp)) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			" Couldn't find block %" PRIu16 " (i=%zu/r=%zu/w=%zu/d=%zu/rs=%zu), found an old one instead %" PRIu32 " (%" PRIu64 "), bitrate is too high\n",
 			(uint16_t)retry->seq, idx, atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire), atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire), ctx->sender_queue_delete_index,
@@ -1068,9 +1060,10 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	// Check buffer element age
 	uint64_t now = timestampNTP_u64();
+	/* queue_time holds the original insertion time for this seq */
 	uint64_t data_age = (now - ctx->sender_queue[idx]->time) / RIST_CLOCK;
 	uint64_t retry_age = (now - retry->insert_time) / RIST_CLOCK;
-	if (retry_age > retry->peer->config.recovery_length_max) {
+	if (RIST_UNLIKELY(retry_age > retry->peer->config.recovery_length_max)) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Retry-request of element %" PRIu32 " (idx %zu) that was sent %" PRIu64
 				"ms ago has been in the queue too long to matter: %"PRIu64"ms > %ums\n",
@@ -1080,7 +1073,6 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	}
 
 	struct rist_buffer *buffer = ctx->sender_queue[idx];
-	/* queue_time holds the original insertion time for this seq */
 	if (ctx->common.debug)
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 			"Resending %"PRIu32"/%"PRIu32"/%"PRIu16" (idx %zu) after %" PRIu64
@@ -1090,46 +1082,34 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	uint8_t *payload = buffer->data;
 
-	// TODO: I do not think this check is needed anymore ... we fixed the bug that was causing
-	// this scenario ... and we have thread-locking to prevent this
-	/*
-	if (!payload)
-	{
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-			"Someone deleted my buffer when resending %" PRIu32 " (idx %zu) after %" PRIu64
-			"ms of first transmission and %"PRIu64"ms in queue, bitrate is %zu + %zu, %zu\n",
-			retry->seq, idx, data_age, retry_age, retry->peer->bw.bitrate, retry_bw->bitrate,
-			retry->peer->bw.bitrate + retry_bw->bitrate);
-	}
-	*/
-
-	buffer->transmit_count++;
 	size_t ret = 0;
 	if (buffer->transmit_count >= retry->peer->config.max_retries) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Datagram %"PRIu32
 			" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu\n",
 			retry->seq, buffer->transmit_count, data_age, buffer->transmit_count);
+			retry->peer->stats_sender_instant.retrans_skip++;
+			return -1;
 	}
-	else {
-		uint16_t src_port = buffer->src_port;
-		if (src_port == 0)
-			src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-		ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
-		// update bandwidth value
-		rist_calculate_bitrate(ret, retry_bw);
-	}
+
+	uint16_t src_port = buffer->src_port;
+	if (src_port == 0)
+		src_port = 32768 + retry->peer->peer_data->adv_peer_id;
+	ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
+	// update bandwidth value
+	rist_calculate_bitrate(ret, retry_bw);
 
 	if (ret < buffer->size) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, retry->seq);
 		retry->peer->stats_sender_instant.retrans_skip++;
-	} else {
-		if (retry->peer->peer_data)
-			retry->peer->peer_data->stats_sender_instant.retrans++;
-		else
-			retry->peer->stats_sender_instant.retrans++;
+		return -1;
 	}
 
+	buffer->transmit_count++;
+	if (retry->peer->peer_data)
+		retry->peer->peer_data->stats_sender_instant.retrans++;
+	else
+		retry->peer->stats_sender_instant.retrans++;
 	return ret;
 }
 
