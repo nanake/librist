@@ -349,6 +349,7 @@ struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf
 	b->last_retry_request = 0;
 	b->transmit_count = 0;
 	b->use_seq = 0;
+	b->retry_queued = false;
 	return b;
 }
 

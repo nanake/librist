@@ -107,6 +107,7 @@ struct rist_buffer {
 	struct rist_buffer *next_free;
 	size_t alloc_size;
 	bool free;
+	bool retry_queued;
 };
 
 struct rist_missing_buffer {
@@ -265,9 +266,10 @@ struct rist_flow {
 };
 
 struct rist_retry {
-	uint32_t seq;
 	struct rist_peer *peer;
 	uint64_t insert_time;
+	uint32_t seq;
+	bool active;//signal whether this retry has been consumed (false) or not
 };
 
 struct rist_common_ctx {

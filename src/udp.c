@@ -1022,6 +1022,9 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 		retry->peer->stats_sender_instant.retrans_skip++;
 		return -1;
 	}
+	/* we're consuming the retry for an existing buffer, set it to false to allow new retries to come in */
+	ctx->sender_queue[idx]->retry_queued = false;
+	retry->active = false;
 
 	// TODO: re-enable rist_send_data_allowed (cooldown feature)
 
@@ -1123,8 +1126,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	// Even though all the checks are on the dequeue function, we leave one here
 	// to prevent the flooding of our fifo .. It is based on the date of the
 	// last queued item with the same seq for this peer.
-	// The policy of whether to allow or not allow duplicate seq entries in the retry queue
+	// The policy of whether to allow or not allow duplicate inactive seq entries in the retry queue
 	// is dependent on the bloat_mode.
+	// No duplicate unhandled (i.e.: still queued) retries are accepted.
 	// bloat_mode disabled mode = unlimited duplicates
 	// bloat_mode normal mode = we enforce rtt spacing and allow duplicates
 	// bloat_mode aggresive mode = we enforce 2*rtt spacing and allow duplicates
@@ -1152,6 +1156,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					"Nack request for seq %" PRIu32 " with age %" PRIu64 "ms and rtt_min %" PRIu32 " for peer #%d\n",
 					seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id);
 		} else if (ctx->peer_lst_len == 1) {
+			/* there is a retry outstanding for this buffer, no need to add another */
+			if (buffer->retry_queued)
+				return;
 			// Only one peer (faster algorithm with no lookups)
 			if (buffer->last_retry_request != 0)
 			{
@@ -1179,6 +1186,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
+				buffer->retry_queued = true;
 			}
 			else
 			{
@@ -1210,6 +1218,9 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			retry = &ctx->sender_retry_queue[index];
 			if (retry->seq == seq && retry->peer == peer) {
 				delta = (now - retry->insert_time) / RIST_CLOCK;
+				/* this retry hasn't been handled yet, it makes no sense to insert a duplicate */
+				if (retry->active)
+					return;
 				if (delta < rtt)
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
@@ -1232,6 +1243,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	retry->seq = seq;
 	retry->peer = peer;
 	retry->insert_time = now;
+	retry->active = true;
 	if (++ctx->sender_retry_queue_write_index >= ctx->sender_retry_queue_size) {
 		ctx->sender_retry_queue_write_index = 0;
 	}
