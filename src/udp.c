@@ -1198,7 +1198,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			// Multiple peers, we need to search for other retries in the queue for comparison
 			uint64_t delta = 0;
 			//We work backwards from the write index till we either find a retry with same peer & seq
-			//or it's too old to matter (older than 1 RTT ago)
+			//or it's too old to matter,looking up to 8 RTT's ago (4 in normal mode, 8 in aggressive)
 			size_t index = (ctx->sender_retry_queue_write_index -1) & (ctx->sender_retry_queue_size -1);
 			uint64_t rtt = peer->last_mrtt;
 			if (peer->config.recovery_length_min > rtt)
@@ -1207,11 +1207,12 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
 				rtt *= 2;
 			struct rist_retry *lookup = NULL;
+			uint64_t search_period = rtt * 4;
 			while (index != ctx->sender_retry_queue_write_index) {
 				lookup = &ctx->sender_retry_queue[index];
 				if (lookup->seq == seq && lookup->peer == peer)
 					break;
-				if (lookup->insert_time < (now - rtt))
+				if (lookup->insert_time < (now - search_period))
 					break;
 				index = (index -1 ) & (ctx->sender_retry_queue_size -1);
 			}
