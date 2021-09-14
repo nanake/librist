@@ -8,9 +8,14 @@
 
 #ifndef RIST_LOGGING_H
 #define RIST_LOGGING_H
+
 #include "headers.h"
 #include "common.h"
 #include <stdio.h>
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /**
  * The recommended way to use the logging settings is to stack/heap alloc
@@ -85,4 +90,9 @@ RIST_API int rist_logging_set_global(struct rist_logging_settings *logging_setti
  * This will unset the global log settings, closing any dupped socket as needed.
  **/
 RIST_API void rist_logging_unset_global(void);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

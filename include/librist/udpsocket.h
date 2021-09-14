@@ -8,6 +8,7 @@
 
 #ifndef UDPSOCKET_H
 #define UDPSOCKET_H
+
 #include <stdlib.h>
 #include <stdint.h>
 #include <string.h>
@@ -44,6 +45,10 @@ typedef int socklen_t;
 #include <net/if.h>
 #include <poll.h>
 #endif /* Windows / POSIX */
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /*** Public API ***/
 #define UDPSOCKET_SOCK_BUFSIZE (1048576)
@@ -234,5 +239,9 @@ RIST_API void evsocket_delevent(struct evsocket_ctx *ctx, struct evsocket_event 
  * @return number of active event handlers
  */
 RIST_API int evsocket_geteventcount(struct evsocket_ctx *ctx);
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif /* ifndef UDPSOCKET_H */

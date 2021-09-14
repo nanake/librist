@@ -9,13 +9,14 @@
 #ifndef LIBRIST_H
 #define LIBRIST_H
 
-#ifdef __cplusplus
-extern "C" {
-#endif
 #include <stdio.h>
 #include "common.h"
 #include "headers.h"
 #include "logging.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
 
 /* Receiver specific functions, use rist_receiver_create to create a receiver rist_ctx */
 /**

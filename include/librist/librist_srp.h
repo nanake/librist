@@ -13,6 +13,10 @@
 #include <stddef.h>
 #include <stdbool.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /**
  * @brief SRP User lookup function
  *
@@ -57,4 +61,9 @@ typedef void (*user_verifier_lookup_t)(char * username,
  *
  **/
 RIST_API int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_t lookup_func, void *userdata);
+
+#ifdef __cplusplus
+}
+#endif
+
 #endif

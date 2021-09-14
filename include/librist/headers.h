@@ -12,6 +12,10 @@
 #include <stdint.h>
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 /* Used for cname, miface and shared secret */
 #define RIST_MAX_STRING_SHORT 128
 /* Used for url/address */
@@ -335,5 +339,9 @@ struct rist_stats
 		struct rist_stats_receiver_flow receiver_flow;
 	} stats;
 };
+
+#ifdef __cplusplus
+}
+#endif
 
 #endif
