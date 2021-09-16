@@ -3360,7 +3360,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	if (peer->url)
 		free(peer->url);
 
-	if (ctx->auth.arg) {
+	if (peer->parent != NULL && ctx->auth.disconn_cb) {
 		ctx->auth.disconn_cb(ctx->auth.arg, peer);
 	}
 	if (next != NULL)
