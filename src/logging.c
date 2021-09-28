@@ -155,7 +155,10 @@ static int init_once_global()
 static int
 logging_set_global_unlocked(struct rist_logging_settings *logging_settings)
 {
-	if (global_logging_settings.settings.log_socket >= 0)
+	if (global_logging_settings.settings.log_socket >= 0 &&
+		global_logging_settings.settings.log_socket != STDIN_FILENO &&
+		global_logging_settings.settings.log_socket != STDOUT_FILENO &&
+		global_logging_settings.settings.log_socket != STDERR_FILENO)
 	{
 		udpsocket_close(global_logging_settings.settings.log_socket);
 	}
@@ -192,7 +195,10 @@ void rist_logging_unset_global(void)
 		return;
 	}
 	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
-	if (global_logging_settings.settings.log_socket >= 0)
+	if (global_logging_settings.settings.log_socket >= 0 &&
+		global_logging_settings.settings.log_socket != STDIN_FILENO &&
+		global_logging_settings.settings.log_socket != STDOUT_FILENO &&
+		global_logging_settings.settings.log_socket != STDERR_FILENO)
 	{
 		udpsocket_close(global_logging_settings.settings.log_socket);
 	}
@@ -220,8 +226,23 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	settings->log_cb = log_cb;
 	settings->log_cb_arg = cb_arg;
 	settings->log_stream = logfp;
+	if (address == NULL) {
+		if (settings->log_socket >= 0 &&
+			global_logging_settings.settings.log_socket != STDIN_FILENO &&
+			global_logging_settings.settings.log_socket != STDOUT_FILENO &&
+			global_logging_settings.settings.log_socket != STDERR_FILENO)
+		{
+			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
+			udpsocket_close(settings->log_socket);
+		}
+		settings->log_socket = -1;
+	}
 	if (address && address[0] != '\0') {
-		if (settings->log_socket >= 0) {
+		if (settings->log_socket >= 0 &&
+			global_logging_settings.settings.log_socket != STDIN_FILENO &&
+			global_logging_settings.settings.log_socket != STDOUT_FILENO &&
+			global_logging_settings.settings.log_socket != STDERR_FILENO)
+		{
 			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 			udpsocket_close(settings->log_socket);
 			settings->log_socket = -1;
