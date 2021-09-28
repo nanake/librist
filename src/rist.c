@@ -1120,7 +1120,7 @@ int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t desired_si
 		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_set_fifo_size called with null ctx\n");
 		return -1;
 	}
-	if (ctx->mode == RIST_RECEIVER_MODE || !ctx->receiver_ctx)
+	if (ctx->mode != RIST_RECEIVER_MODE || !ctx->receiver_ctx)
 	{
 		rist_log_priv3(RIST_LOG_ERROR, "rist_receiver_set_fifo_size can only be called on receiver\n");
 		return -2;
