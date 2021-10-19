@@ -155,10 +155,17 @@ static int init_once_global()
 static int
 logging_set_global_unlocked(struct rist_logging_settings *logging_settings)
 {
+#ifndef _WIN32
 	if (global_logging_settings.settings.log_socket >= 0 &&
 		global_logging_settings.settings.log_socket != STDIN_FILENO &&
 		global_logging_settings.settings.log_socket != STDOUT_FILENO &&
 		global_logging_settings.settings.log_socket != STDERR_FILENO)
+#else
+	if (global_logging_settings.settings.log_socket >= 0 &&
+		global_logging_settings.settings.log_socket != _fileno( stdin ) &&
+		global_logging_settings.settings.log_socket != _fileno( stdout ) &&
+		global_logging_settings.settings.log_socket != _fileno( stderr ))
+#endif
 	{
 		udpsocket_close(global_logging_settings.settings.log_socket);
 	}
@@ -196,9 +203,15 @@ void rist_logging_unset_global(void)
 	}
 	pthread_mutex_lock(&global_logging_settings.global_logs_lock);
 	if (global_logging_settings.settings.log_socket >= 0 &&
+#ifndef _WIN32
 		global_logging_settings.settings.log_socket != STDIN_FILENO &&
 		global_logging_settings.settings.log_socket != STDOUT_FILENO &&
 		global_logging_settings.settings.log_socket != STDERR_FILENO)
+#else
+		global_logging_settings.settings.log_socket != _fileno( stdin ) &&
+		global_logging_settings.settings.log_socket != _fileno( stdout ) &&
+		global_logging_settings.settings.log_socket != _fileno( stderr ))
+#endif
 	{
 		udpsocket_close(global_logging_settings.settings.log_socket);
 	}
@@ -228,9 +241,15 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	settings->log_stream = logfp;
 	if (address == NULL) {
 		if (settings->log_socket >= 0 &&
-			global_logging_settings.settings.log_socket != STDIN_FILENO &&
-			global_logging_settings.settings.log_socket != STDOUT_FILENO &&
-			global_logging_settings.settings.log_socket != STDERR_FILENO)
+#ifndef _WIN32
+			settings->log_socket != STDIN_FILENO &&
+			settings->log_socket != STDOUT_FILENO &&
+			settings->log_socket != STDERR_FILENO)
+#else
+			settings->log_socket != _fileno( stdin ) &&
+			settings->log_socket != _fileno( stdout ) &&
+			settings->log_socket != _fileno( stderr ))
+#endif
 		{
 			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 			udpsocket_close(settings->log_socket);
@@ -239,9 +258,15 @@ int rist_logging_set(struct rist_logging_settings **logging_settings, enum rist_
 	}
 	if (address && address[0] != '\0') {
 		if (settings->log_socket >= 0 &&
-			global_logging_settings.settings.log_socket != STDIN_FILENO &&
-			global_logging_settings.settings.log_socket != STDOUT_FILENO &&
-			global_logging_settings.settings.log_socket != STDERR_FILENO)
+#ifndef _WIN32
+			settings->log_socket != STDIN_FILENO &&
+			settings->log_socket != STDOUT_FILENO &&
+			settings->log_socket != STDERR_FILENO)
+#else
+			settings->log_socket != _fileno( stdin ) &&
+			settings->log_socket != _fileno( stdout ) &&
+			settings->log_socket != _fileno( stderr ))
+#endif
 		{
 			rist_log_priv3(RIST_LOG_NOTICE, "Closing old logsocket\n");
 			udpsocket_close(settings->log_socket);
