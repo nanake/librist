@@ -16,7 +16,7 @@
 #include <winsock2.h> //<-- not used here, but included because otherwise our order is broken.
 #define _WINSOCKAPI_
 # include <windows.h>
-#ifdef HAVE_PTHREADS
+#if HAVE_PTHREADS
 #include <pthread.h>
 # define PTHREAD_START_FUNC(fname,aname) void *fname(void *aname)
 RIST_PRIV int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms);

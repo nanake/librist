@@ -83,7 +83,7 @@ struct evsocket_ctx {
 	int giveup;
 	struct evsocket_ctx *next;
 };
-#if !defined(_WIN32) || defined(HAVE_PTHREADS)
+#if !defined(_WIN32) || HAVE_PTHREADS
 static pthread_mutex_t ctx_list_mutex = PTHREAD_MUTEX_INITIALIZER;
 #else
 static pthread_mutex_t ctx_list_mutex;
@@ -94,7 +94,7 @@ static struct evsocket_ctx *CTX_LIST = NULL;
 
 static void ctx_add(struct evsocket_ctx *c)
 {
-#if defined(_WIN32) && !defined(HAVE_PTHREADS)
+#if defined(_WIN32) && !HAVE_PTHREADS
   	init_mutex_once(&ctx_list_mutex, &once_var);
 #endif
 	pthread_mutex_lock(&ctx_list_mutex);

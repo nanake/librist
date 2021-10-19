@@ -14,7 +14,7 @@
 #include "pthread-shim.h"
 #include "config.h"
 #include <assert.h>
-#if defined(_WIN32) && !defined(HAVE_PTHREADS)
+#if defined(_WIN32) && !HAVE_PTHREADS
 #include <windows.h>
 #endif
 
@@ -25,12 +25,12 @@ static struct {
 } global_logging_settings = {
 	.settings = LOGGING_SETTINGS_INITIALIZER,
 	.logs_set = false,
-#if !defined(_WIN32) || defined(HAVE_PTHREADS)
+#if !defined(_WIN32) || HAVE_PTHREADS
 	.global_logs_lock = PTHREAD_MUTEX_INITIALIZER,
 #endif
 };
 
-#if defined(_WIN32) && !defined(HAVE_PTHREADS)
+#if defined(_WIN32) && !HAVE_PTHREADS
 static INIT_ONCE once_var = INIT_ONCE_STATIC_INIT;
 #endif
 
@@ -146,7 +146,7 @@ void rist_log_priv3(enum rist_log_level level, const char *format, ...)
 
 static int init_once_global()
 {
-	#if defined(_WIN32) && !defined(HAVE_PTHREADS)
+	#if defined(_WIN32) && !HAVE_PTHREADS
 	return init_mutex_once(&global_logging_settings.global_logs_lock, &once_var);
 	#endif
 	return 0;

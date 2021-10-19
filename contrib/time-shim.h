@@ -17,7 +17,7 @@
 
 typedef struct timespec timespec_t;
 
-#ifdef HAVE_CLOCK_GETTIME
+#if HAVE_CLOCK_GETTIME
 
 #define gettimeofday mingw_gettimeofday
 
@@ -47,7 +47,7 @@ int clock_gettime(clockid_t clock, timespec_t *tp);
 #elif defined(__APPLE__)
 #  define CLOCK_REALTIME_OSX 0
 #  define CLOCK_MONOTONIC_OSX 1
-#ifndef HAVE_CLOCK_GETTIME
+#if !HAVE_CLOCK_GETTIME
 typedef int clockid_t_osx;
 #else
 #ifndef CLOCK_REALTIME
@@ -67,7 +67,7 @@ struct timespec {
 };
 #endif
 typedef struct timespec timespec_t;
-#ifdef HAVE_CLOCK_GETTIME
+#if HAVE_CLOCK_GETTIME
 int clock_gettime_osx(clock_id_t clock_id, timespec_t *tp);
 #else
 int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp);

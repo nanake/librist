@@ -9,7 +9,7 @@
 
 #include "time-shim.h"
 
-#if defined(_WIN32) && !defined(HAVE_CLOCK_GETTIME)
+#if defined(_WIN32) && !HAVE_CLOCK_GETTIME
 #define _WINSOCKAPI_
 # include <windows.h>
 # include <errno.h>
@@ -226,7 +226,7 @@ static int rist__get_monotonic(struct timeval *tv)
     return 0;
 }
 
-#ifdef HAVE_CLOCK_GETTIME
+#if HAVE_CLOCK_GETTIME
 int clock_gettime_osx(clock_id_t clock_id, timespec_t *tp)
 #else
 int clock_gettime_osx(clockid_t_osx clock_id, timespec_t *tp)

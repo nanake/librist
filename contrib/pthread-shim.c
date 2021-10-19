@@ -9,7 +9,7 @@
 #include "pthread-shim.h"
 #include <stdio.h>
 #ifdef _WIN32
-#ifdef HAVE_PTHREADS
+#if HAVE_PTHREADS
 int pthread_cond_timedwait_ms(pthread_cond_t *cond, pthread_mutex_t *mutex, uint32_t ms)
 {
 	timespec_t ts;

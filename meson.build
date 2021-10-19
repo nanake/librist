@@ -57,6 +57,9 @@ if meson.is_subproject()
 	should_install = false
 endif
 
+have_pthreads = cc.has_header('pthread.h')
+have_clock_gettime = false
+
 threads = []
 test_args = []
 if host_machine.system() == 'windows'
@@ -66,14 +69,14 @@ if host_machine.system() == 'windows'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
 	if get_option('have_mingw_pthreads')
-		if cc.has_header('pthread.h')
+		if have_pthreads
 			threads = dependency('threads')
 			deps += threads
 			cdata.set('HAVE_PTHREADS', 1)
-					if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies: threads)
-			cdata.set('HAVE_CLOCK_GETTIME', 1)
+			have_clock_gettime =  cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies: threads)
 		endif
-		endif
+	else
+		have_pthreads = false
 	endif
 	add_project_arguments(['-DWIN32_LEAN_AND_MEAN'], language: 'c')
 	add_project_arguments(['-D__USE_MINGW_ANSI_STDIO=1'], language: 'c')
@@ -93,15 +96,14 @@ else
 		add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
 	endif
 	librist_soversion = librist_soversion
-	if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
-		cdata.set('HAVE_CLOCK_GETTIME', 1)
-	elif host_machine.system() != 'darwin'
+	have_clock_gettime = cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
+	if not have_clock_gettime and host_machine.system() != 'darwin'
 		lib_rt = cc.find_library('rt', required: false)
-		if not cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : lib_rt)
+		have_clock_gettime = cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies : lib_rt)
+		if not have_clock_gettime
 			error('clock_gettime not found')
 		endif
 		deps += [ lib_rt ]
-		cdata.set('HAVE_CLOCK_GETTIME', 1)
 	endif
 	add_project_arguments(['-Wshadow', '-pedantic-errors'], language: 'c')
 	add_project_arguments(cc.get_supported_arguments([
@@ -122,6 +124,9 @@ else
 	endif
 	deps += threads
 endif
+
+cdata.set10('HAVE_CLOCK_GETTIME', have_clock_gettime)
+cdata.set10('HAVE_PTHREADS', have_pthreads)
 
 if cc.has_argument('-fvisibility=hidden')
     add_project_arguments('-fvisibility=hidden', language: 'c')

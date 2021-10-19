@@ -17,6 +17,7 @@ endif
 if builtin_mbedtls and not mbedcrypto_lib_found
     message('Using builtin mbedtls code')
     mbedcrypto_lib_includes = include_directories('library','include')
+    add_project_arguments(['-D_FILE_OFFSET_BITS=64'], language: 'c')
     mbedcrypto_lib = declare_dependency(
             sources: [
                     'library/aes.c',
@@ -98,7 +99,6 @@ if builtin_mbedtls and not mbedcrypto_lib_found
     #mbedcrypto_lib = declare_dependency(link_with : my_mbedcrypto_lib, include_directories : my_mbedcrypto_inc)
 endif
 if mbedcrypto_lib_found
-    add_project_arguments(['-D_FILE_OFFSET_BITS=64'], language: 'c')
     deps += mbedcrypto_lib
     platform_files += 'contrib/srp.c'
     platform_files += 'src/eap.c'
