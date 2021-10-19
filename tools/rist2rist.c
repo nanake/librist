@@ -10,7 +10,8 @@
 #include <librist/librist.h>
 #include "librist/version.h"
 #include "risturlhelp.h"
-#ifdef USE_MBEDTLS
+#include "config.h"
+#if HAVE_MBEDTLS
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
 #endif
@@ -55,7 +56,7 @@ static struct option long_options[] = {
 { "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
 { "help",            no_argument,       NULL, 'h' },
@@ -71,7 +72,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -N | --cname identifier                   | Manually configured identifier                           |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
@@ -83,7 +84,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --statsinterval 1000      \\\n"
 "       --verbose-level 6         \n";
 
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	FILE *srpfile = NULL;
 #endif
 
@@ -207,7 +208,7 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	int srp_error = 0;
 	if (strlen(peer_config->srp_username) > 0 && strlen(peer_config->srp_password) > 0)
 	{
@@ -330,7 +331,7 @@ int main (int argc, char **argv) {
 				goto usage;
 			remote_log_address = strdup(optarg);
 		break;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 		case 'F':
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {

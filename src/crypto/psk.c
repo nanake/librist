@@ -9,14 +9,14 @@
 #include "log-private.h"
 #include "crypto-private.h"
 
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 #include "mbedtls/aes.h"
 #include "mbedtls/md.h"
 #include "mbedtls/pkcs5.h"
 #elif defined(LINUX_CRYPTO)
 #include "linux-crypto.h"
 #endif
-#ifndef USE_MBEDTLS
+#if !HAVE_MBEDTLS
 #include "fastpbkdf2.h"
 #endif
 
@@ -28,7 +28,7 @@ int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, u
 	strcpy(key->password, password);
 	key->key_size = key_size;
 	key->key_rotation = rotation;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	mbedtls_aes_init(&key->mbedtls_aes_ctx);
 #elif defined(LINUX_CRYPTO)
 	linux_crypto_init(&key->linux_crypto_ctx);
@@ -39,7 +39,7 @@ int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, u
 int _librist_crypto_psk_rist_key_destroy(struct rist_key *key)
 {
     if (key->key_size) {
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	    mbedtls_aes_free(&key->mbedtls_aes_ctx);
 #elif defined(LINUX_CRYPTO)
 	    linux_crypto_free(&key->linux_crypto_ctx);
@@ -53,7 +53,7 @@ int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key 
     strcpy(key_out->password, key_in->password);
     key_out->key_size = key_in->key_size;
     key_out->key_rotation = key_in->key_rotation;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	mbedtls_aes_init(&key_out->mbedtls_aes_ctx);
 #elif defined(LINUX_CRYPTO)
 	linux_crypto_init(&key_out->linux_crypto_ctx);
@@ -64,7 +64,7 @@ int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key 
 static void _librist_crypto_aes_key(struct rist_key *key)
 {
     uint8_t aes_key[256 / 8];
-#ifndef USE_MBEDTLS
+#if !HAVE_MBEDTLS
     fastpbkdf2_hmac_sha256(
             (const void *) key->password, strlen(key->password),
             (const void *) &key->gre_nonce, sizeof(key->gre_nonce),
@@ -98,7 +98,7 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     }
     mbedtls_md_free(&sha_ctx);
 #endif
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
     mbedtls_aes_setkey_enc(&key->mbedtls_aes_ctx, aes_key, key->key_size);
 #elif defined(LINUX_CRYPTO)
     if (key->linux_crypto_ctx)
@@ -119,7 +119,7 @@ static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, 
 	uint8_t copy_offset = gre_version == 1? 0 : 12;
     memset(iv, 0, 16);
     memcpy(iv + copy_offset, &seq_nbe, sizeof(seq_nbe));
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
         size_t aes_offset = 0;
         unsigned char buf[16];
         mbedtls_aes_crypt_ctr(&key->mbedtls_aes_ctx, payload_len, &aes_offset, iv, buf, inbuf, outbuf);

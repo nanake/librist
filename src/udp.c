@@ -890,7 +890,7 @@ peer_select:
 
 		if (!peer->is_data || peer->parent)
 			continue;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 		if (!peer->listening && !eap_is_authenticated(peer->eap_ctx))
 			continue;
 #endif
@@ -915,7 +915,7 @@ peer_select:
 			if (peer->listening) {
 				struct rist_peer *child = peer->child;
 				while (child) {
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 					if (!eap_is_authenticated(child->eap_ctx))
 					{
 						//do nothing
@@ -947,7 +947,7 @@ peer_select:
 		if (peer->listening) {
 			struct rist_peer *child = peer->child;
 			while (child) {
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 					if (!eap_is_authenticated(child->eap_ctx))
 					{
 						//do nothing

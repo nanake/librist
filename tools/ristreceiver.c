@@ -7,7 +7,8 @@
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
 #include "librist/version.h"
-#ifdef USE_MBEDTLS
+#include "config.h"
+#if HAVE_MBEDTLS
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
 #endif
@@ -57,7 +58,7 @@ static struct option long_options[] = {
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
 { "help",            no_argument,       NULL, 'h' },
@@ -75,7 +76,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
@@ -296,7 +297,7 @@ int main(int argc, char *argv[])
 	int receiver_pipe[2];
 #endif
 
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	FILE *srpfile = NULL;
 #endif
 
@@ -357,7 +358,7 @@ int main(int argc, char *argv[])
 		case 'r':
 			remote_log_address = strdup(optarg);
 		break;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 		case 'F':
 			srpfile = fopen(optarg, "r");
 			if (!srpfile) {
@@ -463,7 +464,7 @@ int main(int argc, char *argv[])
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to receiver #%i\n", (int)(i + 1));
 			exit(1);
 		}
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 		int srp_error = 0;
 		if (profile != RIST_PROFILE_SIMPLE) {
 			if (strlen(peer_config->srp_username) > 0 && strlen(peer_config->srp_password) > 0)

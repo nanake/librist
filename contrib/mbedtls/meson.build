@@ -2,7 +2,6 @@
 # Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
 # SPDX-License-Identifier: BSD-2-Clause
 
-mbedcrypto_lib_found = false
 if not builtin_mbedtls
     mbedcrypto_lib = dependency('mbedcrypto', required: false)
     if not mbedcrypto_lib.found()
@@ -99,7 +98,7 @@ if builtin_mbedtls and not mbedcrypto_lib_found
     #mbedcrypto_lib = declare_dependency(link_with : my_mbedcrypto_lib, include_directories : my_mbedcrypto_inc)
 endif
 if mbedcrypto_lib_found
-    add_project_arguments(['-DUSE_MBEDTLS','-D_FILE_OFFSET_BITS=64'], language: 'c')
+    add_project_arguments(['-D_FILE_OFFSET_BITS=64'], language: 'c')
     deps += mbedcrypto_lib
     platform_files += 'contrib/srp.c'
     platform_files += 'src/eap.c'

@@ -69,7 +69,6 @@ if host_machine.system() == 'windows'
 		if cc.has_header('pthread.h')
 			threads = dependency('threads')
 			deps += threads
-			add_project_arguments(['-DHAVE_PTHREAD_H'], language: 'c')
 			cdata.set('HAVE_PTHREADS', 1)
 					if cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args, dependencies: threads)
 			cdata.set('HAVE_CLOCK_GETTIME', 1)
@@ -165,10 +164,12 @@ if builtin_cjson
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
+mbedcrypto_lib_found = false
 if use_mbedtls
 	message('Building mbedtls')
 	subdir('contrib/mbedtls')
 endif
+cdata.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
 
 subdir('include')
 

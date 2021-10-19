@@ -2579,7 +2579,7 @@ protocol_bypass:
 					payload.dst_port = p->local_port;
 				}
 				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 				{
 					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
@@ -2625,7 +2625,7 @@ protocol_bypass:
 						}
 						break;
 					case RIST_PAYLOAD_TYPE_EAPOL:
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 						if (p->eap_ctx == NULL) {
 							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
 						}
@@ -2738,7 +2738,7 @@ protocol_bypass:
 			uint16_t port = 0;
 			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 			eap_clone_ctx(peer->eap_ctx, p);
 			eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
 #endif
@@ -3035,7 +3035,7 @@ protocol_bypass:
 					rist_peer_rtcp(NULL, peer);
 				}
 			}
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 			if (!peer->listening || peer->parent)
 				eap_periodic(peer->eap_ctx);
 #endif
@@ -3355,7 +3355,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
 	_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	eap_delete_ctx(&peer->eap_ctx);
 #endif
 	if (peer->url)
@@ -3533,7 +3533,7 @@ void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 				rist_peer_rtcp(NULL, p);
 			}
 		}
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 		if (!p->listening && p->parent)
 			eap_periodic(p->eap_ctx);
 #endif

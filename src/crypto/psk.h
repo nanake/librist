@@ -9,7 +9,8 @@
 #define RIST_CRYPTO_PSK_H
 
 #include "common/attributes.h"
-#ifdef USE_MBEDTLS
+#include "config.h"
+#if HAVE_MBEDTLS
 #include "mbedtls/aes.h"
 #elif defined(LINUX_CRYPTO)
 #include "linux-crypto.h"
@@ -21,7 +22,7 @@
 struct rist_key {
 	uint32_t key_size;
 	uint32_t gre_nonce;
-#ifdef USE_MBEDTLS
+#if HAVE_MBEDTLS
 	mbedtls_aes_context mbedtls_aes_ctx;
 #elif defined(LINUX_CRYPTO)
 	struct linux_crypto *linux_crypto_ctx;
