@@ -9,6 +9,7 @@
 #define __PTHREAD_SHIM_H
 
 #include "common/attributes.h"
+#include "config.h"
 
 #ifdef _WIN32
 # include <stdbool.h>
