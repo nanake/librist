@@ -47,6 +47,14 @@
 #include "mbedtls/sha256.h"
 #include "mbedtls/sha512.h"
 
+#include "mbedtls/version.h"
+
+#if MBEDTLS_VERSION_NUMBER > 0x02070000
+#define USE_SHA_RET 1
+#else
+#define USE_SHA_RET 0
+#endif
+
 
 #include "srp.h"
 
@@ -290,8 +298,9 @@ static void hash_start( SRP_HashAlgorithm alg, HashCTX *c )
 }*/
 
 
-static void hash_update( SRP_HashAlgorithm alg, HashCTX *c, const void *data, size_t len )
+static int hash_update( SRP_HashAlgorithm alg, HashCTX *c, const void *data, size_t len )
 {
+#if !USE_SHA_RET
     switch (alg)
     {
       case SRP_SHA1  : mbedtls_sha1_update( &c->sha, data, len ); break;
@@ -300,11 +309,30 @@ static void hash_update( SRP_HashAlgorithm alg, HashCTX *c, const void *data, si
       case SRP_SHA384: mbedtls_sha512_update( &c->sha512, data, len ); break;
       case SRP_SHA512: mbedtls_sha512_update( &c->sha512, data, len ); break;
       default:
-        return;
+        return -1;
     };
+    return 0;
+#else
+    switch (alg)
+    {
+    case SRP_SHA1: 
+        return mbedtls_sha1_update_ret( &c->sha, data, len );
+    case SRP_SHA224: 
+        return mbedtls_sha256_update_ret( &c->sha256, data, len );
+    case SRP_SHA256:
+        return mbedtls_sha256_update_ret( &c->sha256, data, len );
+    case SRP_SHA384:
+        return mbedtls_sha512_update_ret( &c->sha512, data, len );
+    case SRP_SHA512:
+        return mbedtls_sha512_update_ret( &c->sha512, data, len );
+    default:
+        return -1;
+    };
+#endif
 }
-static void hash_final( SRP_HashAlgorithm alg, HashCTX *c, unsigned char *md )
+static int hash_final( SRP_HashAlgorithm alg, HashCTX *c, unsigned char *md )
 {
+#if !USE_SHA_RET
     switch (alg)
     {
       case SRP_SHA1  : mbedtls_sha1_finish( &c->sha, md ); break;
@@ -313,11 +341,30 @@ static void hash_final( SRP_HashAlgorithm alg, HashCTX *c, unsigned char *md )
       case SRP_SHA384: mbedtls_sha512_finish( &c->sha512, md ); break;
       case SRP_SHA512: mbedtls_sha512_finish( &c->sha512, md ); break;
       default:
-        return;
+        return -1;
     };
+    return 0;
+#else
+    switch (alg)
+    {
+    case SRP_SHA1  : 
+        return mbedtls_sha1_finish_ret( &c->sha, md );
+    case SRP_SHA224: 
+        return mbedtls_sha256_finish_ret( &c->sha256, md );
+    case SRP_SHA256: 
+        return mbedtls_sha256_finish_ret( &c->sha256, md );
+    case SRP_SHA384: 
+        return mbedtls_sha512_finish_ret( &c->sha512, md );
+    case SRP_SHA512: 
+        return mbedtls_sha512_finish_ret( &c->sha512, md );
+      default:
+        return -1;
+    };
+#endif
 }
-static void hash( SRP_HashAlgorithm alg, const unsigned char *d, size_t n, unsigned char *md )
+static int hash( SRP_HashAlgorithm alg, const unsigned char *d, size_t n, unsigned char *md )
 {
+#if !USE_SHA_RET
     switch (alg)
     {
       case SRP_SHA1  : mbedtls_sha1( d, n, md ); break;
@@ -326,8 +373,26 @@ static void hash( SRP_HashAlgorithm alg, const unsigned char *d, size_t n, unsig
       case SRP_SHA384: mbedtls_sha512( d, n, md, 1 ); break;
       case SRP_SHA512: mbedtls_sha512( d, n, md, 0 ); break;
       default:
-        return;
+        return -1;
     };
+    return 0;
+#else
+    switch (alg)
+    {
+    case SRP_SHA1  : 
+        return mbedtls_sha1_ret( d, n, md );
+    case SRP_SHA224: 
+        return mbedtls_sha256_ret( d, n, md, 1);
+    case SRP_SHA256:
+        return mbedtls_sha256_ret( d, n, md, 0);
+    case SRP_SHA384: 
+        return mbedtls_sha512_ret( d, n, md, 1 );
+    case SRP_SHA512: 
+        return mbedtls_sha512_ret( d, n, md, 0 );
+    default:
+        return -1;
+    };
+#endif
 }
 static int hash_length( SRP_HashAlgorithm alg )
 {
@@ -391,11 +456,18 @@ static BIGNUM * calculate_x( SRP_HashAlgorithm alg, const BIGNUM * salt, const c
     HashCTX       ctx;
 
     hash_init( alg, &ctx );
-    hash_update( alg, &ctx, username, strlen(username) );
-    hash_update( alg, &ctx, ":", 1 );
-    hash_update( alg, &ctx, password, password_len );
 
-    hash_final( alg, &ctx, ucp_hash );
+    if (hash_update( alg, &ctx, username, strlen(username) ) != 0)
+        return NULL;
+    
+    if (hash_update( alg, &ctx, ":", 1 ) != 0)
+        return NULL;
+    
+    if (hash_update( alg, &ctx, password, password_len ) != 0)
+        return NULL;
+
+    if (hash_final( alg, &ctx, ucp_hash ) != 0)
+        return NULL;
 
     return H_ns( alg, salt, ucp_hash, hash_length(alg) );
 }
