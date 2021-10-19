@@ -214,6 +214,7 @@ static struct rist_flow *create_flow(struct rist_receiver *ctx, uint32_t flow_id
 	atomic_init(&f->receiver_queue_output_idx, 0);
 	atomic_init(&f->dataout_fifo_queue_write_index, 0);
 	atomic_init(&f->dataout_fifo_queue_read_index, 0);
+	atomic_init(&f->fifo_overflow, false);
 
 	f->session_timeout = RIST_DEFAULT_SESSION_TIMEOUT * RIST_CLOCK;
 	f->flow_timeout = 250 * RIST_CLOCK;

@@ -259,6 +259,7 @@ struct rist_flow {
 	size_t dataout_fifo_queue_bytesize;
 	atomic_ulong dataout_fifo_queue_read_index;
 	atomic_ulong dataout_fifo_queue_write_index;
+	atomic_bool fifo_overflow;
 
 	/* Temporary buffer for grouping and sending nacks */
 	struct nacks nacks;

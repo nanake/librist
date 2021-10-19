@@ -951,6 +951,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 						if (!ctx->receiver_data_callback)
 							rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Rist data out fifo queue overflow\n");
 						rist_receiver_data_block_free2(&block);
+						atomic_store_explicit(&f->fifo_overflow, true, memory_order_release);
 					} else
 					{
 						f->dataout_fifo_queue[dataout_fifo_write_index] = block;
