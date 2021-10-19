@@ -430,6 +430,12 @@ typedef void (*connection_status_callback_t)(void *arg, struct rist_peer *peer, 
 RIST_API int rist_connection_status_callback_set(struct rist_ctx *ctx, connection_status_callback_t, void *arg);
 
 /**
+ * @brief Set option on RIST CTX
+ * 
+ */
+RIST_API int rist_set_opt(struct rist_ctx *ctx, enum rist_opt opt, void* optval1, void* optval2, void* optval3);
+
+/**
  * @brief Get the version of libRIST
  *
  * @return String representing the version of libRIST

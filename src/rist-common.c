@@ -18,6 +18,7 @@
 #include "mpegts.h"
 #include "rist_ref.h"
 #include "config.h"
+#include "rist-thread.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
@@ -1774,7 +1775,7 @@ static bool rist_receiver_rtcp_authenticate(struct rist_peer *peer, uint32_t seq
 			pthread_mutex_lock(&peer->flow->mutex);
 			if (!peer->flow->receiver_thread_running) {
 				// Make sure this data out thread is created only once per flow
-				if (pthread_create(&peer->flow->receiver_thread, NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
+				if (rist_thread_create(&ctx->common, &peer->flow->receiver_thread, NULL, receiver_pthread_dataout, (void *)peer->flow) != 0) {
 					rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 							"Could not created receiver data output thread.\n");
 					return false;

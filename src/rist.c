@@ -11,6 +11,7 @@
 #include "log-private.h"
 #include "udp-private.h"
 #include "vcs_version.h"
+#include "rist-thread.h"
 #include <librist/version.h>
 #include "crypto/crypto-private.h"
 #include <assert.h>
@@ -1007,7 +1008,7 @@ static int rist_sender_start(struct rist_sender *ctx)
 {
 	pthread_mutex_lock(&ctx->mutex);
 	if (!ctx->protocol_running) {
-		if (pthread_create(&ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)
+		if (rist_thread_create(&ctx->common, &ctx->sender_thread, NULL, sender_pthread_protocol, (void *)ctx) != 0)
 		{
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not created sender thread.\n");
 			goto unlock_failed;
@@ -1036,7 +1037,7 @@ static int rist_receiver_start(struct rist_receiver *ctx)
 	pthread_mutex_lock(&ctx->mutex);
 	if (!ctx->protocol_running)
 	{
-		if (pthread_create(&ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0)
+		if (rist_thread_create(&ctx->common, &ctx->receiver_thread, NULL, receiver_pthread_protocol, (void *)ctx) != 0)
 		{
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create receiver protocol thread.\n");
 			goto unlock_failed;
@@ -1143,5 +1144,30 @@ int rist_receiver_set_output_fifo_size(struct rist_ctx *ctx, uint32_t desired_si
 		return -4;
 	}
 	ctx->receiver_ctx->fifo_queue_size = desired_size;
+	return 0;
+}
+
+int rist_set_opt(struct rist_ctx *ctx, enum rist_opt opt, void* optval1, void* optval2, void* optval3)
+{
+	struct rist_common_ctx *cctx = NULL;
+	if (ctx->mode == RIST_RECEIVER_MODE && ctx->receiver_ctx != NULL)
+		cctx = &ctx->receiver_ctx->common;
+	else if (ctx->mode == RIST_SENDER_MODE && ctx->sender_ctx != NULL)
+		cctx = &ctx->sender_ctx->common;
+	else
+		return -1;
+	
+	switch(opt) {
+	case RIST_OPT_THREAD_CALLBACK:
+		;
+		rist_thread_callback_t *thread_callback  = optval1;
+		if (thread_callback == NULL || thread_callback->thread_callback == NULL || optval3 != NULL)
+			return -1;
+		cctx->thread_callback = thread_callback->thread_callback;
+		cctx->thread_callback_arg = optval2;
+		break;
+	default:
+		return -1;
+	}
 	return 0;
 }

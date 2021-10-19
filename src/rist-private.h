@@ -351,6 +351,9 @@ struct rist_common_ctx {
 	/* Connection status callback */
 	connection_status_callback_t connection_status_callback;
 	void *connection_status_callback_argument;
+
+	rist_thread_callback_func_t thread_callback;
+	void *thread_callback_arg;
 };
 
 struct rist_receiver {

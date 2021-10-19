@@ -11,6 +11,7 @@
 
 #include <stdint.h>
 #include <stdlib.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -340,6 +341,34 @@ struct rist_stats
 		struct rist_stats_receiver_flow receiver_flow;
 	} stats;
 };
+
+/**
+ * @brief Thread callback function
+ * 
+ * The thread callback function is called whenever a thread is created or (about to be) destroyed. This can be used 
+ * to apply cpu sets to the thread, or set fine grained priorities.
+ * 
+ * @param handle, OS specific thread handle, on POSIX systems this will be a pointer to pthread_t on Windows systems
+ * 				  this will be a pointer to a pseudo thread handle. The handle is invalidated after the callback is
+ * 				  called a second time with created set to false.
+ * @param type Not used for now, it is here for future extension.
+ * @param created True when thread is newly created, false when it's (about to be) destroyed.
+ * @param user_data Calling application specified user data.
+ */
+typedef void (*rist_thread_callback_func_t)(void *handle, int type, bool created, void* user_data);
+
+//Wrapper struct because ISO C forbids conversion from object pointer to function pointer
+typedef struct {
+	rist_thread_callback_func_t thread_callback;
+} rist_thread_callback_t;
+
+enum rist_opt
+{
+	//Set callback called when a thread is created or destroyed
+	//optval1 must point to a rist_thread_callback_t struct optval2 may contain a pointer to user data optval3 must be NULL.
+	RIST_OPT_THREAD_CALLBACK
+};
+
 
 #ifdef __cplusplus
 }
