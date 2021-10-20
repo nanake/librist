@@ -39,7 +39,7 @@ typedef struct {
 } pthread_rwlock_t;
 
 # define PTHREAD_START_FUNC(fname,aname) DWORD __stdcall fname(LPVOID aname)
-typedef DWORD __stdcall(*pthread_start_func_t)(LPVOID aname);
+typedef DWORD (__stdcall *pthread_start_func_t)(LPVOID aname);
 RIST_PRIV int init_mutex_once(pthread_mutex_t *mutex, PINIT_ONCE once_var);
 
 RIST_PRIV int pthread_create(pthread_t *thread, pthread_attr_t *attr, DWORD (__stdcall *start_routine)(LPVOID), void *arg);
