@@ -14,7 +14,9 @@
 #include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
+#if HAVE_MBEDTLS
 #include "eap.h"
+#endif
 #include "mpegts.h"
 #include "rist_ref.h"
 #include "config.h"

@@ -1,3 +1,10 @@
+/*
+ * Copyright © 2021, VideoLAN and librist authors
+ * All rights reserved.
+ *
+ * SPDX-License-Identifier: BSD-2-Clause
+ */
+
 #include "pthread-shim.h"
 #include "rist-private.h"
 #include "config.h"

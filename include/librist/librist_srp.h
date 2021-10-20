@@ -8,7 +8,8 @@
 
 #ifndef _LIBRIST_SRP_H_
 #define _LIBRIST_SRP_H_
-
+#include "librist_config.h"
+#if HAVE_MBEDTLS
 #include "librist.h"
 #include <stddef.h>
 #include <stdbool.h>
@@ -65,5 +66,5 @@ RIST_API int rist_enable_eap_srp(struct rist_peer *peer, const char *username, c
 #ifdef __cplusplus
 }
 #endif
-
+#endif
 #endif

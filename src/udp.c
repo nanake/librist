@@ -11,7 +11,9 @@
 #include "log-private.h"
 #include "socket-shim.h"
 #include "endian-shim.h"
+#if HAVE_MBEDTLS
 #include "eap.h"
+#endif
 #include "crypto/psk.h"
 #include "mpegts.h"
 #include <stdlib.h>

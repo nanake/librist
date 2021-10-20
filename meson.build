@@ -174,7 +174,6 @@ if use_mbedtls
 	message('Building mbedtls')
 	subdir('contrib/mbedtls')
 endif
-cdata.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
 
 subdir('include')
 

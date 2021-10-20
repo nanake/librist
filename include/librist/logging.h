@@ -17,6 +17,17 @@
 extern "C" {
 #endif
 
+enum rist_log_level
+{
+	RIST_LOG_DISABLE = -1,
+	RIST_LOG_ERROR = 3,
+	RIST_LOG_WARN = 4,
+	RIST_LOG_NOTICE = 5,
+	RIST_LOG_INFO = 6,
+	RIST_LOG_DEBUG = 7,
+	RIST_LOG_SIMULATE = 100,
+};
+
 /**
  * The recommended way to use the logging settings is to stack/heap alloc
  * and initialize via LOGGING_SETTINGS_INITIALIZER, and set it's members.
@@ -90,6 +101,14 @@ RIST_API int rist_logging_set_global(struct rist_logging_settings *logging_setti
  * This will unset the global log settings, closing any dupped socket as needed.
  **/
 RIST_API void rist_logging_unset_global(void);
+
+/**
+ * @brief Free the rist_logging_settings structure memory allocation
+ *
+ * @return 0 on success or non-zero on error.
+ */
+RIST_DEPRECATED RIST_API int rist_logging_settings_free(const struct rist_logging_settings **logging_settings);
+RIST_API int rist_logging_settings_free2(struct rist_logging_settings **logging_settings);
 
 #ifdef __cplusplus
 }

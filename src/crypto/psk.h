@@ -9,7 +9,7 @@
 #define RIST_CRYPTO_PSK_H
 
 #include "common/attributes.h"
-#include "config.h"
+#include "librist/librist_config.h"
 #if HAVE_MBEDTLS
 #include "mbedtls/aes.h"
 #elif defined(LINUX_CRYPTO)

@@ -31,4 +31,4 @@
 	#define RIST_DEPRECATED
 #endif
 
-#endif
+#endif /* RIST_COMMON_H */
