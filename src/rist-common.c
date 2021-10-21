@@ -3054,12 +3054,17 @@ protocol_bypass:
 		while (peer)
 		{
 			struct rist_peer *next = peer->next;
-			if (!peer->dead && now > peer->last_rtcp_received && peer->last_rtcp_received > 0)
+			uint64_t last_rtcp_received = peer->last_rtcp_received;
+			if (cctx->profile == RIST_PROFILE_SIMPLE &&
+				!peer->is_rtcp && peer->peer_rtcp != NULL &&
+				peer->peer_rtcp->last_rtcp_received > last_rtcp_received)
+				last_rtcp_received = peer->peer_rtcp->last_rtcp_received;
+			if (!peer->dead && now > last_rtcp_received && last_rtcp_received > 0)
 			{
-				if ((now - peer->last_rtcp_received) > peer->session_timeout)
+				if ((now - last_rtcp_received) > peer->session_timeout)
 				{
 					rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
-						(now - peer->last_rtcp_received)/ RIST_CLOCK);
+						(now - last_rtcp_received)/ RIST_CLOCK);
 					kill_peer(peer);
 				}
 			} else if (peer->dead && peer->parent)
