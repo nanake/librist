@@ -41,7 +41,7 @@ typedef struct {
 
 enum rist_opt
 {
-	//Set callback called when a thread is created or destroyed.
+	//Set callback called when a thread is created or destroyed. This can only be set before rist_start is called.
 	//optval1 must point to a rist_thread_callback_t struct, optval2 may contain a pointer to user data, optval3 must be NULL.
 	RIST_OPT_THREAD_CALLBACK
 };

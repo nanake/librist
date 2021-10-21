@@ -1163,6 +1163,8 @@ int rist_set_opt(struct rist_ctx *ctx, enum rist_opt opt, void* optval1, void* o
 		rist_thread_callback_t *thread_callback  = optval1;
 		if (thread_callback == NULL || thread_callback->thread_callback == NULL || optval3 != NULL)
 			return -1;
+		if (atomic_load_explicit(&cctx->startup_complete, memory_order_acquire)) 
+			return -1;
 		cctx->thread_callback = thread_callback->thread_callback;
 		cctx->thread_callback_arg = optval2;
 		break;
