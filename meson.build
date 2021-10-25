@@ -17,9 +17,9 @@ cdata = configuration_data()
 #If any interfaces have been added, removed, or changed since the last update, increment current, and set revision to 0.
 #If any interfaces have been added since the last public release, then increment age.
 #If any interfaces have been removed or changed since the last public release, then set age to 0.
-librist_abi_current = 5
-librist_abi_revision = 5
-librist_abi_age = 1
+librist_abi_current = 6
+librist_abi_revision = 0
+librist_abi_age = 2
 librist_soversion = librist_abi_current - librist_abi_age
 librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
 
