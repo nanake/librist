@@ -17,6 +17,7 @@
 typedef int atomic_int;
 typedef unsigned int atomic_uint;
 typedef unsigned long atomic_ulong;
+typedef bool atomic_bool;
 
 #define memory_order_relaxed __ATOMIC_RELAXED
 #define memory_order_acquire __ATOMIC_ACQUIRE
