@@ -25,8 +25,8 @@
 #include <stddef.h>
 #include <stdint.h>
 
-typedef volatile LONG  __declspec(align(32)) atomic_bool;
-typedef volatile LONG  __declspec(align(32)) atomic_int;
+typedef volatile ULONG  __declspec(align(32)) atomic_bool;
+typedef volatile ULONG  __declspec(align(32)) atomic_int;
 typedef volatile ULONG __declspec(align(32)) atomic_uint;
 typedef volatile ULONG __declspec(align(32)) atomic_ulong;
 typedef volatile USHORT _declspec(align(16)) atomic_uint_fast16_t;
@@ -54,7 +54,7 @@ typedef enum {
 static inline int atomic_compare_exchange_weak(intptr_t *obj, intptr_t *expected, intptr_t desired)
 {
     intptr_t old = *expected;
-	*expected = (intptr_t)InterlockedCompareExchange((PVOID *)obj,(PVOID) desired, (PVOID)*expected);
+	*expected = (intptr_t)InterlockedCompareExchange64((PVOID *)obj,(PVOID) desired, (PVOID)*expected);
 	return old == *expected;
 }
 
