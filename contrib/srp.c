@@ -55,7 +55,7 @@
 #define USE_SHA_RET 0
 #endif
 
-#if MBEDTLS_VERSION_NUMBER > 0x03000000
+#if MBEDTLS_VERSION_NUMBER >= 0x03000000
 #include <mbedtls/compat-2.x.h>
 #endif
 
