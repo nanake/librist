@@ -499,7 +499,7 @@ int rist_sender_data_write(struct rist_ctx *rist_ctx, const struct rist_data_blo
 {
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_data_write call with null context");
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_data_write call with null context\n");
 		return -1;
 	}
 	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
@@ -572,7 +572,17 @@ int rist_oob_write(struct rist_ctx *ctx, const struct rist_oob_block *oob_block)
 					  "Dropping oob packet of size %d, max is %d.\n", oob_block->payload_len, RIST_MAX_PACKET_SIZE - 16);
 		return -1;
 	}
-	return rist_oob_enqueue(cctx, oob_block->peer, oob_block->payload, oob_block->payload_len);
+	struct rist_peer *peer = oob_block->peer;
+	if (peer == NULL)
+		peer = cctx->oob_current_peer;
+	if (peer)
+		return rist_oob_enqueue(cctx, peer, oob_block->payload, oob_block->payload_len);
+	else
+	{
+		rist_log_priv(cctx, RIST_LOG_WARN,
+			"No oob peer, dropping packet of size %d\n", oob_block->payload_len);
+		return 0;
+	}
 }
 
 int rist_oob_callback_set(struct rist_ctx *ctx,

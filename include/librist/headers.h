@@ -25,7 +25,7 @@ extern "C" {
 
 /* Track PROTOCOL and API changes */
 #define RIST_PEER_UDPSOCKET_VERSION (0)
-#define RIST_UDP_CONFIG_VERSION (0)
+#define RIST_UDP_CONFIG_VERSION (1)
 
 /* Error Codes */
 #define RIST_ERR_MALLOC -1
@@ -53,6 +53,14 @@ enum rist_data_block_receiver_flags
 	RIST_DATA_FLAGS_DISCONTINUITY = 1 << 0,
 	RIST_DATA_FLAGS_FLOW_BUFFER_START = 1 << 1,
 	RIST_DATA_FLAGS_OVERFLOW = 1 << 2
+};
+
+enum rist_mux_mode
+{
+	RIST_MUX_MODE_RAW = 0,
+	RIST_MUX_MODE_AUTO = 1,
+	RIST_MUX_MODE_VIRT_SOURCE_PORT = 2,
+	RIST_MUX_MODE_IPV4 = 3,
 };
 
 struct rist_ctx;
@@ -94,6 +102,8 @@ struct rist_udp_config
 	int rtp;
 	uint8_t rtp_ptype;
 	uint16_t stream_id;
+	int mux_mode;
+	char mux_filter[RIST_MAX_STRING_SHORT];
 };
 
 #ifdef __cplusplus

@@ -77,7 +77,7 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				continue;
 
 			if (strcmp( url_params[i].key, RIST_URL_PARAM_MIFACE ) == 0) {
-				strncpy((void *)output_udp_config->miface, val, 128-1);
+				strncpy((void *)output_udp_config->miface, val, RIST_MAX_STRING_SHORT - 1);
 			} else if (strcmp( url_params[i].key, RIST_URL_PARAM_STREAM_ID ) == 0) {
 				int temp = atoi( val );
 				if (temp > 0)
@@ -90,10 +90,16 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_udp_config->rtp_sequence = (uint16_t)temp;
-			} else if (strcmp( url_params[i].key, RIST_URL_PARAP_RTP_OUTPUT_PTYPE) == 0) {
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_RTP_OUTPUT_PTYPE) == 0) {
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_udp_config->rtp_ptype = (uint8_t)temp;
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_MUX_MODE) == 0) {
+				int temp = atoi( val );
+				if (temp >= 0)
+					output_udp_config->mux_mode = (uint8_t)temp;
+			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_MUX_FILTER) == 0) {
+				strncpy((void *)output_udp_config->mux_filter, val, RIST_MAX_STRING_SHORT -1);
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);
@@ -1880,6 +1886,8 @@ static void rist_recv_oob_data(struct rist_peer *peer, struct rist_buffer *paylo
 	if (ctx->oob_data_enabled && ctx->oob_data_callback)
 	{
 		struct rist_oob_block oob_block;
+		if (ctx->oob_current_peer == NULL || ctx->oob_current_peer->dead)
+			ctx->oob_current_peer = peer;
 		oob_block.peer = peer;
 		oob_block.payload = payload->data;
 		oob_block.payload_len = payload->size;
@@ -2856,7 +2864,7 @@ protocol_bypass:
 
 			struct rist_buffer *oob_buffer = ctx->oob_queue[ctx->oob_queue_read_index];
 			if (!oob_buffer->data) {
-				rist_log_priv(ctx, RIST_LOG_ERROR, "\tNull oob buffer, skipping!!!\n");
+				rist_log_priv(ctx, RIST_LOG_ERROR, "Null oob buffer, skipping!!!\n");
 				ctx->oob_queue_read_index++;
 				continue;
 			}

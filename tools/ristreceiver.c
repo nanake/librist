@@ -26,6 +26,11 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include "oob_shared.h"
+#ifdef USE_TUN
+#include "rist-private.h"
+#include <sys/ioctl.h>
+#include <linux/if_tun.h>
+#endif
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s
@@ -54,7 +59,10 @@ static struct option long_options[] = {
 { "secret",          required_argument, NULL, 's' },
 { "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
+#ifdef USE_TUN
 { "tun",             required_argument, NULL, 't' },
+{ "tun-mode",        required_argument, NULL, 'm' },
+#endif
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
@@ -69,6 +77,10 @@ static struct option long_options[] = {
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -i | --inputurl  rist://...             * | Comma separated list of input rist URLs                  |\n"
 "       -o | --outputurl udp://... or rtp://... * | Comma separated list of output udp or rtp URLs           |\n"
+#ifdef USE_TUN
+"                                                 | Use tun://@ to write udp data to a tun device defined    |\n"
+"                                                 | using the -t option                                      |\n"
+#endif
 "       -b | --buffer value                       | Default buffer size for packet retransmissions           |\n"
 "       -s | --secret PWD                         | Default pre-shared encryption secret                     |\n"
 "       -e | --encryption-type TYPE               | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
@@ -80,6 +92,13 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
+#endif
+#ifdef USE_TUN
+"       -t | --tun name                           | Create a tun device and use it for data communications   |\n"
+"       -m | --tun-mode number                    | Data management on the tun interface:                    |\n"
+"                                                 | 0 = all tun data is accepted into or out of oob channel  |\n"
+"                                                 | 1 = only non udp data is accepted (default)              |\n"
+"                                                 | 2 = no data goes into or out of oob channel              |\n"
 #endif
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
@@ -99,6 +118,11 @@ struct rist_callback_object {
 	int mpeg[MAX_OUTPUT_COUNT];
 	struct rist_udp_config *udp_config[MAX_OUTPUT_COUNT];
 	uint16_t i_seqnum[MAX_OUTPUT_COUNT];
+	struct rist_ctx *receiver_ctx;
+#ifdef USE_TUN
+	int tun;
+	int tun_mode;
+#endif
 };
 
 static inline void risttools_rtp_set_hdr(uint8_t *p_rtp, uint8_t i_type, uint16_t i_seqnum, uint32_t i_timestamp, uint32_t i_ssrc)
@@ -138,17 +162,45 @@ static void connection_status_callback(void *arg, struct rist_peer *peer, enum r
 static int cb_recv(void *arg, struct rist_data_block *b)
 {
 	struct rist_callback_object *callback_object = (void *) arg;
-
 	int found = 0;
 	int i = 0;
 	for (i = 0; i < MAX_OUTPUT_COUNT; i++) {
 		if (!callback_object->udp_config[i])
 			continue;
 		struct rist_udp_config *udp_config = callback_object->udp_config[i];
+		bool found_it = false;
+		int mux_mode = 0;
+		if (udp_config->version == 1)
+			mux_mode = udp_config->mux_mode;
 		// The stream-id on the udp url gets translated into the virtual destination port of the GRE tunnel
-		uint16_t virt_dst_port = udp_config->stream_id;
-		// look for the correct mapping of destination port to output
-		if (profile == RIST_PROFILE_SIMPLE ||  virt_dst_port == 0 || (virt_dst_port == b->virt_dst_port)) {
+		// and we match on that. The other two muxing modes are not spec compliant and are only
+		// guaranteed to work from librist to librist
+		if (profile == RIST_PROFILE_SIMPLE || udp_config->stream_id == 0 || 
+				(mux_mode == RIST_MUX_MODE_RAW && udp_config->stream_id == b->virt_dst_port) ||
+				(mux_mode == RIST_MUX_MODE_VIRT_SOURCE_PORT && udp_config->stream_id == b->virt_src_port) ||
+				(mux_mode == RIST_MUX_MODE_IPV4))
+		{
+			// Normal manual match
+			found_it = true;
+		}
+		else if (mux_mode == RIST_MUX_MODE_AUTO)
+		{
+			// Auto-detect (librist to librist)
+			if (b->virt_src_port == 1) {
+				mux_mode = RIST_MUX_MODE_IPV4;
+				found_it = true;
+			}
+			if (b->virt_src_port < 32768 && udp_config->stream_id == b->virt_src_port) {
+				mux_mode = RIST_MUX_MODE_VIRT_SOURCE_PORT;
+				found_it = true;
+			}
+			else if (b->virt_src_port >= 32768 && udp_config->stream_id == b->virt_dst_port) {
+				mux_mode = RIST_MUX_MODE_RAW;
+				found_it = true;
+			}
+		}
+
+		if (found_it) {
 			if (callback_object->mpeg[i] > 0) {
 				uint8_t *payload = NULL;
 				size_t payload_len = 0;
@@ -165,6 +217,16 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 						ptype = udp_config->rtp_ptype;
 					risttools_rtp_set_hdr(payload, ptype, i_seqnum, i_timestamp, b->flow_id);
 				}
+				else if (mux_mode == RIST_MUX_MODE_IPV4) {
+					// TODO: filtering based on ip header?
+					// with an input string for destination ip and port
+					// for now, forward it all
+					// use output_udp_config->mux_filter
+					size_t ipheader_bytes = sizeof(struct ipheader) + sizeof(struct udpheader);
+					payload = (uint8_t *)b->payload;
+					payload += ipheader_bytes;
+					payload_len = b->payload_len - ipheader_bytes;
+				}
 				else {
 					payload = (uint8_t *)b->payload;
 					payload_len = b->payload_len;
@@ -179,9 +241,24 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		}
 	}
 
+#ifdef USE_TUN
+	if (b->virt_src_port == 1 && found == 0)
+	{
+		// This is a tun mux
+		if (callback_object->tun) {
+			if (write(callback_object->tun, b->payload, b->payload_len) < 0) {
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Error %d writing %d rist bytes to output tun\n", errno, b->payload_len);
+			}
+		}
+		rist_receiver_data_block_free2(&b);
+		return 0;
+	}
+#endif
+
 	if (found == 0)
 	{
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Destination port mismatch, no output found for %d\n", b->virt_dst_port);
+		rist_receiver_data_block_free2(&b);
 		return -1;
 	}
 	rist_receiver_data_block_free2(&b);
@@ -196,8 +273,7 @@ static void intHandler(int signal) {
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	(void)peer;
-	struct rist_ctx *ctx = (struct rist_ctx *)arg;
+	struct rist_callback_object *callback_object = (void *) arg;
 	char buffer[500];
 	char message[200];
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
@@ -208,18 +284,71 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	oob_block.peer = peer;
 	oob_block.payload = buffer;
 	oob_block.payload_len = ret;
-	rist_oob_write(ctx, &oob_block);
+	rist_oob_write(callback_object->receiver_ctx, &oob_block);
 	return 0;
 }
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
 	(void)peer;
-	struct rist_ctx *ctx = (struct rist_ctx *)arg;
-	(void)ctx;
+	struct rist_callback_object *callback_object = (void *) arg;
+	(void)callback_object;
 	return 0;
 }
 
+#ifdef USE_TUN
+static int rist_validate_tun_data(uint8_t *buffer, ssize_t buffer_len)
+{
+	struct ipheader *ip = (struct ipheader *) buffer;
+	int protocol = 0;
+	ssize_t payload_len = 0;
+	// Double check the validity of the packet and get the protocol number
+	if (RIST_IPH_GET_VER(ip->iph_verlen) == 4) {
+		protocol = (int) ip->iph_protocol;
+		payload_len = (ssize_t)be16toh(ip->iph_len);
+		if (payload_len != buffer_len) {
+			rist_log(&logging_settings, RIST_LOG_INFO, "Malformed ipv4 packet %d != %d\n",
+				payload_len != buffer_len);
+			return -1;
+		}
+	}
+	else if (RIST_IPH_GET_VER(ip->iph_verlen) == 6) {
+		// TODO: how do I get the protocol?
+		// For now, send all IPv6 over OOB channel
+	}
+	else {
+		rist_log(&logging_settings, RIST_LOG_INFO, "Unknown ipv? payload %d\n",
+			RIST_IPH_GET_VER(ip->iph_verlen));
+		return -1;
+	}
+	return protocol;
+}
+
+static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
+{
+	struct rist_callback_object *callback_object = (void *) arg;
+	int message_len = 0;
+	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
+	if (message) {
+		rist_log(&logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
+	}
+	else if (callback_object->tun)
+	{
+		// Process non-api based data
+		int protocol = rist_validate_tun_data((uint8_t *)oob_block->payload, oob_block->payload_len);
+		if (protocol >= 0)
+		{
+			if (callback_object->tun_mode == 0 ||
+				(callback_object->tun_mode == 1 && protocol != 17)) {
+				if (write(callback_object->tun, oob_block->payload, oob_block->payload_len) < 0) {
+					rist_log(&logging_settings, RIST_LOG_ERROR, "Error %d writing %d bytes to output tun\n", errno, oob_block->payload_len);
+				}
+			}
+		}
+	}
+	return 0;
+}
+#else
 static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
@@ -231,6 +360,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	}
 	return 0;
 }
+#endif
 
 struct ristreceiver_flow_cumulative_stats {
 	uint32_t flow_id;
@@ -271,6 +401,51 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	return 0;
 }
 
+#ifdef USE_TUN
+static void rist_process_tun_data(struct rist_callback_object *callback_object, uint8_t *buffer, ssize_t buffer_len)
+{
+	int protocol = rist_validate_tun_data(buffer, buffer_len);
+	if (protocol >=0) {
+		// Send data through oob channel
+		if (callback_object->tun_mode == 0 ||
+				(callback_object->tun_mode == 1 && protocol != 17)) {
+			struct rist_oob_block oob_block = { 0 };
+			oob_block.peer = NULL;
+			oob_block.payload = &buffer[0];
+			oob_block.payload_len = buffer_len;
+			if (rist_oob_write(callback_object->receiver_ctx, &oob_block) < 0)
+				rist_log(&logging_settings, RIST_LOG_INFO, "Error writing %d bytes to rist_oob_write\n", buffer_len);
+		}
+	}
+}
+
+static PTHREAD_START_FUNC(tun_loop, arg)
+{
+	struct rist_callback_object *callback_object = (void *) arg;
+	while (!signalReceived) {
+		uint8_t buffer[RIST_MAX_PACKET_SIZE];
+		fd_set read_fds;
+		FD_ZERO(&read_fds);
+		FD_SET(callback_object->tun, &read_fds);
+		// Set timeout to 100 ms
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100000;
+		// Wait for input to become ready or until the time out;
+		if (select(FD_SETSIZE, &read_fds, NULL, NULL, &timeout) == 1)
+		{
+			ssize_t r = read(callback_object->tun, &buffer[0], RIST_MAX_PACKET_SIZE);
+			if (r > 0) {
+				rist_process_tun_data(callback_object, &buffer[0], r);
+			}
+			else
+				break;
+		}
+	}
+	return 0;
+}
+#endif
+
 int main(int argc, char *argv[])
 {
 	int option_index;
@@ -279,11 +454,13 @@ int main(int argc, char *argv[])
 	const struct rist_peer_config *peer_input_config[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;
+#ifdef USE_TUN
 	char *oobtun = NULL;
+#endif
 	char *shared_secret = NULL;
 	int buffer = 0;
 	int encryption_type = 0;
-	struct rist_callback_object callback_object;
+	struct rist_callback_object callback_object = { 0 };
 	enum rist_log_level loglevel = RIST_LOG_INFO;
 	int statsinterval = 1000;
 	char *remote_log_address = NULL;
@@ -326,7 +503,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:v:F:h:u", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:h:u", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -343,9 +520,14 @@ int main(int argc, char *argv[])
 		case 'e':
 			encryption_type = atoi(optarg);
 		break;
+#ifdef USE_TUN
 		case 't':
 			oobtun = strdup(optarg);
 		break;
+		case 'm':
+			callback_object.tun_mode = atoi(optarg);
+		break;
+#endif
 		case 'p':
 			profile = atoi(optarg);
 		break;
@@ -401,7 +583,10 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
-	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) != 0) {
+	callback_object.receiver_ctx = ctx;
+
+	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, (void *)&callback_object) != 0) {
+
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not init rist auth handler\n");
 		exit(1);
 	}
@@ -412,7 +597,7 @@ int main(int argc, char *argv[])
 	}
 
 	if (profile != RIST_PROFILE_SIMPLE) {
-		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
+		if (rist_oob_callback_set(ctx, cb_recv_oob, (void *)&callback_object) == -1) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add enable out-of-band data\n");
 			exit(1);
 		}
@@ -422,6 +607,19 @@ int main(int argc, char *argv[])
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		exit(1);
 	}
+
+#ifdef USE_TUN
+	// Setup tun device
+	if (oobtun) {
+		callback_object.tun = oob_setup_tun_device(oobtun);
+		if (callback_object.tun == -1)
+			rist_log(&logging_settings, RIST_LOG_ERROR, "tun open error: %s\n", strerror(errno));
+		else if (callback_object.tun < 0)
+			rist_log(&logging_settings, RIST_LOG_ERROR, "tun ioctl error: %s (%d)\n", strerror(errno), callback_object.tun);
+		if (callback_object.tun < 0)
+			exit(1);
+	}
+#endif
 
 	char *saveptr1;
 	char *inputtoken = strtok_r(inputurl, ",", &saveptr1);
@@ -535,6 +733,15 @@ next:
 	if (!atleast_one_socket_opened) {
 		exit(1);
 	}
+
+#ifdef USE_TUN
+	pthread_t thread_tun_loop = { 0 };
+	if (callback_object.tun && pthread_create(&thread_tun_loop, NULL, tun_loop, (void *)&callback_object) != 0)
+	{
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start tun read thread\n");
+		exit(1);
+	}
+#endif
 
 	if (data_read_mode == DATA_READ_MODE_CALLBACK) {
 		if (rist_receiver_data_callback_set2(ctx, cb_recv, &callback_object))
@@ -679,8 +886,14 @@ next:
 		free(inputurl);
 	if (outputurl)
 		free(outputurl);
+#ifdef USE_TUN
+	if (thread_tun_loop)
+		pthread_join(thread_tun_loop, NULL);
 	if (oobtun)
 		free(oobtun);
+	if (callback_object.tun)
+		close(callback_object.tun);
+#endif
 	if (shared_secret)
 		free(shared_secret);
 

@@ -13,6 +13,13 @@
 #include <arpa/inet.h>
 #endif
 #include "socket-shim.h"
+#ifdef USE_TUN
+#include <librist/udpsocket.h>
+#include <fcntl.h>
+#include <sys/ioctl.h>
+#include <linux/if.h>
+#include <linux/if_tun.h>
+#endif
 
 static unsigned short csum(unsigned short *buf, int nwords)
 {
@@ -44,6 +51,21 @@ void populate_ip_header(struct ipheader *ip, char *sourceip, char *destip, unsig
 	ip->iph_chksum = 0;
 }
 
+void populate_ipv4_rist_header(uint16_t address_family, uint8_t *recv_buf, ssize_t recv_bufsize, struct sockaddr * addr, socklen_t addrlen)
+{
+	if (address_family == AF_INET6) {
+		// TODO: map ipv6 to ipv4
+	}
+	else {
+		// TODO
+	}
+	(void )address_family;
+	(void)recv_buf;
+	(void)recv_bufsize;
+	(void)addr;
+	(void)addrlen;
+}
+
 int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *message, int message_len)
 {
 	// We populate a valid IP header here but we do not really use it for any type of routing
@@ -62,6 +84,57 @@ int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *mess
 	ip->iph_chksum = csum((unsigned short *)buffer, total_len);
 	return total_len;
 }
+
+#ifdef USE_TUN
+int oob_setup_tun_device(char *oobtun)
+{
+	struct ifreq ifr;
+	int tun = 0;
+	int ret = 0;
+	memset(&ifr, 0, sizeof(ifr));
+	tun = open("/dev/net/tun", O_RDWR);
+	if (tun < 0) {
+		return -1;
+	}
+	ifr.ifr_flags = IFF_NO_PI | IFF_TUN;
+	strncpy(ifr.ifr_name, oobtun, IFNAMSIZ);
+	int r = ioctl(tun, TUNSETIFF, &ifr);
+	if (r < 0) {
+		close(tun);
+		return -2;
+	}
+	/* Get the flags that are set */
+	int skfd = socket(PF_INET, SOCK_DGRAM, IPPROTO_IP);
+	if (skfd < 0 ) {
+		ret = -3;
+		goto fail;
+	}
+	if (ioctl(skfd, SIOCGIFFLAGS, (void*) &ifr)) {
+		ret = -4;
+		goto fail;
+	}
+	/* Set the flags that bring the device up */
+	ifr.ifr_flags |= ( IFF_UP | IFF_RUNNING );
+	if (ioctl(skfd, SIOCSIFFLAGS, (void*) &ifr)) {
+		ret = -5;
+		goto fail;
+	}
+	if (udpsocket_set_optimal_buffer_size(skfd) < 0) {
+		ret = -6;
+		goto fail;
+	}
+	if (udpsocket_set_optimal_buffer_send_size(skfd) < 0) {
+		ret = -7;
+		goto fail;
+	}
+	close(skfd);
+	return tun;
+fail:
+	close(skfd);
+	close (tun);
+	return ret;
+}
+#endif
 
 char *oob_process_api_message(int buffer_len, char *buffer, int *message_len)
 {

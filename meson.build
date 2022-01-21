@@ -171,6 +171,10 @@ if builtin_cjson
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
+if cc.check_header('linux/if_tun.h') and get_option('use_tun')
+	add_project_arguments(['-DUSE_TUN'], language: 'c')
+endif
+
 mbedcrypto_lib_found = false
 if use_mbedtls
 	message('Building mbedtls')

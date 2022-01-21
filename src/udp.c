@@ -178,7 +178,9 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 	uint8_t *_payload = NULL;
 
 	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
-							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
+							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || 
+								payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT || 
+								payload_type == RIST_PAYLOAD_TYPE_DATA_OOB)
 							&& (k->key_size || p->compression));
 
 	assert(payload != NULL);
@@ -321,9 +323,16 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	if (src_port == 0)
 		src_port = 32768 + p->adv_peer_id;
 
+	struct rist_common_ctx *cctx = get_cctx(p);
 	if (p->sd < 0 || !p->address_len) {
-		rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "rist_send_common_rtcp failed\n");
+		rist_log_priv(cctx, RIST_LOG_ERROR, "rist_send_common_rtcp failed\n");
 		return -1;
+	}
+
+	if (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_OOB)
+	{
+		if (cctx->oob_current_peer == NULL || cctx->oob_current_peer->dead)
+			cctx->oob_current_peer = p;
 	}
 
 	if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL) && !p->receiver_mode)
@@ -335,12 +344,12 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 	{
 		if (p->address_family == AF_INET6) {
 			// TODO: print IP and port (and error number?)
-			rist_log_priv(get_cctx(p), RIST_LOG_ERROR,
+			rist_log_priv(cctx, RIST_LOG_ERROR,
 				"\tError on transmission sendto for seq #%"PRIu32"\n", seq_rtp);
 		} else {
 			struct sockaddr_in *sin4 = (struct sockaddr_in *)&p->u.address;
 			unsigned char *ip = (unsigned char *)&sin4->sin_addr.s_addr;
-			rist_log_priv(get_cctx(p), RIST_LOG_ERROR,
+			rist_log_priv(cctx, RIST_LOG_ERROR,
 				"\tError on transmission sendto, ret=%d to %d.%d.%d.%d:%d/%d, seq #%"PRIu32", %d bytes\n",
 					ret, ip[0], ip[1], ip[2], ip[3], htons(sin4->sin_port),
 					p->local_port, seq_rtp, payload_len);

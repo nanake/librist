@@ -26,9 +26,13 @@
 #include "rist-private.h"
 #include <stdatomic.h>
 #include "oob_shared.h"
+#ifdef USE_TUN
+#include <sys/ioctl.h>
+#include <linux/if_tun.h>
+#endif
 
 #if defined(_WIN32) || defined(_WIN64)
-# define strtok_r strtok_s
+#define strtok_r strtok_s
 #define MSG_DONTWAIT (0)
 #endif
 
@@ -49,8 +53,17 @@ struct rist_callback_object {
 	struct rist_ctx *receiver_ctx;
 	struct rist_ctx *sender_ctx;
 	struct rist_udp_config *udp_config;
-	uint8_t recv[RIST_MAX_PACKET_SIZE];
+	uint8_t recv[RIST_MAX_PACKET_SIZE + 100];
 };
+
+#ifdef USE_TUN
+struct rist_callback_tun_object {
+	struct rist_ctx *sender_ctx;
+	int tun;
+	int tun_mode;
+	bool send_rist;
+};
+#endif
 
 struct receive_thread_object {
 	int sd;
@@ -60,7 +73,6 @@ struct receive_thread_object {
 };
 
 struct rist_sender_args {
-	struct rist_ctx *ctx;
 	char* token;
 	int profile;
 	enum rist_log_level loglevel;
@@ -69,6 +81,9 @@ struct rist_sender_args {
 	int buffer_size;
 	int statsinterval;
 	uint16_t stream_id;
+#ifdef USE_TUN
+	struct rist_callback_tun_object *callback_tun_object;
+#endif
 };
 
 static struct option long_options[] = {
@@ -79,7 +94,10 @@ static struct option long_options[] = {
 { "encryption-type", required_argument, NULL, 'e' },
 { "profile",         required_argument, NULL, 'p' },
 { "null-packet-deletion",  no_argument, NULL, 'n' },
+#ifdef USE_TUN
 { "tun",             required_argument, NULL, 't' },
+{ "tun-mode",        required_argument, NULL, 'm' },
+#endif
 { "stats",           required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
@@ -94,6 +112,10 @@ static struct option long_options[] = {
 
 const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -i | --inputurl  udp://... or rtp://... * | Comma separated list of input udp or rtp URLs            |\n"
+#ifdef USE_TUN
+"                                                 | Use tun://@ to read udp data from a tun device defined   |\n"
+"                                                 | using the -t option                                      |\n"
+#endif
 "       -o | --outputurl rist://...             * | Comma separated list of output rist URLs                 |\n"
 "       -b | --buffer value                       | Default buffer size for packet retransmissions           |\n"
 "       -s | --secret PWD                         | Default pre-shared encryption secret                     |\n"
@@ -107,6 +129,13 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
+#endif
+#ifdef USE_TUN
+"       -t | --tun name                           | Create a tun device and use it for data communications   |\n"
+"       -m | --tun-mode number                    | Data management on the tun interface:                    |\n"
+"                                                 | 0 = all data is accepted into and out of oob channel     |\n"
+"                                                 | 1 = only non udp data is accepted (default)              |\n"
+"                                                 | 2 = no data goes into or out of oob channel              |\n"
 #endif
 "       -f | --fast-start value                   | Controls data output flow before handshake is completed  |\n"
 //"                                                 | -1 = hold data out and igmp source joins                 |\n"
@@ -145,18 +174,22 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	ssize_t recv_bufsize = -1;
 	struct sockaddr_in addr4 = {0};
 	struct sockaddr_in6 addr6 = {0};
-	//struct sockaddr *addr;
+	struct sockaddr *addr;
 	uint8_t *recv_buf = callback_object->recv;
+	struct ipheader ipv4hdr;
+	struct udpheader udphdr;
+	size_t ipheader_bytes = sizeof(ipv4hdr) + sizeof(udphdr);
+	socklen_t addrlen = 0;
 
 	uint16_t address_family = (uint16_t)callback_object->udp_config->address_family;
 	if (address_family == AF_INET6) {
-		socklen_t addrlen = sizeof(struct sockaddr_in6);
-		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
-		//addr = (struct sockaddr *) &addr6;
+		addrlen = sizeof(struct sockaddr_in6);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf + ipheader_bytes, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
+		addr = (struct sockaddr *) &addr6;
 	} else {
-		socklen_t addrlen = sizeof(struct sockaddr_in);
-		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr4, &addrlen);
-		//addr = (struct sockaddr *) &addr4;
+		addrlen = sizeof(struct sockaddr_in);
+		recv_bufsize = udpsocket_recvfrom(callback_object->sd, recv_buf + ipheader_bytes, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr4, &addrlen);
+		addr = (struct sockaddr *) &addr4;
 	}
 
 	if (recv_bufsize > 0) {
@@ -181,14 +214,25 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			//data_block.flags = RIST_DATA_FLAGS_USE_SEQ;
 			// TODO: Figure out why this does not work (commenting out for now)
 		}
-		if (callback_object->udp_config->rtp && recv_bufsize > 12)
-			offset = 12; // TODO: check for header extensions and remove them as well
-		data_block.payload = recv_buf + offset;
-		data_block.payload_len = recv_bufsize - offset;
+		if (callback_object->udp_config->version == 1 && callback_object->udp_config->mux_mode == RIST_MUX_MODE_IPV4) {
+			data_block.virt_src_port = 1;
+			data_block.payload = recv_buf + offset;
+			data_block.payload_len = recv_bufsize - offset + ipheader_bytes;
+			populate_ipv4_rist_header(address_family, recv_buf, recv_bufsize, addr, addrlen);
+		}
+		else {
+			// rtp header will not be stripped out in IPV4 mux mode
+			if (callback_object->udp_config->rtp && recv_bufsize > 12)
+				offset = 12; // TODO: check for header extensions and remove them as well
+			if (callback_object->udp_config->version == 1 && callback_object->udp_config->mux_mode == RIST_MUX_MODE_VIRT_SOURCE_PORT) {
+				data_block.virt_src_port = callback_object->udp_config->stream_id;
+			}
+			data_block.payload = recv_buf + offset + ipheader_bytes;
+			data_block.payload_len = recv_bufsize - offset;
+		}
 		if (peer_connected_count) {
-			int w = rist_sender_data_write(callback_object->sender_ctx, &data_block);
-			// TODO: report error?
-			(void) w;
+			if (rist_sender_data_write(callback_object->sender_ctx, &data_block) < 0)
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing data in input_udp_recv, socket=%d\n", callback_object->sd);
 		}
 	}
 	else
@@ -244,12 +288,65 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 
 static int cb_auth_disconnect(void *arg, struct rist_peer *peer)
 {
-	(void)peer;
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
 	(void)ctx;
+	(void)peer;
 	return 0;
 }
 
+#ifdef USE_TUN
+static int rist_validate_tun_data(uint8_t *buffer, ssize_t buffer_len)
+{
+	struct ipheader *ip = (struct ipheader *) buffer;
+	int protocol = 0;
+	ssize_t payload_len = 0;
+	// Double check the validity of the packet and get the protocol number
+	if (RIST_IPH_GET_VER(ip->iph_verlen) == 4) {
+		protocol = (int) ip->iph_protocol;
+		payload_len = (ssize_t)be16toh(ip->iph_len);
+		if (payload_len != buffer_len) {
+			rist_log(&logging_settings, RIST_LOG_INFO, "Malformed ipv4 packet %d != %d\n",
+				payload_len != buffer_len);
+			return -1;
+		}
+	}
+	else if (RIST_IPH_GET_VER(ip->iph_verlen) == 6) {
+		// TODO: how do I get the protocol?
+		// For now, send all IPv6 over OOB channel
+	}
+	else {
+		rist_log(&logging_settings, RIST_LOG_INFO, "Unknown ipv? payload %d\n",
+			RIST_IPH_GET_VER(ip->iph_verlen));
+		return -1;
+	}
+	return protocol;
+}
+
+static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
+{
+	struct rist_callback_tun_object *callback_tun_object = (void *) arg;
+	int message_len = 0;
+	char *message = oob_process_api_message((int)oob_block->payload_len, (char *)oob_block->payload, &message_len);
+	if (message) {
+		rist_log(&logging_settings, RIST_LOG_INFO,"Out-of-band api data received: %.*s\n", message_len, message);
+	}
+	else if (callback_tun_object->tun)
+	{
+		// Process non-api based data
+		int protocol = rist_validate_tun_data((uint8_t *)oob_block->payload, oob_block->payload_len);
+		if (protocol >= 0)
+		{
+			if (callback_tun_object->tun_mode == 0 ||
+				(callback_tun_object->tun_mode == 1 && protocol != 17)) {
+				if (write(callback_tun_object->tun, oob_block->payload, oob_block->payload_len) < 0) {
+					rist_log(&logging_settings, RIST_LOG_ERROR, "Error %d writing %d bytes to output tun\n", errno, oob_block->payload_len);
+				}
+			}
+		}
+	}
+	return 0;
+}
+#else
 static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 {
 	struct rist_ctx *ctx = (struct rist_ctx *)arg;
@@ -261,6 +358,7 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 	}
 	return 0;
 }
+#endif
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container)
 {
@@ -276,31 +374,36 @@ static void intHandler(int signal)
 	signalReceived = signal;
 }
 
-static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
+static struct rist_peer* setup_rist_peer(struct rist_ctx *ctx, struct rist_sender_args *setup)
 {
-	if (rist_stats_callback_set(setup->ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		return NULL;
 	}
 
-	if (rist_auth_handler_set(setup->ctx, cb_auth_connect, cb_auth_disconnect, setup->ctx) < 0) {
+	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) < 0) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		return NULL;
 	}
 
-	if (rist_connection_status_callback_set(setup->ctx, connection_status_callback, NULL) == -1) {
+	if (rist_connection_status_callback_set(ctx, connection_status_callback, NULL) == -1) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist connection status callback\n");
 		return NULL;
 	}
 
 	if (setup->profile != RIST_PROFILE_SIMPLE) {
-		if (rist_oob_callback_set(setup->ctx, cb_recv_oob, setup->ctx) == -1) {
+#ifdef USE_TUN
+		if (rist_oob_callback_set(ctx, cb_recv_oob, setup->callback_tun_object) == -1) {
+#else
+		if (rist_oob_callback_set(ctx, cb_recv_oob, ctx) == -1) {
+#endif
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable out-of-band data\n");
 			return NULL;
 		}
 	}
 
-	if (rist_stats_callback_set(setup->ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL) == -1) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		return NULL;
 	}
@@ -343,7 +446,8 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 		peer_config_link->congestion_control_mode, peer_config_link->min_retries, peer_config_link->max_retries);
 
 	struct rist_peer *peer;
-	if (rist_peer_create(setup->ctx, &peer, peer_config_link) == -1) {
+	if (rist_peer_create(ctx, &peer, peer_config_link) == -1) {
+
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not add peer connector to %s\n", peer_config_link->address);
 		free((void *)peer_config_link);
 		return NULL;
@@ -373,6 +477,66 @@ static struct rist_peer* setup_rist_peer(struct rist_sender_args *setup)
 
 	return peer;
 }
+
+#ifdef USE_TUN
+static void rist_process_tun_data(struct rist_callback_tun_object *callback_tun_object, uint8_t *buffer, ssize_t buffer_len)
+{
+	int protocol = rist_validate_tun_data(buffer, buffer_len);
+	if (protocol >=0) {
+		// Send data through oob channel
+		if (callback_tun_object->tun_mode == 0 ||
+				(callback_tun_object->tun_mode == 1 && protocol != 17)) {
+			struct rist_oob_block oob_block = { 0 };
+			oob_block.peer = NULL;
+			oob_block.payload = &buffer[0];
+			oob_block.payload_len = buffer_len;
+			if (rist_oob_write(callback_tun_object->sender_ctx, &oob_block) < 0)
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing %d bytes to rist_oob_write\n", buffer_len);
+		}
+		// Send data through rist channel
+		if (callback_tun_object->send_rist == true && 
+				callback_tun_object->tun_mode != 0 && protocol == 17) {
+			struct rist_data_block data_block = { 0 };
+			// We use this source port to signal a non standard stream, i.e. tun mux
+			data_block.virt_src_port = 1;
+			// Delegate ts_ntp to the library by default.
+			// If we wanted to be more accurate, we could use the kernel nic capture timestamp (linux)
+			data_block.ts_ntp = 0;
+			data_block.flags = 0;
+			data_block.payload = &buffer[0];
+			data_block.payload_len = buffer_len;
+			if (rist_sender_data_write(callback_tun_object->sender_ctx, &data_block) < 0)
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing %d bytes to rist_sender_data_write\n", buffer_len);
+		}
+	}
+}
+
+static PTHREAD_START_FUNC(tun_loop, arg)
+{
+	struct rist_callback_tun_object *callback_tun_object = (void *) arg;
+	while (!signalReceived) {
+		uint8_t buffer[RIST_MAX_PACKET_SIZE];
+		fd_set read_fds;
+		FD_ZERO(&read_fds);
+		FD_SET(callback_tun_object->tun, &read_fds);
+		// Set timeout to 100 ms
+		struct timeval timeout;
+		timeout.tv_sec = 0;
+		timeout.tv_usec = 100000;
+		// Wait for input to become ready or until the time out;
+		if (select(FD_SETSIZE, &read_fds, NULL, NULL, &timeout) == 1)
+		{
+			ssize_t r = read(callback_tun_object->tun, &buffer[0], RIST_MAX_PACKET_SIZE);
+			if (r > 0) {
+				rist_process_tun_data(callback_tun_object, &buffer[0], r);
+			}
+			else
+				break;
+		}
+	}
+	return 0;
+}
+#endif
 
 static PTHREAD_START_FUNC(input_loop, arg)
 {
@@ -406,6 +570,47 @@ static PTHREAD_START_FUNC(input_loop, arg)
 	return 0;
 }
 
+static struct rist_ctx *configure_rist_output_context(char* outputurl,
+	struct rist_sender_args *peer_args, const struct rist_udp_config *udp_config,
+	bool npd, enum rist_profile profile)
+{
+	struct rist_ctx *sender_ctx;
+	// Setup the output rist objects (a brand new instance per receiver)
+	char *saveptroutput;
+	char *tmpoutputurl = malloc(strlen(outputurl) +1);
+	strcpy(tmpoutputurl, outputurl);
+	char *outputtoken = strtok_r(tmpoutputurl, ",", &saveptroutput);
+
+	// All output peers should be on the same context per receiver
+	if (rist_sender_create(&sender_ctx, peer_args->profile, 0, &logging_settings) != 0) {
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
+		goto fail;
+	}
+	if (npd) {
+		if (profile == RIST_PROFILE_SIMPLE)
+			rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
+		else
+			rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled. Support for this feature is not guaranteed to be present on receivers. Please make sure the receiver supports it (librist does)\n");
+		if (rist_sender_npd_enable(sender_ctx) != 0) {
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
+		}
+	}
+	for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
+		peer_args->token = outputtoken;
+		peer_args->stream_id = udp_config->stream_id;
+		struct rist_peer *peer = setup_rist_peer(sender_ctx, peer_args);
+		if (peer == NULL)
+			goto fail;
+		outputtoken = strtok_r(NULL, ",", &saveptroutput);
+		if (!outputtoken)
+			break;
+	}
+	free(tmpoutputurl);
+	return sender_ctx;
+fail:
+	return  NULL;
+}
+
 int main(int argc, char *argv[])
 {
 	int c;
@@ -414,7 +619,11 @@ int main(int argc, char *argv[])
 	struct evsocket_event *event[MAX_INPUT_COUNT];
 	char *inputurl = NULL;
 	char *outputurl = NULL;
+#ifdef USE_TUN
+	struct rist_callback_tun_object callback_tun_object = {0};
+	callback_tun_object.tun_mode = 1;
 	char *oobtun = NULL;
+#endif
 	char *shared_secret = NULL;
 	int buffer_size = 0;
 	int encryption_type = 0;
@@ -426,7 +635,11 @@ int main(int argc, char *argv[])
 	struct rist_sender_args peer_args;
 	char *remote_log_address = NULL;
 	bool thread_started[MAX_INPUT_COUNT +1] = {false};
+#ifdef USE_TUN
+	pthread_t thread_main_loop[MAX_INPUT_COUNT+2] = { 0 };
+#else
 	pthread_t thread_main_loop[MAX_INPUT_COUNT+1] = { 0 };
+#endif
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
@@ -452,7 +665,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:p:S:F:f:v:hun", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:v:hun", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -469,9 +682,14 @@ int main(int argc, char *argv[])
 		case 'e':
 			encryption_type = atoi(optarg);
 		break;
+#ifdef USE_TUN
 		case 't':
 			oobtun = strdup(optarg);
 		break;
+		case 'm':
+			callback_tun_object.tun_mode = atoi(optarg);
+		break;
+#endif
 		case 'p':
 			profile = atoi(optarg);
 		break;
@@ -540,8 +758,26 @@ int main(int argc, char *argv[])
 	peer_args.buffer_size = buffer_size;
 	peer_args.statsinterval = statsinterval;
 
+#ifdef USE_TUN
+	// Setup tun device
+	if (oobtun) {
+		callback_tun_object.tun = oob_setup_tun_device(oobtun);
+		if (callback_tun_object.tun == -1)
+			rist_log(&logging_settings, RIST_LOG_ERROR, "tun open error: %s\n", strerror(errno));
+		else if (callback_tun_object.tun < 0)
+			rist_log(&logging_settings, RIST_LOG_ERROR, "tun ioctl error: %s (%d)\n", strerror(errno), callback_tun_object.tun);
+		if (callback_tun_object.tun < 0)
+			exit(1);
+	}
+#endif
+
+	bool rist_listens = false;
+	if (strstr(outputurl, "://@") != NULL) {
+		rist_listens = true;
+	}
+
 	// Setup the input udp/rist objects: listen to the given address(es)
-	int32_t stream_id_check[MAX_INPUT_COUNT];
+	int32_t stream_id_check[MAX_INPUT_COUNT ];
 	for (size_t j = 0; j < MAX_INPUT_COUNT; j++)
 		stream_id_check[j] = -1;
 	struct evsocket_ctx *evctx = NULL;
@@ -572,38 +808,36 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		// Setup the output rist objects (a brand new instance per receiver)
-		char *saveptroutput;
-		char *tmpoutputurl = malloc(strlen(outputurl) +1);
-		strcpy(tmpoutputurl, outputurl);
-		char *outputtoken = strtok_r(tmpoutputurl, ",", &saveptroutput);
-		// All output peers should be on the same context per receiver
-		if (rist_sender_create(&callback_object[i].sender_ctx, peer_args.profile, 0, &logging_settings) != 0) {
-			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
-			break;
-		}
-		if (npd) {
-			if (profile == RIST_PROFILE_SIMPLE)
-				rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
-			else
-				rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled. Support for this feature is not guaranteed to be present on receivers. Please make sure the receiver supports it (librist does)\n");
-			if (rist_sender_npd_enable(callback_object[i].sender_ctx) != 0) {
-				rist_log(&logging_settings, RIST_LOG_ERROR, "Failed to enable null packet deletion\n");
+#ifdef USE_TUN
+		peer_args.callback_tun_object = &callback_tun_object;
+#endif
+
+		// Setup the output rist objects
+		if (rist_listens && i > 0) {
+			if (callback_object[0].udp_config->version == 1 && (callback_object[0].udp_config->mux_mode == RIST_MUX_MODE_RAW || udp_config->mux_mode == RIST_MUX_MODE_RAW)) {
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Multiplexing is not allowed when any peer is in listening mode unless you enable non standard muxing on all inputs\n");
+				goto shutdown;
+			}
+			else {
+				// Single context for all inputs, we multiplex on the payload
+				callback_object[i].sender_ctx = callback_object[0].sender_ctx;
 			}
 		}
-		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
-			peer_args.token = outputtoken;
-			peer_args.ctx = callback_object[i].sender_ctx;
-			peer_args.stream_id = udp_config->stream_id;
-			struct rist_peer *peer = setup_rist_peer(&peer_args);
-			if (peer == NULL)
+		else
+		{
+			// A brand new instance/context per receiver
+			callback_object[i].sender_ctx = configure_rist_output_context(outputurl, &peer_args, udp_config, npd, profile);
+			if (callback_object[i].sender_ctx == NULL)
 				goto shutdown;
-
-			outputtoken = strtok_r(NULL, ",", &saveptroutput);
-			if (!outputtoken)
-				break;
 		}
-		free(tmpoutputurl);
+#ifdef USE_TUN
+		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
+			// Use the first context for OOB tun context
+			if (!callback_tun_object.sender_ctx) {
+				callback_tun_object.sender_ctx = callback_object[i].sender_ctx;
+			}
+		}
+#endif
 
 		if (strcmp(udp_config->prefix, "rist") == 0) {
 			// This is a rist input (new context for each listener)
@@ -612,13 +846,18 @@ int main(int argc, char *argv[])
 				goto next;
 			}
 			peer_args.token = inputtoken;
-			peer_args.ctx = callback_object[i].receiver_ctx;
-			struct rist_peer *peer = setup_rist_peer(&peer_args);
+			struct rist_peer *peer = setup_rist_peer(callback_object[i].receiver_ctx, &peer_args);
 			if (peer == NULL)
 				atleast_one_socket_opened = true;
 			rist_udp_config_free2(&udp_config);
 			udp_config = NULL;
 		}
+#ifdef USE_TUN
+		else if (strcmp(udp_config->prefix, "tun") == 0) {
+			atleast_one_socket_opened = true;
+			callback_tun_object.send_rist = true;
+		}
+#endif
 		else {
 			if(!evctx)
 				evctx = evsocket_create();
@@ -653,19 +892,26 @@ next:
 		inputtoken = strtok_r(NULL, ",", &saveptrinput);
 	}
 
-	if (!atleast_one_socket_opened) {
+#ifdef USE_TUN
+	if (!atleast_one_socket_opened && !callback_tun_object.tun) {
 		goto shutdown;
 	}
+#else
+ 	if (!atleast_one_socket_opened) {
+ 		goto shutdown;
+ 	}
+#endif
 
 	if (evctx && pthread_create(&thread_main_loop[0], NULL, input_loop, (void *)callback_object) != 0)
 	{
-		fprintf(stderr, "Could not start udp receiver thread\n");
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start udp receiver thread\n");
 		goto shutdown;
 	}
 	thread_started[0] = true;
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
-		if (callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
+		if (((rist_listens && i == 0) || !rist_listens) &&
+			 callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 			goto shutdown;
 		}
@@ -675,11 +921,19 @@ next:
 		}
 		if (callback_object[i].receiver_ctx && pthread_create(&thread_main_loop[i+1], NULL, input_loop, (void *)callback_object) != 0)
 		{
-			fprintf(stderr, "Could not start send rist receiver thread\n");
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start send rist receiver thread\n");
 			goto shutdown;
 		}
 		thread_started[i+1] = true;
 	}
+
+#ifdef USE_TUN
+	if (callback_tun_object.tun && pthread_create(&thread_main_loop[MAX_INPUT_COUNT + 1], NULL, tun_loop, (void *)&callback_tun_object) != 0)
+	{
+		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start tun read thread\n");
+		goto shutdown;
+	}
+#endif
 
 #ifdef _WIN32
 		system("pause");
@@ -716,8 +970,14 @@ shutdown:
 		free(inputurl);
 	if (outputurl)
 		free(outputurl);
+#ifdef USE_TUN
+	if (thread_main_loop[MAX_INPUT_COUNT+1])
+		pthread_join(thread_main_loop[MAX_INPUT_COUNT+1], NULL);
 	if (oobtun)
 		free(oobtun);
+	if (callback_tun_object.tun)
+		close(callback_tun_object.tun);
+#endif
 	if (shared_secret)
 		free(shared_secret);
 

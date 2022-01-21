@@ -334,6 +334,7 @@ struct rist_common_ctx {
 	int (*oob_data_callback)(void *arg, const struct rist_oob_block *oob_block);
 	void *oob_data_callback_argument;
 	bool oob_data_enabled;
+	struct rist_peer *oob_current_peer;
 
 	int (*stats_callback)(void *arg, const struct rist_stats *stats_container);
 	void *stats_callback_argument;

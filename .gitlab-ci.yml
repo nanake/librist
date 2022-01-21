@@ -25,7 +25,7 @@ build-ubuntu:
         - avx2
         - amd64
     script:
-        - meson build --buildtype release --werror
+        - meson build --buildtype release --werror -Duse_tun=true
         - ninja -C build
     artifacts:
         paths:

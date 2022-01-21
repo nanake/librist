@@ -5,6 +5,9 @@
  */
 
 #include "common/attributes.h"
+#include <librist/udpsocket.h>
+
+#define RIST_IPH_GET_VER(v) (((v) >> 4) & 0x0F)
 
 #define RIST_OOB_API_IP_PROTOCOL 252
 #define RIST_OOB_API_IP_IDENT_AUTH 54321
@@ -12,7 +15,7 @@
 #define RIST_OOB_ERROR_INVALID_PROTO -2
 #define RIST_OOB_ERROR_INVALID_IDENT -3
 
-// The IP header's structure (20 bytes)
+// The IPv4 header's structure (20 bytes)
 RIST_PACKED_STRUCT(ipheader, {
 	unsigned char      iph_verlen;
 	unsigned char      iph_tos;
@@ -34,5 +37,9 @@ RIST_PACKED_STRUCT(udpheader, {
 	unsigned short int udph_chksum;
 })
 
+void populate_ipv4_rist_header(unsigned short int address_family, unsigned char *recv_buf, ssize_t recv_bufsize, struct sockaddr * addr, socklen_t addrlen);
 int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *message, int message_len);
 char *oob_process_api_message(int buffer_len, char *buffer, int *message_len);
+#ifdef USE_TUN
+int oob_setup_tun_device(char *oobtun);
+#endif
