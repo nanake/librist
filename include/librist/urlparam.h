@@ -41,8 +41,8 @@
 #define RIST_URL_PARAM_RTP_TIMESTAMP "rtp-timestamp"
 #define RIST_URL_PARAM_RTP_SEQUENCE "rtp-sequence"
 #define RIST_URL_PARAM_RTP_OUTPUT_PTYPE "rtp-ptype"
-#define RIST_URL_PARAM_MUX_MODE "mux-mode"
-#define RIST_URL_PARAM_MUX_FILTER "mux-filter"
+#define RIST_URL_PARAM_MULTIPLEX_MODE "multiplex-mode"
+#define RIST_URL_PARAM_MULTIPLEX_FILTER "multiplex-filter"
 /* Rist additional parameter names */
 #define RIST_URL_PARAM_VIRT_SRC_PORT "virt-src-port"
 #define RIST_URL_PARAM_PROFILE "profile"

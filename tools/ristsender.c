@@ -214,7 +214,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			//data_block.flags = RIST_DATA_FLAGS_USE_SEQ;
 			// TODO: Figure out why this does not work (commenting out for now)
 		}
-		if (callback_object->udp_config->version == 1 && callback_object->udp_config->mux_mode == RIST_MUX_MODE_IPV4) {
+		if (callback_object->udp_config->version == 1 && callback_object->udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_IPV4) {
 			data_block.virt_src_port = 1;
 			data_block.payload = recv_buf + offset;
 			data_block.payload_len = recv_bufsize - offset + ipheader_bytes;
@@ -224,7 +224,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			// rtp header will not be stripped out in IPV4 mux mode
 			if (callback_object->udp_config->rtp && recv_bufsize > 12)
 				offset = 12; // TODO: check for header extensions and remove them as well
-			if (callback_object->udp_config->version == 1 && callback_object->udp_config->mux_mode == RIST_MUX_MODE_VIRT_SOURCE_PORT) {
+			if (callback_object->udp_config->version == 1 && callback_object->udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT) {
 				data_block.virt_src_port = callback_object->udp_config->stream_id;
 			}
 			data_block.payload = recv_buf + offset + ipheader_bytes;
@@ -814,7 +814,7 @@ int main(int argc, char *argv[])
 
 		// Setup the output rist objects
 		if (rist_listens && i > 0) {
-			if (callback_object[0].udp_config->version == 1 && (callback_object[0].udp_config->mux_mode == RIST_MUX_MODE_RAW || udp_config->mux_mode == RIST_MUX_MODE_RAW)) {
+			if (callback_object[0].udp_config->version == 1 && (callback_object[0].udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_RAW || udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_RAW)) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Multiplexing is not allowed when any peer is in listening mode unless you enable non standard muxing on all inputs\n");
 				goto shutdown;
 			}

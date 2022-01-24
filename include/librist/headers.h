@@ -55,12 +55,12 @@ enum rist_data_block_receiver_flags
 	RIST_DATA_FLAGS_OVERFLOW = 1 << 2
 };
 
-enum rist_mux_mode
+enum librist_multiplex_mode
 {
-	RIST_MUX_MODE_RAW = 0,
-	RIST_MUX_MODE_AUTO = 1,
-	RIST_MUX_MODE_VIRT_SOURCE_PORT = 2,
-	RIST_MUX_MODE_IPV4 = 3,
+	LIBRIST_MULTIPLEX_MODE_RAW = 0,
+	LIBRIST_MULTIPLEX_MODE_AUTO = 1,
+	LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT = 2,
+	LIBRIST_MULTIPLEX_MODE_IPV4 = 3,
 };
 
 struct rist_ctx;
@@ -102,8 +102,8 @@ struct rist_udp_config
 	int rtp;
 	uint8_t rtp_ptype;
 	uint16_t stream_id;
-	int mux_mode;
-	char mux_filter[RIST_MAX_STRING_SHORT];
+	enum librist_multiplex_mode multiplex_mode;
+	char multiplex_filter[RIST_MAX_STRING_SHORT];
 };
 
 #ifdef __cplusplus
