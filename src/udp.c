@@ -178,9 +178,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 	uint8_t *_payload = NULL;
 
 	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
-							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || 
-								payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT || 
-								payload_type == RIST_PAYLOAD_TYPE_DATA_OOB)
+							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
 							&& (k->key_size || p->compression));
 
 	assert(payload != NULL);
