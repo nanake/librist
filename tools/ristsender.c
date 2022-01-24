@@ -6,6 +6,7 @@
 
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
+#include <stdint.h>
 #include "librist/version.h"
 #include "config.h"
 #if HAVE_MBEDTLS
@@ -215,7 +216,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			// TODO: Figure out why this does not work (commenting out for now)
 		}
 		if (callback_object->udp_config->version == 1 && callback_object->udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_IPV4) {
-			data_block.virt_src_port = 1;
+			data_block.virt_src_port = UINT16_MAX;
 			data_block.payload = recv_buf + offset;
 			data_block.payload_len = recv_bufsize - offset + ipheader_bytes;
 			populate_ipv4_rist_header(address_family, recv_buf, recv_bufsize, addr, addrlen);
@@ -814,7 +815,7 @@ int main(int argc, char *argv[])
 
 		// Setup the output rist objects
 		if (rist_listens && i > 0) {
-			if (callback_object[0].udp_config->version == 1 && (callback_object[0].udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_RAW || udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_RAW)) {
+			if (callback_object[0].udp_config->version == 1 && (callback_object[0].udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT || udp_config->multiplex_mode == LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT)) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Multiplexing is not allowed when any peer is in listening mode unless you enable non standard muxing on all inputs\n");
 				goto shutdown;
 			}

@@ -55,12 +55,13 @@ enum rist_data_block_receiver_flags
 	RIST_DATA_FLAGS_OVERFLOW = 1 << 2
 };
 
+
 enum librist_multiplex_mode
 {
-	LIBRIST_MULTIPLEX_MODE_RAW = 0,
-	LIBRIST_MULTIPLEX_MODE_AUTO = 1,
-	LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT = 2,
-	LIBRIST_MULTIPLEX_MODE_IPV4 = 3,
+	LIBRIST_MULTIPLEX_MODE_AUTO = -1, //Autoselect between multiplex modes below.
+	LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT = 0,//Multiplexed flows are selected based on their GRE destination port (data packets)
+	LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT = 1, // Multiplexed flows are selected based on their GRE source port (data packets). libRIST ONLY
+	LIBRIST_MULTIPLEX_MODE_IPV4 = 2, // Multiple IP flows are multiplexed into a single RIST flow, to be output via a TUN device. libRIST ONLY
 };
 
 struct rist_ctx;

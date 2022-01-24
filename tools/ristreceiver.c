@@ -6,6 +6,8 @@
 
 #include <librist/librist.h>
 #include <librist/udpsocket.h>
+#include <stdint.h>
+#include "headers.h"
 #include "librist/version.h"
 #include "config.h"
 #if HAVE_MBEDTLS
@@ -176,7 +178,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		// and we match on that. The other two muxing modes are not spec compliant and are only
 		// guaranteed to work from librist to librist
 		if (profile == RIST_PROFILE_SIMPLE || udp_config->stream_id == 0 || 
-				(mux_mode == LIBRIST_MULTIPLEX_MODE_RAW && udp_config->stream_id == b->virt_dst_port) ||
+				(mux_mode == LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT && udp_config->stream_id == b->virt_dst_port) ||
 				(mux_mode == LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT && udp_config->stream_id == b->virt_src_port) ||
 				(mux_mode == LIBRIST_MULTIPLEX_MODE_IPV4))
 		{
@@ -186,7 +188,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		else if (mux_mode == LIBRIST_MULTIPLEX_MODE_AUTO)
 		{
 			// Auto-detect (librist to librist)
-			if (b->virt_src_port == 1) {
+			if (b->virt_src_port == UINT16_MAX) {
 				mux_mode = LIBRIST_MULTIPLEX_MODE_IPV4;
 				found_it = true;
 			}
@@ -195,7 +197,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 				found_it = true;
 			}
 			else if (b->virt_src_port >= 32768 && udp_config->stream_id == b->virt_dst_port) {
-				mux_mode = LIBRIST_MULTIPLEX_MODE_RAW;
+				mux_mode = LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT;
 				found_it = true;
 			}
 		}
