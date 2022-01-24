@@ -98,8 +98,8 @@ int parse_url_udp_options(const char* url, struct rist_udp_config *output_udp_co
 				int temp = atoi( val );
 				if (temp >= 0)
 					output_udp_config->multiplex_mode = (uint8_t)temp;
-			} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_MULTIPLEX_FILTER) == 0) {
-				strncpy((void *)output_udp_config->multiplex_filter, val, RIST_MAX_STRING_SHORT -1);
+/*UNUSED TODO} else if (output_udp_config->version == 1 && strcmp( url_params[i].key, RIST_URL_PARAM_MULTIPLEX_FILTER) == 0) {
+				strncpy((void *)output_udp_config->multiplex_filter, val, RIST_MAX_STRING_SHORT -1); */
 			} else {
 				ret = -1;
 				fprintf(stderr, "Unknown or invalid parameter %s\n", url_params[i].key);

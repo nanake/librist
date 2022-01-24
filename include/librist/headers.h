@@ -104,7 +104,7 @@ struct rist_udp_config
 	uint8_t rtp_ptype;
 	uint16_t stream_id;
 	enum librist_multiplex_mode multiplex_mode;
-	char multiplex_filter[RIST_MAX_STRING_SHORT];
+	char multiplex_filter[RIST_MAX_STRING_SHORT];//Future usage
 };
 
 #ifdef __cplusplus
