@@ -171,8 +171,12 @@ if builtin_cjson
 									include_directories : include_directories('contrib/contrib_cJSON'))
 endif
 
-if cc.check_header('linux/if_tun.h') and get_option('use_tun')
-	add_project_arguments(['-DUSE_TUN'], language: 'c')
+if get_option('use_tun')
+	if host_machine.system() == 'linux' and cc.check_header('linux/if_tun.h')
+		add_project_arguments(['-DUSE_TUN'], language: 'c')
+	else
+		error('TUN only supported on linux at this moment')
+	endif
 endif
 
 mbedcrypto_lib_found = false
