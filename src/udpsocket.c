@@ -202,7 +202,7 @@ int udpsocket_join_mcast_group(int sd, const char* miface, struct sockaddr* sa, 
 	int ifindex = 0;
 
 	if (is_ip_address(miface, AF_INET))	{
-		src_addr = inet_addr(miface);
+		inet_pton(AF_INET, miface, &src_addr);
 	} else if (miface != NULL && miface[0] != '\0') {
 #ifndef _WIN32
 		ifindex = if_nametoindex(miface);

@@ -12,6 +12,7 @@
 #else
 #include <arpa/inet.h>
 #endif
+#include "socket-shim.h"
 
 static unsigned short csum(unsigned short *buf, int nwords)
 {
@@ -33,9 +34,12 @@ void populate_ip_header(struct ipheader *ip, char *sourceip, char *destip, unsig
 	ip->iph_ttl = 0x40;
 	ip->iph_protocol = protocol;
 	// The source IP address
-	ip->iph_sourceip = inet_addr(sourceip);
+	unsigned int address = 0;
+	inet_pton(AF_INET, sourceip, &address);
+	ip->iph_sourceip = address;
 	// The destination IP address
-	ip->iph_destip = inet_addr(destip);
+	inet_pton(AF_INET, destip, &address);
+	ip->iph_destip = address;
 	// make sure the checksum area is zero or the calculated checksum will be wrong
 	ip->iph_chksum = 0;
 }

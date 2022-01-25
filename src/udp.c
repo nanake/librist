@@ -439,8 +439,9 @@ void rist_populate_cname(struct rist_peer *peer)
 		struct sockaddr *xsa = (struct sockaddr *)&peer_sockaddr;
 		// TODO: why is this returning non-sense?
 		if (xsa->sa_family == AF_INET) {
+			char addr[INET_ADDRSTRLEN] = {'\0'};
 			struct sockaddr_in *xin = (struct sockaddr_in*)&peer_sockaddr;
-			char *addr = inet_ntoa(xin->sin_addr);
+			inet_ntop(AF_INET, &xin->sin_addr, addr, INET_ADDRSTRLEN);
 			if (strcmp(addr, "0.0.0.0") != 0) {
 				name_length = snprintf(identifier, RIST_MAX_HOSTNAME, "%s@%s:%u", hostname,
 										addr, ntohs(xin->sin_port));
@@ -1257,14 +1258,13 @@ void rist_print_inet_info(char *prefix, struct rist_peer *peer)
 	char ipstr[INET6_ADDRSTRLEN];
 	uint32_t port;
 	// deal with both IPv4 and IPv6:
+	struct sockaddr_in6 *s = (struct sockaddr_in6 *) &peer->u.address;
+	inet_ntop(peer->address_family, &s->sin6_addr, ipstr, sizeof ipstr);
 	if (peer->address_family == AF_INET6) {
-		struct sockaddr_in6 *s = (struct sockaddr_in6 *) &peer->u.address;
 		port = ntohs(s->sin6_port);
-		inet_ntop(AF_INET6, &s->sin6_addr, ipstr, sizeof ipstr);
 	} else {
 		struct sockaddr_in *addr = (void *) &peer->u.address;
 		port = ntohs(addr->sin_port);
-		snprintf(ipstr, INET6_ADDRSTRLEN, "%s", inet_ntoa(addr->sin_addr));
 	}
 
 	struct rist_common_ctx *ctx = get_cctx(peer);
