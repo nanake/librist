@@ -2228,7 +2228,13 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		RIST_MARK_UNUSED(fd);
 		RIST_MARK_UNUSED(revents);
 		struct rist_peer *peer = (struct rist_peer *) arg;
-
+#ifdef _WIN32
+		if (WSAGetLastError() == WSAECONNRESET) {
+			//recvfrom clears the WSAECONNRESET error
+			recvfrom(peer->sd, NULL, 0, 0, NULL, 0);
+			return;
+		}
+#endif
 		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSocket error!\n");
 
 		//rist_peer_remove(get_cctx(peer), peer, NULL);
@@ -2289,7 +2295,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		if (atomic_load_explicit(&peer->shutdown, memory_order_acquire)) {
 			return;
 		}
-
 		uint64_t now = timestampNTP_u64();
 		struct rist_common_ctx *cctx = get_cctx(peer);
 
