@@ -24,7 +24,7 @@ int suppress_null_packets(const uint8_t payload_in[],uint8_t payload_out[], size
 	SET_BIT(header_ext->flags, 7);
 	size_t offset = 0;
 	size_t output_offset = 0;
-	size_t bytes_remaining = *payload_len - packet_size;
+	//size_t bytes_remaining = *payload_len - packet_size;
 	struct mpegts_header *hdr = (struct mpegts_header *)&payload_in[offset];
 	int suppressed = 0;
 	if (RIST_UNLIKELY(hdr->syncbyte  != 0x47))
@@ -41,7 +41,7 @@ int suppress_null_packets(const uint8_t payload_in[],uint8_t payload_out[], size
 			output_offset += packet_size;
 		}
 		offset += packet_size;
-		bytes_remaining -= packet_size;
+		//bytes_remaining -= packet_size;
 		hdr = (struct mpegts_header *)&payload_in[offset];
 	}
 	return suppressed;
