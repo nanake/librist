@@ -12,17 +12,20 @@
 #endif
 
 #ifdef _WIN32
-
 #include <winsock2.h>
 #define _WINSOCKAPI_
 #include <windows.h>
 #include <ws2tcpip.h>
 #include <stdlib.h>
-
 #define AF_LOCAL AF_UNSPEC
 #define MSG_DONTWAIT (0)
 
 typedef int socklen_t;
+#ifndef __MINGW32__
+#include <io.h>
+#define dup(s) _dup(s)
+#define write(fd, buf, size) _write(fd, buf, size)
+#endif
 
 #else /* Unix like OSes */
 

@@ -279,7 +279,7 @@ int udpsocket_open_connect(const char *host, uint16_t port, const char *mciface)
 
 	if (connect(sd, (struct sockaddr *)&raw, addrlen) < 0) {
 		int err = errno;
-		close(sd);
+		udpsocket_close(sd);
 		errno = err;
 		return -1;
 	}
@@ -317,14 +317,14 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		struct sockaddr_in6 sa = { .sin6_family = raw.sin6_family, .sin6_port = raw.sin6_port };
 		if (bind(sd, (struct sockaddr *)&sa, addrlen) < 0)	{
 			rist_log_priv3(RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
-			close(sd);
+			udpsocket_close(sd);
 			return -1;
 		}
 	} else
 #endif
 	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)	{
 		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
-		close(sd);
+		udpsocket_close(sd);
 		return -1;
 	}
 	if (is_multicast) {
@@ -384,7 +384,11 @@ int udpsocket_recvfrom(int sd, void *buf, size_t size, int flags, struct sockadd
 
 int udpsocket_close(int sd)
 {
+#ifndef _WIN32
 	return close(sd);
+#else
+	return closesocket(sd);
+#endif
 }
 
 int udpsocket_parse_url_parameters(const char *url, udpsocket_url_param_t *params, int max_params,

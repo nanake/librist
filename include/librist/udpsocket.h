@@ -27,9 +27,6 @@
 #include <windows.h>
 #include <ws2tcpip.h>
 #define AF_LOCAL AF_UNSPEC
-#ifndef __MINGW32__
-#define close(s) closesocket(s)
-#endif
 typedef int socklen_t;
 
 /* POSIX */
