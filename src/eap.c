@@ -239,7 +239,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 		struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 		hdr->type = EAP_TYPE_SRP_SHA1;
 		hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
-		return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(hdr), outpkt);
+		return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(*hdr), outpkt);
 	}
 	//perm failure
 	ctx->authentication_state = EAP_AUTH_STATE_FAILED;
