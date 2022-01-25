@@ -82,10 +82,10 @@ static inline int lc_set_errno(int result)
 
 int clock_gettime(clockid_t clock_id, struct timespec *tp)
 {
-    unsigned __int64 t;
+    uint64_t t;
     LARGE_INTEGER pf, pc;
     union {
-        unsigned __int64 u64;
+        uint64_t u64;
         FILETIME ft;
     }  ct, et, kt, ut;
 

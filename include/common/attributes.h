@@ -79,7 +79,8 @@ struct pollfd
 struct pollfd;
 #endif
 #else
-typedef __int64 ssize_t;
+#include <stdint.h>
+typedef int64_t ssize_t;
 #endif
 #else
 typedef signed int ssize_t;
