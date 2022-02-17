@@ -2584,6 +2584,8 @@ protocol_bypass:
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 							"Peer %u was dead for %"PRIu64" ms and it is now alive again\n",
 								p->adv_peer_id, dead_time / RIST_CLOCK);
+					if (p->peer_data)
+						p->peer_data->dead = 0;
 				}
 				p->last_rtcp_received = now;
 				if (p->flow)
