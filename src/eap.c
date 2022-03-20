@@ -231,7 +231,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 	if (srp_user_is_authenticated(ctx->srp_user))
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
-			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated\n");
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated\n");
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
@@ -416,7 +416,7 @@ static int process_eap_response_srp_server_validator(struct eapsrp_ctx *ctx)
 	if (srp_verifier_is_authenticated(ctx->srp_verifier))
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
-			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Succesfully authenticated %s@%s\n", ctx->username, ctx->ip_string);
+			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated %s@%s\n", ctx->username, ctx->ip_string);
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;

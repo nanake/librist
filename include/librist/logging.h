@@ -90,8 +90,8 @@ RIST_API int rist_logging_set(struct rist_logging_settings **logging_settings, e
 /**
  * @brief Set global log settings
  * Set the global log settings that are used by the udpsocket_ functions
- * @param logging_settings struct containing log settings from wich log settings will be copied from
- * @return 0 for succes
+ * @param logging_settings struct containing log settings from which log settings will be copied from
+ * @return 0 for success
  **/
 RIST_API int rist_logging_set_global(struct rist_logging_settings *logging_settings);
 

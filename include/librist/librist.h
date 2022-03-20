@@ -59,7 +59,7 @@ RIST_API int rist_destroy(struct rist_ctx *ctx);
 /**
  * @brief Parses udp url for udp config data (multicast interface, stream-id, prefix, etc)
  *
- * Use this API to parse a generic URL string and turn it into a meaninful udp_config structure
+ * Use this API to parse a generic URL string and turn it into a meaningful udp_config structure
  *
  * @param url a pointer to a url to be parsed, i.e. udp://myserver.net:1234?miface=eth0&stream-id=1968
  * @param[out] udp_config a pointer to a the rist_udp_config structure (NULL is allowed).

@@ -564,7 +564,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 		}
 		else
 		{
-			// UDP recevier. Infinite wait, 100 socket events
+			// UDP receiver. Infinite wait, 100 socket events
 			evsocket_loop_single(callback_object->evctx, 5, 100);
 		}
 	}

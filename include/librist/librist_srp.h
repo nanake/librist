@@ -24,7 +24,7 @@ extern "C" {
  *  The SRP User lookup function is called inside the process of authentication
  *  the calling application MUST implement this function if it desires to so run
  *  as a RIST MAIN profile server with SRP authentication enabled.
- *  Userlookup is assumed to have been succesfull if both verifier params and both
+ *  Userlookup is assumed to have been successful if both verifier params and both
  *  salt params are set by the lookup function.
  *  libRIST will take ownership of all heap allocated data.
  *

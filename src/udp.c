@@ -281,7 +281,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 
 
 	// TODO: compare p->sender_ctx->sender_queue_read_index and p->sender_ctx->sender_queue_write_index
-	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algortihm)
+	// and warn when the difference is a multiple of 10 (slow CPU or overtaxed algorithm)
 	// The difference should always stay very low < 10
 
 	if (RIST_UNLIKELY((p->sender_ctx && p->sender_ctx->simulate_loss) || (p->receiver_ctx && p->receiver_ctx->simulate_loss))) {
@@ -1141,7 +1141,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 	// No duplicate unhandled (i.e.: still queued) retries are accepted.
 	// bloat_mode disabled mode = unlimited duplicates
 	// bloat_mode normal mode = we enforce rtt spacing and allow duplicates
-	// bloat_mode aggresive mode = we enforce 2*rtt spacing and allow duplicates
+	// bloat_mode aggressive mode = we enforce 2*rtt spacing and allow duplicates
 	// This is a safety check to protect against buggy or non compliant receivers that request the
 	// same seq number without waiting one RTT.
 
@@ -1185,7 +1185,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				if (peer->config.recovery_rtt_max < rtt)
 					rtt = peer->config.recovery_rtt_max;
 				if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE) {
-					// Agressive congestion control only allows every two RTTs
+					// Aggressive congestion control only allows every two RTTs
 					rtt = rtt * 2;
 				}
 				if (delta < rtt)
@@ -1213,7 +1213,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			uint64_t rtt = peer->last_mrtt;
 			if (peer->config.recovery_length_min > rtt)
 				rtt = peer->config.recovery_length_min;
-			// Agressive congestion control only allows every two RTTs
+			// Aggressive congestion control only allows every two RTTs
 			if (peer->config.congestion_control_mode == RIST_CONGESTION_CONTROL_MODE_AGGRESSIVE)
 				rtt *= 2;
 			struct rist_retry *lookup = NULL;

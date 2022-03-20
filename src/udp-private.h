@@ -103,7 +103,7 @@ Figure 2: GRE header with sequence number
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 Figure 5: GRE header with Key/Nonce
 
-The sequence number will become the heigher 4byte of AES IV.
+The sequence number will become the higher 4byte of AES IV.
 So, that on increment - the lower bits (which are zero) get incremented
 
 */

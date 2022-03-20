@@ -378,7 +378,7 @@ static uint64_t receiver_calculate_packet_time(struct rist_flow *f, const uint64
 	{
 		int64_t new_offset = (int64_t)now - (int64_t)source_time;
 		int64_t offset_diff = llabs(new_offset - f->time_offset);
-		//Make sure the new and old offsets differ atleast by 10 hrs, otherwise something is wrong.
+		//Make sure the new and old offsets differ at least by 10 hrs, otherwise something is wrong.
 		if (offset_diff > (int64_t)(10LL * 3600LL * 1000LL * RIST_CLOCK)) {
 			f->time_offset_old = f->time_offset;
 			//Calculate new offset by getting max time for payload type and adding it to old offset
@@ -1848,7 +1848,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	else if (rtt > peer->config.recovery_rtt_max) {
 		rtt = peer->config.recovery_rtt_max;
 	}
-	// Optimal dynamic time for first retry (reorder bufer) is rtt/2
+	// Optimal dynamic time for first retry (reorder buffer) is rtt/2
 	rtt = rtt / 2;
 	if (rtt < peer->config.recovery_reorder_buffer)
 	{
@@ -2355,7 +2355,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 
 		if (cctx->profile > RIST_PROFILE_SIMPLE)
 		{
-			// Make sure we have enought bytes
+			// Make sure we have enough bytes
 			if (recv_bufsize < (int)sizeof(struct rist_gre)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 				return;
@@ -2479,7 +2479,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 				payload.type = RIST_PAYLOAD_TYPE_EAPOL;
 				goto protocol_bypass;
 			}
-			// Make sure we have enought bytes
+			// Make sure we have enough bytes
 			if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 				return;
@@ -2495,7 +2495,7 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 			seq = 0;
 			gre_size = 0;
 			recv_bufsize += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
-			// Make sure we have enought bytes
+			// Make sure we have enough bytes
 			if (recv_bufsize < (int)sizeof(struct rist_protocol_hdr)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 				return;
@@ -2658,7 +2658,7 @@ protocol_bypass:
 							}
 							else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
 								rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-									"Peer %d EAP Authentication suceeded\n", peer->adv_peer_id);
+									"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
 								p->eap_authentication_state = 2;
 
 							}
