@@ -156,7 +156,7 @@ endif
 
 #On ubuntu cjson does not come with pkgconfig files, hence the extended checking.
 if not builtin_cjson
-	cjson_lib = dependency('cJSON', required: false)
+	cjson_lib = dependency('libcjson', required: false)
 	if not cjson_lib.found()
 		cjson_lib = cc.find_library('cjson', required: required_library, has_headers: ['cjson/cJSON.h'])
 		if not cjson_lib.found()
