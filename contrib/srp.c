@@ -60,6 +60,8 @@
 #endif
 
 
+#define DEBUG_EXTRACT_SRP_EXCHANGE 0
+
 #include "srp.h"
 
 static int g_initialized = 0;
@@ -190,7 +192,7 @@ static NGConstant * new_ng( SRP_NGType ng_type, const char * n_hex, const char *
         if (ng->g)
             mbedtls_mpi_free(ng->g);
         free(ng);
-        return 0;        
+        return 0;
     }
 
     if ( ng_type != SRP_NG_CUSTOM )
@@ -319,9 +321,9 @@ static int hash_update( SRP_HashAlgorithm alg, HashCTX *c, const void *data, siz
 #else
     switch (alg)
     {
-    case SRP_SHA1: 
+    case SRP_SHA1:
         return mbedtls_sha1_update_ret( &c->sha, data, len );
-    case SRP_SHA224: 
+    case SRP_SHA224:
         return mbedtls_sha256_update_ret( &c->sha256, data, len );
     case SRP_SHA256:
         return mbedtls_sha256_update_ret( &c->sha256, data, len );
@@ -351,15 +353,15 @@ static int hash_final( SRP_HashAlgorithm alg, HashCTX *c, unsigned char *md )
 #else
     switch (alg)
     {
-    case SRP_SHA1  : 
+    case SRP_SHA1  :
         return mbedtls_sha1_finish_ret( &c->sha, md );
-    case SRP_SHA224: 
+    case SRP_SHA224:
         return mbedtls_sha256_finish_ret( &c->sha256, md );
-    case SRP_SHA256: 
+    case SRP_SHA256:
         return mbedtls_sha256_finish_ret( &c->sha256, md );
-    case SRP_SHA384: 
+    case SRP_SHA384:
         return mbedtls_sha512_finish_ret( &c->sha512, md );
-    case SRP_SHA512: 
+    case SRP_SHA512:
         return mbedtls_sha512_finish_ret( &c->sha512, md );
       default:
         return -1;
@@ -383,15 +385,15 @@ static int hash( SRP_HashAlgorithm alg, const unsigned char *d, size_t n, unsign
 #else
     switch (alg)
     {
-    case SRP_SHA1  : 
+    case SRP_SHA1  :
         return mbedtls_sha1_ret( d, n, md );
-    case SRP_SHA224: 
+    case SRP_SHA224:
         return mbedtls_sha256_ret( d, n, md, 1);
     case SRP_SHA256:
         return mbedtls_sha256_ret( d, n, md, 0);
-    case SRP_SHA384: 
+    case SRP_SHA384:
         return mbedtls_sha512_ret( d, n, md, 1 );
-    case SRP_SHA512: 
+    case SRP_SHA512:
         return mbedtls_sha512_ret( d, n, md, 0 );
     default:
         return -1;
@@ -463,10 +465,10 @@ static BIGNUM * calculate_x( SRP_HashAlgorithm alg, const BIGNUM * salt, const c
 
     if (hash_update( alg, &ctx, username, strlen(username) ) != 0)
         return NULL;
-    
+
     if (hash_update( alg, &ctx, ":", 1 ) != 0)
         return NULL;
-    
+
     if (hash_update( alg, &ctx, password, password_len ) != 0)
         return NULL;
 
@@ -663,7 +665,10 @@ void srp_create_salted_verification_key( struct SRPSession *session,
 
     if (!bytes_s || !bytes_v)
        goto cleanup_and_exit;
-
+#if DEBUG_EXTRACT_SRP_EXCHANGE
+	mbedtls_mpi_write_file("Salt:", s, 16, NULL);
+	mbedtls_mpi_write_file("Verifier:", v, 16, NULL);
+#endif
     mbedtls_mpi_write_binary( s, (unsigned char *)*bytes_s, *len_s );
     mbedtls_mpi_write_binary( v, (unsigned char *)*bytes_v, *len_v );
 
@@ -785,6 +790,29 @@ struct SRPVerifier *  srp_verifier_new( struct SRPSession *session,
 
        calculate_M( session->hash_alg, session->ng, ver->M, username, s, A, B, ver->session_key );
        calculate_H_AMK( session->hash_alg, ver->H_AMK, A, ver->M, ver->session_key );
+
+#if DEBUG_EXTRACT_SRP_EXCHANGE
+	   mbedtls_mpi_write_file("Server k:", k, 16, NULL);
+	   mbedtls_mpi_write_file("Server b:", b, 16, NULL);
+	   mbedtls_mpi_write_file("Server B:", B, 16, NULL);
+	   mbedtls_mpi_write_file("Server u:", u, 16, NULL);
+	   mbedtls_mpi_write_file("Server S:", S, 16, NULL);
+	   fprintf(stderr, "Server K:");
+	   for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", ver->session_key[i]);
+	   }
+	   fprintf(stderr, "\n");
+	   fprintf(stderr, "Server M1:");
+	   for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", ver->M[i]);
+	   }
+	   fprintf(stderr, "\n");
+	   fprintf(stderr, "Server M2:");
+	   for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", ver->H_AMK[i]);
+	   }
+	   fprintf(stderr, "\n");
+#endif
 
        *len_B   = mbedtls_mpi_size(B);
        *bytes_B = malloc( *len_B );
@@ -1010,6 +1038,11 @@ void  srp_user_start_authentication( struct SRPUser * usr, const char ** usernam
     mbedtls_mpi_fill_random( usr->a, 32, &mbedtls_ctr_drbg_random, &ctr_drbg_ctx);
     mbedtls_mpi_exp_mod(usr->A, usr->ng->g, usr->a, usr->ng->N, RR);
 
+#if DEBUG_EXTRACT_SRP_EXCHANGE
+	mbedtls_mpi_write_file("User a:", usr->a, 16, NULL);
+	mbedtls_mpi_write_file("User A:", usr->A, 16, NULL);
+#endif
+
     *len_A   = mbedtls_mpi_size(usr->A);
     *bytes_A = malloc( *len_A );
 
@@ -1082,6 +1115,12 @@ void  srp_user_process_challenge( struct SRPUser * usr,
 
     k = H_nn(usr->hash_alg, usr->ng->N, usr->ng->g);
 
+#if DEBUG_EXTRACT_SRP_EXCHANGE
+	mbedtls_mpi_write_file("User u:", u, 16, NULL);
+	mbedtls_mpi_write_file("User x:", x, 16, NULL);
+	mbedtls_mpi_write_file("User k:", k, 16, NULL);
+#endif
+
     if (!k)
        goto cleanup_and_exit;
 
@@ -1107,6 +1146,25 @@ void  srp_user_process_challenge( struct SRPUser * usr,
 
         calculate_M( usr->hash_alg, usr->ng, usr->M, usr->username, s, usr->A, B, usr->session_key );
         calculate_H_AMK( usr->hash_alg, usr->H_AMK, usr->A, usr->M, usr->session_key );
+
+#if DEBUG_EXTRACT_SRP_EXCHANGE
+		mbedtls_mpi_write_file("User S:", usr->S, 16, NULL);
+		fprintf(stderr, "User K:");
+	    for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", usr->session_key[i]);
+	    }
+		fprintf(stderr, "\n");
+		fprintf(stderr, "User M1:");
+	    for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", usr->M[i]);
+	    }
+		fprintf(stderr, "\n");
+		fprintf(stderr, "User M2:");
+	    for (int i =0; i < SHA256_DIGEST_LENGTH; i++) {
+		   fprintf(stderr, "%02X", usr->H_AMK[i]);
+	    }
+		fprintf(stderr, "\n");
+#endif
 
         *bytes_M = usr->M;
         if (len_M) {
