@@ -328,12 +328,13 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 			mbedtls_mpi_read_string(&tmp, 16, ascii_g);
 			tmp_swap = (uint16_t *)&outpkt[offset];
 			*tmp_swap = htobe16((uint16_t)mbedtls_mpi_size(&tmp));
-			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], (1500 - offset));
+			offset += 2;
+			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], mbedtls_mpi_size(&tmp));
 			offset += mbedtls_mpi_size(&tmp);
 			mbedtls_mpi_read_string(&tmp, 16, ascii_n);
-			tmp_swap = (uint16_t *)&outpkt[offset];
-			*tmp_swap = htobe16((uint16_t)mbedtls_mpi_size(&tmp));
-			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], (1500 - offset));
+			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], mbedtls_mpi_size(&tmp));
+			offset += mbedtls_mpi_size(&tmp);
+			mbedtls_mpi_free(&tmp);
 			if (ctx->srp_session)
 				srp_session_delete(ctx->srp_session);
 			ctx->srp_session = srp_session_new(HASH_ALGO, SRP_NG_CUSTOM, ascii_n, ascii_g);
