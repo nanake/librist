@@ -96,6 +96,9 @@ else
 	elif host_machine.system() == 'darwin'
 		test_args += '-D_DARWIN_C_SOURCE'
 		add_project_arguments('-D_DARWIN_C_SOURCE', language: 'c')
+	elif host_machine.system() == 'gnu'
+		test_args += '-D_GNU_SOURCE'
+		add_project_arguments('-D_GNU_SOURCE', language: 'c')
 	endif
 	librist_soversion = librist_soversion
 	have_clock_gettime = cc.has_function('clock_gettime', prefix : '#include <time.h>', args : test_args)
