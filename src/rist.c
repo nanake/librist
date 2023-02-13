@@ -952,6 +952,20 @@ int rist_peer_create(struct rist_ctx *ctx, struct rist_peer **peer, const struct
 	return ret;
 }
 
+int rist_peer_get_socket(struct rist_peer *peer, int *socket, int *socket_extra) {
+	if (socket == NULL)
+		return -1;
+	if (peer->parent != NULL)
+		return -1;
+	*socket = peer->sd;
+	int ret = 0;
+	if (socket_extra != NULL && get_cctx(peer)->profile == RIST_PROFILE_SIMPLE) {
+		*socket_extra = peer->peer_rtcp->sd;
+		ret = 1;
+	}
+	return ret;
+}
+
 int rist_peer_weight_set(struct rist_ctx *ctx, struct rist_peer *peer, const uint32_t weight)
 {
 	if (!ctx)

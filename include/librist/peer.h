@@ -183,6 +183,8 @@ RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
  */
 RIST_API int rist_peer_weight_set(struct rist_ctx *ctx, struct rist_peer *peer, const uint32_t weight);
 
+RIST_API int rist_peer_get_socket(struct rist_peer *peer, int *socket, int *socket_extra);
+
 enum rist_connection_status
 {
 	RIST_CONNECTION_ESTABLISHED = 0,
