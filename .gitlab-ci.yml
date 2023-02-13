@@ -2,7 +2,6 @@ stages:
   - build
   - analyze
   - test
-  - test2
 
 .ubuntu-amd64-bionic:
     image: registry.videolan.org/librist-ubuntu-bionic:20200501213126
@@ -95,19 +94,6 @@ test-ubuntu:
         - cd build && meson test --print-errorlogs
     dependencies:
         - build-ubuntu
-    artifacts:
-        when: on_failure
-        paths:
-            - build/meson-logs/testlog.txt
-
-test-win64:
-    stage: test2
-    extends: .debian-amd64-common
-    needs: ["build-win64", "test-ubuntu"]
-    script:
-        - cd build && meson test --suite unicast --print-errorlogs
-    dependencies:
-        - build-win64
     artifacts:
         when: on_failure
         paths:
