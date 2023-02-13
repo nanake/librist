@@ -3410,6 +3410,11 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	if (next != NULL)
 		*next = peer->next;
 	rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, "[CLEANUP] cleanup done for peer %u\n", peer->adv_peer_id);
+
+	if (ctx->oob_current_peer == peer) {
+		ctx->oob_current_peer = NULL;
+	}
+
 	free(peer);
 	return 0;
 }
