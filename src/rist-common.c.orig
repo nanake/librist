@@ -906,7 +906,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							delay_rtc / RIST_CLOCK, delay / RIST_CLOCK,
 							recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK,
 							drop? "dropping" : "releasing");
-					
+
 				}
 				else if (b->target_output_time > now) {
 					// This is how we keep the buffer at the correct level
@@ -1255,14 +1255,9 @@ err:
 struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		const struct rist_peer_config *config)
 {
-	int key_size = config->key_size;
-	if (strlen(config->secret) && !key_size) {
-		rist_log_priv(&ctx->common, RIST_LOG_NOTICE, "PSK Set but key size not explicitly configured, defaulting to AES256");
-		key_size = 256;
-	}
-	if (key_size) {
-		if (key_size != 128 && key_size != 192 && key_size != 256) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", key_size);
+	if (config->key_size) {
+		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
 		if (!strlen(config->secret)) {
@@ -1270,7 +1265,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid secret passphrase\n");
 			return NULL;
 		}
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", key_size);
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", config->key_size);
 	}
 	else {
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Encryption is disabled for this peer\n");
@@ -1289,8 +1284,8 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 		return NULL;
 	}
 
-	if (key_size) {
-		_librist_crypto_psk_rist_key_init(&p->key_tx, key_size, config->key_rotation, config->secret);
+	if (config->key_size) {
+		_librist_crypto_psk_rist_key_init(&p->key_tx, config->key_size, config->key_rotation, config->secret);
 		_librist_crypto_psk_rist_key_clone(&p->key_tx, &p->key_rx);
 	}
 
@@ -2351,7 +2346,6 @@ static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revent
 					return;
 #else
 		if (recv_bufsize == SOCKET_ERROR) {
-			*again = false;
 			int errorcode = WSAGetLastError();
 			if (errorcode == WSAEWOULDBLOCK)
 				return;
@@ -3479,21 +3473,16 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
-	int key_size = config->key_size;
-	if (strlen(config->secret) && !key_size) {
-		rist_log_priv(&ctx->common, RIST_LOG_NOTICE, "PSK Set but key size not explicitly configured, defaulting to AES256");
-		key_size = 256;
-	}
-	if (key_size) {
-		if (key_size != 128 && key_size != 192 && key_size != 256) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", key_size);
+	if (config->key_size) {
+		if (config->key_size != 128 && config->key_size != 192 && config->key_size != 256) {
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", config->key_size);
 			return NULL;
 		}
 		if (!strlen(config->secret)) {
 			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid secret passphrase\n");
 			return NULL;
 		}
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", key_size);
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", config->key_size);
 	}
 	else {
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Encryption is disabled for this peer\n");
@@ -3512,8 +3501,8 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		return NULL;
 	}
 
-	if (key_size) {
-		_librist_crypto_psk_rist_key_init(&newpeer->key_tx, key_size, config->key_rotation, config->secret);
+	if (config->key_size) {
+		_librist_crypto_psk_rist_key_init(&newpeer->key_tx, config->key_size, config->key_rotation, config->secret);
 		_librist_crypto_psk_rist_key_clone(&newpeer->key_tx, &newpeer->key_rx);
 	}
 
