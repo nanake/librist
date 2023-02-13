@@ -920,12 +920,13 @@ next:
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 			goto shutdown;
 		}
-		if (callback_object[i].receiver_ctx && pthread_create(&thread_main_loop[i+1], NULL, input_loop, (void *)callback_object) != 0)
+		if (callback_object[i].receiver_ctx && pthread_create(&thread_main_loop[i+1], NULL, input_loop, (void *)&callback_object[i]) != 0)
 		{
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start send rist receiver thread\n");
 			goto shutdown;
+		} else if (callback_object[i].receiver_ctx) {
+			thread_started[i+1] = true;
 		}
-		thread_started[i+1] = true;
 	}
 
 #ifdef USE_TUN
