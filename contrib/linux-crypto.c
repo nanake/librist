@@ -8,7 +8,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
-#ifdef __linux
+#ifdef __linux__
 #include "linux-crypto.h"
 
 struct linux_crypto {
