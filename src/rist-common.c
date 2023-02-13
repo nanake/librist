@@ -26,7 +26,8 @@
 #include <assert.h>
 
 
-static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
+static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again);
+static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
 static PTHREAD_START_FUNC(receiver_pthread_dataout,arg);
 static void store_peer_settings(const struct rist_peer_config *settings, struct rist_peer *peer);
@@ -1360,7 +1361,7 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 	if (!peer->event_recv) {
 		struct evsocket_ctx *evctx = get_cctx(peer)->evctx;
 		peer->event_recv = evsocket_addevent(evctx, peer->sd, EVSOCKET_EV_READ,
-				rist_peer_recv, rist_peer_sockerr, peer);
+				rist_peer_recv_wrap, rist_peer_sockerr, peer);
 	}
 
 	/* Enable RTCP timer and jump start it */
@@ -2293,7 +2294,17 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		peer->dead_since = timestampNTP_u64();
 	}
 
-	static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
+static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revents, void *arg) {
+	bool again = true;
+	while (true) {
+		rist_peer_recv(evctx, fd, revents, arg, &again);
+		if (!again)
+			return;
+	}
+}
+
+
+	static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again)
 	{
 		RIST_MARK_UNUSED(evctx);
 		RIST_MARK_UNUSED(revents);
@@ -2329,11 +2340,13 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 		}
 #ifndef _WIN32
 		if (recv_bufsize <= 0) {
+			*again = false;
 			int errorcode = errno;
 			if (errno == EAGAIN || errno == EWOULDBLOCK)
 					return;
 #else
 		if (recv_bufsize == SOCKET_ERROR) {
+			*again = false;
 			int errorcode = WSAGetLastError();
 			if (errorcode == WSAEWOULDBLOCK)
 				return;
