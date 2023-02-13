@@ -364,7 +364,7 @@ static int process_eap_response_client_key(struct eapsrp_ctx *ctx, size_t len, u
 										 (const unsigned char*)ctx->verifier, ctx->verifier_len,
 										 pkt, len,
 										 (const unsigned char **)&bytes_B, &len_B);
-	if (!bytes_B)
+	if (!bytes_B || !ctx->srp_verifier)
 	{
 		//perm failure set tries to max
 		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
@@ -387,6 +387,10 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 	if (len < (4 + DIGEST_LENGTH))
 		return EAP_LENERR;
 	char *bytes_HAMK;
+	if (!ctx->srp_verifier) {
+		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
+		return -254;
+	}
 	srp_verifier_verify_session(ctx->srp_verifier, &pkt[4], (const unsigned char**)&bytes_HAMK);
 	if (!bytes_HAMK)
 	{
