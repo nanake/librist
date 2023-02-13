@@ -652,6 +652,11 @@ int rist_stats_free(const struct rist_stats *stats_container)
 	return 0;
 }
 
+uint32_t rist_peer_get_id(const struct rist_peer *peer)
+{
+    return peer->adv_peer_id;
+}
+
 int rist_peer_config_free(const struct rist_peer_config **peer_config)
 {
   return rist_peer_config_free2((struct rist_peer_config **)peer_config);

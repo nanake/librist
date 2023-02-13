@@ -175,7 +175,7 @@ RIST_API int rist_peer_destroy(struct rist_ctx *ctx,
 
 /**
  * @brief Set the weight of a given peer.
- * 
+ *
  * @param ctx RIST context
  * @param peer The peer to set the weight for
  * @param weight The weight to assign to the peer
@@ -235,8 +235,6 @@ RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
 		rist_auth_handler_disconnect_cb disconnect_cb,
 		void *arg);
 
-
-RIST_API uint32_t rist_peer_get_id(const struct rist_peer *peer);
 #ifdef __cplusplus
 }
 #endif
