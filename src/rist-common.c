@@ -3176,7 +3176,9 @@ protocol_bypass:
 			// Send data and process nacks
 			pthread_mutex_lock(&ctx->queue_lock);
 			if (ctx->sender_queue_bytesize > 0) {
+				pthread_mutex_lock(&ctx->common.peerlist_lock);
 				sender_send_data(ctx, max_dataperloop);
+				pthread_mutex_unlock(&ctx->common.peerlist_lock);
 				// Group nacks and send them all at rist_max_jitter intervals
 				if (now > nacks_next_time) {
 					sender_send_nacks(ctx);
