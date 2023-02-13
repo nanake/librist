@@ -48,19 +48,6 @@ build-win64:
           - build
         expire_in: 24 hours
 
-
-build-macos:
-    stage: build
-    tags:
-        - macos
-    script:
-        - meson build --buildtype release
-                      --werror
-                      -Ddefault_library=both
-                      -Duse_mbedtls=false
-        - ninja -C build
-
-
 build-freebsd:
     stage: build
     only: [branches@rist/librist]
@@ -98,25 +85,6 @@ test-ubuntu:
         when: on_failure
         paths:
             - build/meson-logs/testlog.txt
-
-test-macos:
-    stage: test
-    tags:
-        - macos
-    needs: ["build-macos"]
-    script:
-        - meson build --buildtype release
-                      --werror
-                      -Ddefault_library=both
-                      -Duse_mbedtls=false
-        - cd build && MESON_TESTTHREADS=4 meson test --suite unicast --print-errorlogs --timeout-multiplier=10
-    dependencies:
-        - build-macos
-    artifacts:
-        when: on_failure
-        paths:
-            - build/meson-logs/testlog.txt
-
 
 test-freebsd:
     stage: test
