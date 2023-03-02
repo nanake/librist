@@ -2775,8 +2775,7 @@ protocol_bypass:
 			if (cctx->auth.conn_cb) {
 
 				char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-				char *parent_ip_string =
-					get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
+				char *parent_ip_string = get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
 				if (!parent_ip_string){
 					parent_ip_string = "";
 				}

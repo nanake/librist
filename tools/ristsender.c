@@ -27,6 +27,7 @@
 #include "rist-private.h"
 #include <stdatomic.h>
 #include "oob_shared.h"
+#include "prometheus-exporter.h"
 #ifdef USE_TUN
 #include <sys/ioctl.h>
 #include <linux/if_tun.h>
@@ -48,11 +49,19 @@ static int signalReceived = 0;
 static int peer_connected_count = 0;
 static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALIZER;
 
+uint64_t prometheus_id = 0;
+
+struct rist_ctx_wrap {
+	struct rist_ctx *ctx;
+	uint64_t id;
+	bool sender;
+};
+
 struct rist_callback_object {
 	int sd;
 	struct evsocket_ctx *evctx;
-	struct rist_ctx *receiver_ctx;
-	struct rist_ctx *sender_ctx;
+	struct rist_ctx_wrap *receiver_ctx;
+	struct rist_ctx_wrap *sender_ctx;
 	struct rist_udp_config *udp_config;
 	uint8_t recv[RIST_MAX_PACKET_SIZE + 100];
 };
@@ -87,6 +96,18 @@ struct rist_sender_args {
 #endif
 };
 
+#if HAVE_PROMETHEUS_SUPPORT
+struct rist_prometheus_stats *prom_stats_ctx;
+bool prometheus_multipoint = false;
+bool prometheus_nocreated = false;
+bool prometheus_httpd = false;
+bool enable_prometheus = false;
+char *prometheus_tags = NULL;
+uint16_t prometheus_port = 9100;
+char *prometheus_ip = NULL;
+char *prometheus_unix_sock = NULL;
+#endif
+
 static struct option long_options[] = {
 { "inputurl",        required_argument, NULL, 'i' },
 { "outputurl",       required_argument, NULL, 'o' },
@@ -108,6 +129,20 @@ static struct option long_options[] = {
 { "fast-start",      required_argument, NULL, 'f' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
+#if HAVE_PROMETHEUS_SUPPORT
+{ "enable-metrics",  no_argument,       NULL, 'M' },
+{ "metrics-tags",    required_argument, NULL, 1 },
+{ "metrics-multipoint",no_argument,     (int*)&prometheus_multipoint, true },
+{ "metrics-nocreated",no_argument,      (int*)&prometheus_nocreated, true },
+#if HAVE_LIBMICROHTTPD
+{ "metrics-http",    no_argument,      (int*)&prometheus_httpd, true },
+{ "metrics-port",    required_argument, NULL, 2 },
+{ "metrics-ip",      required_argument, NULL, 3 },
+#endif //HAVE_LIBMICROHTTPD
+#if HAVE_SOCK_UN_H
+{ "metrics-unix",    required_argument, NULL, 4 },
+#endif //HAVE_SOCK_UN_H
+#endif //HAVE_PROMETHEUS_SUPPORT
 { 0, 0, 0, 0 },
 };
 
@@ -142,6 +177,21 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 //"                                                 | -1 = hold data out and igmp source joins                 |\n"
 "                                                 |  0 = hold data out                                       |\n"
 "                                                 |  1 = start to send data immediately                      |\n"
+#if HAVE_PROMETHEUS_SUPPORT
+"       -M | --enable-metrics                     | Enable OpenMetrics/Prometheus compatible metrics         |\n"
+"          | --metrics-tags                       | Additional tags to add to the metrics                    |\n"
+"          | --metrics-multipoint                 | Metrics return multiple timestamped data points          |\n"
+"          | --metrics-nocreated                  | Metrics skip the created metric for Prometheus compat    |\n"
+#if HAVE_LIBMICROHTTPD
+"          | --metrics-http                       | Start HTTP Server to expose metrics on                   |\n"
+"                                                 | defaults to http://0.0.0.0:9100/metrics                  |\n"
+"          | --metrics-port                       | Port for metrics HTTP server to listen on                |\n"
+"          | --metrics-ip                         | IP for metrics HTTP server to listen on                  |\n"
+#endif //HAVE_LIBMICROHTTPD
+#if HAVE_SOCK_UN_H
+"          | --metrics-unix                       | Unix socket to expose metrics on                         |\n"
+#endif //HAVE_SOCK_UN_H
+#endif //HAVE_PROMETHEUS_SUPPORT
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -232,7 +282,7 @@ static void input_udp_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			data_block.payload_len = recv_bufsize - offset;
 		}
 		if (peer_connected_count) {
-			if (rist_sender_data_write(callback_object->sender_ctx, &data_block) < 0)
+			if (rist_sender_data_write(callback_object->sender_ctx->ctx, &data_block) < 0)
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing data in input_udp_recv, socket=%d\n", callback_object->sd);
 		}
 	}
@@ -272,7 +322,18 @@ static void connection_status_callback(void *arg, struct rist_peer *peer, enum r
 
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
-	struct rist_ctx *ctx = (struct rist_ctx *)arg;
+	struct rist_ctx_wrap *w = (struct rist_ctx_wrap *)arg;
+#if HAVE_PROMETHEUS_SUPPORT
+	if (w->sender && prom_stats_ctx != NULL) {
+		uint32_t id = rist_peer_get_id(peer);
+		char url[256];
+		snprintf(url, sizeof(url), "%s:%u", connecting_ip, connecting_port);
+		char local_url[256];
+		snprintf(local_url, sizeof(local_url), "%s:%u", local_ip, local_port);
+		rist_prometheus_sender_add_peer(prom_stats_ctx, w->id, id, url, local_url, true);
+	}
+#endif
+	struct rist_ctx *ctx = w->ctx;
 	char buffer[500];
 	char message[200];
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
@@ -363,8 +424,13 @@ static int cb_recv_oob(void *arg, const struct rist_oob_block *oob_block)
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container)
 {
-	(void)arg;
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
+#if HAVE_PROMETHEUS_SUPPORT
+	if (prom_stats_ctx != NULL)
+		rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uint64_t)arg);
+#else
+	(void)arg;
+#endif
 	rist_stats_free(stats_container);
 	return 0;
 }
@@ -375,15 +441,16 @@ static void intHandler(int signal)
 	signalReceived = signal;
 }
 
-static struct rist_peer* setup_rist_peer(struct rist_ctx *ctx, struct rist_sender_args *setup)
+static struct rist_peer* setup_rist_peer(struct rist_ctx_wrap *w, struct rist_sender_args *setup)
 {
-	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, NULL) == -1) {
+	struct rist_ctx *ctx = w->ctx;
+	if (rist_stats_callback_set(ctx, setup->statsinterval, cb_stats, (void*)w->id) == -1) {
 
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		return NULL;
 	}
 
-	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, ctx) < 0) {
+	if (rist_auth_handler_set(ctx, cb_auth_connect, cb_auth_disconnect, w) < 0) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not initialize rist auth handler\n");
 		return NULL;
 	}
@@ -454,6 +521,21 @@ static struct rist_peer* setup_rist_peer(struct rist_ctx *ctx, struct rist_sende
 		return NULL;
 	}
 
+#if HAVE_PROMETHEUS_SUPPORT
+	if (w->sender && prom_stats_ctx != NULL) {
+		char *p = strchr(overrides_peer_config->address, '@');
+		if (p == NULL) {
+			p = strstr(overrides_peer_config->address, "://");
+			if (p == NULL) {
+				p = overrides_peer_config->address;
+			} else {
+				p+= strlen("://");
+			}
+			uint32_t id = rist_peer_get_id(peer);
+			rist_prometheus_sender_add_peer(prom_stats_ctx, w->id, id, p, NULL, false);
+		}
+	}
+#endif
 #if HAVE_MBEDTLS
 	int srp_error = 0;
 	if (setup->profile != RIST_PROFILE_SIMPLE) {
@@ -495,7 +577,7 @@ static void rist_process_tun_data(struct rist_callback_tun_object *callback_tun_
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Error writing %d bytes to rist_oob_write\n", buffer_len);
 		}
 		// Send data through rist channel
-		if (callback_tun_object->send_rist == true && 
+		if (callback_tun_object->send_rist == true &&
 				callback_tun_object->tun_mode != 0 && protocol == 17) {
 			struct rist_data_block data_block = { 0 };
 			// We use this source port to signal a non standard stream, i.e. tun mux
@@ -548,13 +630,13 @@ static PTHREAD_START_FUNC(input_loop, arg)
 		{
 			// RIST receiver
 			struct rist_data_block *b = NULL;
-			int queue_size = rist_receiver_data_read2(callback_object->receiver_ctx, &b, 5);
+			int queue_size = rist_receiver_data_read2(callback_object->receiver_ctx->ctx, &b, 5);
 			if (queue_size > 0) {
 				if (queue_size % 10 == 0 || queue_size > 50)
 					rist_log(&logging_settings, RIST_LOG_WARN, "Falling behind on rist_receiver_data_read: %d\n", queue_size);
 				if (b && b->payload) {
 					if (peer_connected_count) {
-						int w = rist_sender_data_write(callback_object->sender_ctx, b);
+						int w = rist_sender_data_write(callback_object->sender_ctx->ctx, b);
 						// TODO: report error?
 						(void) w;
 					}
@@ -571,7 +653,7 @@ static PTHREAD_START_FUNC(input_loop, arg)
 	return 0;
 }
 
-static struct rist_ctx *configure_rist_output_context(char* outputurl,
+static struct rist_ctx_wrap *configure_rist_output_context(char* outputurl,
 	struct rist_sender_args *peer_args, const struct rist_udp_config *udp_config,
 	bool npd, enum rist_profile profile)
 {
@@ -587,6 +669,10 @@ static struct rist_ctx *configure_rist_output_context(char* outputurl,
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist sender context\n");
 		goto fail;
 	}
+	struct rist_ctx_wrap *w = malloc(sizeof(*w));
+	w->ctx = sender_ctx;
+	w->id = prometheus_id++;
+	w->sender = true;
 	if (npd) {
 		if (profile == RIST_PROFILE_SIMPLE)
 			rist_log(&logging_settings, RIST_LOG_INFO, "NULL packet deletion enabled on SIMPLE profile. This is non-compliant but might work if receiver supports it (librist does)\n");
@@ -599,7 +685,7 @@ static struct rist_ctx *configure_rist_output_context(char* outputurl,
 	for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
 		peer_args->token = outputtoken;
 		peer_args->stream_id = udp_config->stream_id;
-		struct rist_peer *peer = setup_rist_peer(sender_ctx, peer_args);
+		struct rist_peer *peer = setup_rist_peer(w, peer_args);
 		if (peer == NULL)
 			goto fail;
 		outputtoken = strtok_r(NULL, ",", &saveptroutput);
@@ -607,7 +693,8 @@ static struct rist_ctx *configure_rist_output_context(char* outputurl,
 			break;
 	}
 	free(tmpoutputurl);
-	return sender_ctx;
+
+	return w;
 fail:
 	return  NULL;
 }
@@ -666,7 +753,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:v:hun", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:v:hunM", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -722,6 +809,33 @@ int main(int argc, char *argv[])
 		case 'n':
 			npd = true;
 			break;
+#if HAVE_PROMETHEUS_SUPPORT
+		case 'M':
+			enable_prometheus = true;
+			break;
+		case 0:
+			//long option, value get's set directly
+			break;
+		case 1:
+			//long option metric tags
+			prometheus_tags = strdup(optarg);
+			break;
+		case 2:
+			//prometheus port long opt
+			prometheus_httpd = true;
+			prometheus_port = atoi(optarg);
+			break;
+		case 3:
+			//prometheus IP long opt
+			prometheus_httpd = true;
+			prometheus_ip = strdup(optarg);
+			break;
+		case 4:
+			//prometheus unix socket long opt
+			enable_prometheus = true;
+			prometheus_unix_sock = strdup(optarg);
+			break;
+#endif
 		case 'h':
 			/* Fall through */
 		default:
@@ -752,6 +866,20 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+#if HAVE_PROMETHEUS_SUPPORT
+	if (enable_prometheus || prometheus_httpd) {
+		rist_log(log_ptr, RIST_LOG_INFO, "Enabling Metrics output\n");
+		struct prometheus_httpd_options httpd_opt;
+		httpd_opt.enabled = prometheus_httpd;
+		httpd_opt.port = prometheus_port;
+		httpd_opt.ip = prometheus_ip;
+		prom_stats_ctx = rist_setup_prometheus_stats(log_ptr, prometheus_tags,prometheus_multipoint, prometheus_nocreated, &httpd_opt, prometheus_unix_sock);
+		if (prom_stats_ctx == NULL) {
+			rist_log(log_ptr, RIST_LOG_ERROR, "Failed to setup Metrics output\n");
+			exit(1);
+		}
+	}
+#endif
 	peer_args.loglevel = loglevel;
 	peer_args.profile = profile;
 	peer_args.encryption_type = encryption_type;
@@ -835,14 +963,17 @@ int main(int argc, char *argv[])
 		for (size_t j = 0; j < MAX_OUTPUT_COUNT; j++) {
 			// Use the first context for OOB tun context
 			if (!callback_tun_object.sender_ctx) {
-				callback_tun_object.sender_ctx = callback_object[i].sender_ctx;
+				callback_tun_object.sender_ctx = callback_object[i].sender_ctx->ctx;
 			}
 		}
 #endif
 
 		if (strcmp(udp_config->prefix, "rist") == 0) {
 			// This is a rist input (new context for each listener)
-			if (rist_receiver_create(&callback_object[i].receiver_ctx, peer_args.profile, &logging_settings) != 0) {
+			struct rist_ctx_wrap *w = calloc(1, sizeof(*w));
+			w->id = prometheus_id++;
+			callback_object[i].receiver_ctx = w;
+			if (rist_receiver_create(&callback_object[i].receiver_ctx->ctx, peer_args.profile, &logging_settings) != 0) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not create rist receiver context\n");
 				goto next;
 			}
@@ -912,11 +1043,11 @@ next:
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++) {
 		if (((rist_listens && i == 0) || !rist_listens) &&
-			 callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx) == -1) {
+			 callback_object[i].sender_ctx && rist_start(callback_object[i].sender_ctx->ctx) == -1) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist sender\n");
 			goto shutdown;
 		}
-		if (callback_object[i].receiver_ctx && rist_start(callback_object[i].receiver_ctx) == -1) {
+		if (callback_object[i].receiver_ctx && rist_start(callback_object[i].receiver_ctx->ctx) == -1) {
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not start rist receiver\n");
 			goto shutdown;
 		}
@@ -955,11 +1086,15 @@ shutdown:
 		if ((void *)callback_object[i].udp_config)
 			rist_udp_config_free2(&callback_object[i].udp_config);
 		// Cleanup rist listeners
-		if (callback_object[i].receiver_ctx)
-			rist_destroy(callback_object[i].receiver_ctx);
+		if (callback_object[i].receiver_ctx) {
+			rist_destroy(callback_object[i].receiver_ctx->ctx);
+			free(callback_object[i].receiver_ctx);
+		}
 		// Cleanup rist sender and their peers
-		if (callback_object[i].sender_ctx)
-			rist_destroy(callback_object[i].sender_ctx);
+		if (callback_object[i].sender_ctx) {
+			rist_destroy(callback_object[i].sender_ctx->ctx);
+			free(callback_object[i].sender_ctx);
+		}
 	}
 
 	for (size_t i = 0; i <= MAX_INPUT_COUNT; i++) {
@@ -983,5 +1118,11 @@ shutdown:
 	if (shared_secret)
 		free(shared_secret);
 
+#if HAVE_PROMETHEUS_SUPPORT
+	rist_prometheus_stats_destroy(prom_stats_ctx);
+	free(prometheus_ip);
+	free(prometheus_tags);
+	free(prometheus_unix_sock);
+#endif
 	return 0;
 }

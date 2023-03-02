@@ -133,6 +133,13 @@ endif
 cdata.set10('HAVE_CLOCK_GETTIME', have_clock_gettime)
 cdata.set10('HAVE_PTHREADS', have_pthreads)
 
+sock_un_h = cc.has_header('sys/un.h')
+cdata.set10('HAVE_SOCK_UN_H', sock_un_h)
+microhttpd = dependency('libmicrohttpd', required: false)
+cdata.set10('HAVE_LIBMICROHTTPD', microhttpd.found())
+compile_prometheus = sock_un_h or microhttpd.found()
+cdata.set10('HAVE_PROMETHEUS_SUPPORT', compile_prometheus)
+
 if cc.has_argument('-fvisibility=hidden')
     add_project_arguments('-fvisibility=hidden', language: 'c')
 else

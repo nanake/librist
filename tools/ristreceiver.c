@@ -28,6 +28,7 @@
 #define __STDC_FORMAT_MACROS
 #include <inttypes.h>
 #include "oob_shared.h"
+#include "prometheus-exporter.h"
 #ifdef USE_TUN
 #include "rist-private.h"
 #include <sys/ioctl.h>
@@ -54,6 +55,18 @@ static struct rist_logging_settings logging_settings = LOGGING_SETTINGS_INITIALI
 enum rist_profile profile = RIST_PROFILE_MAIN;
 static int peer_connected_count = 0;
 
+#if HAVE_PROMETHEUS_SUPPORT
+struct rist_prometheus_stats *prom_stats_ctx;
+bool prometheus_multipoint = false;
+bool prometheus_nocreated = false;
+bool prometheus_httpd = false;
+bool enable_prometheus = false;
+char *prometheus_tags = NULL;
+uint16_t prometheus_port = 9100;
+char *prometheus_ip = NULL;
+char *prometheus_unix_sock = NULL;
+#endif
+
 static struct option long_options[] = {
 { "inputurl",        required_argument, NULL, 'i' },
 { "outputurl",       required_argument, NULL, 'o' },
@@ -73,6 +86,20 @@ static struct option long_options[] = {
 #endif
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
+#if HAVE_PROMETHEUS_SUPPORT
+{ "enable-metrics",  no_argument,       NULL, 'M' },
+{ "metrics-tags",    required_argument, NULL, 1 },
+{ "metrics-multipoint",no_argument,     (int*)&prometheus_multipoint, true },
+{ "metrics-nocreated",no_argument,      (int*)&prometheus_nocreated, true },
+#if HAVE_LIBMICROHTTPD
+{ "metrics-http",    no_argument,      (int*)&prometheus_httpd, true },
+{ "metrics-port",    required_argument, NULL, 2 },
+{ "metrics-ip",      required_argument, NULL, 3 },
+#endif //HAVE_LIBMICROHTTPD
+#if HAVE_SOCK_UN_H
+{ "metrics-unix",    required_argument, NULL, 4 },
+#endif //HAVE_SOCK_UN_H
+#endif //HAVE_PROMETHEUS_SUPPORT
 { 0, 0, 0, 0 },
 };
 
@@ -102,6 +129,21 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "                                                 | 1 = only non udp data is accepted (default)              |\n"
 "                                                 | 2 = no data goes into or out of oob channel              |\n"
 #endif
+#if HAVE_PROMETHEUS_SUPPORT
+"       -M | --enable-metrics                     | Enable OpenMetrics/Prometheus compatible metrics         |\n"
+"          | --metrics-tags                       | Additional tags to add to the metrics                    |\n"
+"          | --metrics-multipoint                 | Metrics return multiple timestamped data points          |\n"
+"          | --metrics-nocreated                  | Metrics skip the created metric for Prometheus compat    |\n"
+#if HAVE_LIBMICROHTTPD
+"          | --metrics-http                       | Start HTTP Server to expose metrics on                   |\n"
+"                                                 | defaults to http://0.0.0.0:9100/metrics                  |\n"
+"          | --metrics-port                       | Port for metrics HTTP server to listen on                |\n"
+"          | --metrics-ip                         | IP for metrics HTTP server to listen on                  |\n"
+#endif //HAVE_LIBMICROHTTPD
+#if HAVE_SOCK_UN_H
+"          | --metrics-unix                       | Unix socket to expose metrics on                         |\n"
+#endif //HAVE_SOCK_UN_H
+#endif //HAVE_PROMETHEUS_SUPPORT
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -153,10 +195,12 @@ static uint32_t risttools_convertNTPtoRTP(uint64_t i_ntp)
 static void connection_status_callback(void *arg, struct rist_peer *peer, enum rist_connection_status peer_connection_status)
 {
 	(void)arg;
-	if (peer_connection_status == RIST_CONNECTION_ESTABLISHED || peer_connection_status == RIST_CLIENT_CONNECTED)
+	if (peer_connection_status == RIST_CONNECTION_ESTABLISHED || peer_connection_status == RIST_CLIENT_CONNECTED) {
 		peer_connected_count++;
-	else
+	}
+	else {
 		peer_connected_count--;
+	}
 	rist_log(&logging_settings, RIST_LOG_INFO,"Connection Status changed for Peer %"PRIu64", new status is %d, peer connected count is %d\n",
 				peer, peer_connection_status, peer_connected_count);
 }
@@ -177,7 +221,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		// The stream-id on the udp url gets translated into the virtual destination port of the GRE tunnel
 		// and we match on that. The other two muxing modes are not spec compliant and are only
 		// guaranteed to work from librist to librist
-		if (profile == RIST_PROFILE_SIMPLE || udp_config->stream_id == 0 || 
+		if (profile == RIST_PROFILE_SIMPLE || udp_config->stream_id == 0 ||
 				(mux_mode == LIBRIST_MULTIPLEX_MODE_VIRT_DESTINATION_PORT && udp_config->stream_id == b->virt_dst_port) ||
 				(mux_mode == LIBRIST_MULTIPLEX_MODE_VIRT_SOURCE_PORT && udp_config->stream_id == b->virt_src_port) ||
 				(mux_mode == LIBRIST_MULTIPLEX_MODE_IPV4))
@@ -375,7 +419,6 @@ struct ristreceiver_flow_cumulative_stats {
 struct ristreceiver_flow_cumulative_stats *stats_list;
 
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
-	(void)arg;
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
 	{
@@ -398,6 +441,12 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 		rist_log(&logging_settings, RIST_LOG_INFO,
 				 "{\"flow_cumulative_stats\":{\"flow_id\":%"PRIu32",\"received\":%"PRIu64",\"recovered\":%"PRIu64",\"lost\":%"PRIu64"}}\n",
 				 stats->flow_id, stats->received, stats->recovered, stats->lost);
+#if HAVE_PROMETHEUS_SUPPORT
+		if (prom_stats_ctx != NULL)
+			rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uint64_t)arg);
+#else
+		(void)arg;
+#endif
 	}
 	rist_stats_free(stats_container);
 	return 0;
@@ -505,7 +554,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:h:u", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:h:uM", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -555,6 +604,33 @@ int main(int argc, char *argv[])
 			rist_log(&logging_settings, RIST_LOG_INFO, "%s", help_urlstr);
 			exit(1);
 		break;
+#if HAVE_PROMETHEUS_SUPPORT
+		case 'M':
+			enable_prometheus = true;
+			break;
+		case 0:
+			//long option, value get's set directly
+			break;
+		case 1:
+			//long option metric tags
+			prometheus_tags = strdup(optarg);
+			break;
+		case 2:
+			//prometheus port long opt
+			prometheus_httpd = true;
+			prometheus_port = atoi(optarg);
+			break;
+		case 3:
+			//prometheus IP long opt
+			prometheus_httpd = true;
+			prometheus_ip = strdup(optarg);
+			break;
+		case 4:
+			//prometheus unix socket long opt
+			enable_prometheus = true;
+			prometheus_unix_sock = strdup(optarg);
+			break;
+#endif
 		case 'h':
 			/* Fall through */
 		default:
@@ -577,6 +653,20 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+#if HAVE_PROMETHEUS_SUPPORT
+	if (enable_prometheus || prometheus_httpd) {
+		rist_log(log_ptr, RIST_LOG_INFO, "Enabling Metrics output\n");
+		struct prometheus_httpd_options httpd_opt;
+		httpd_opt.enabled = prometheus_httpd;
+		httpd_opt.port = prometheus_port;
+		httpd_opt.ip = prometheus_ip;
+		prom_stats_ctx = rist_setup_prometheus_stats(log_ptr, prometheus_tags,prometheus_multipoint, prometheus_nocreated, &httpd_opt, prometheus_unix_sock);
+		if (prom_stats_ctx == NULL) {
+			rist_log(log_ptr, RIST_LOG_ERROR, "Failed to setup Metrics output\n");
+			exit(1);
+		}
+	}
+#endif
 	/* rist side */
 
 	struct rist_ctx *ctx;
@@ -605,7 +695,7 @@ int main(int argc, char *argv[])
 		}
 	}
 
-	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, NULL) == -1) {
+	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, (void*)0) == -1) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		exit(1);
 	}
@@ -907,5 +997,11 @@ next:
 		free(stats);
 		stats = next;
 	}
+#if HAVE_PROMETHEUS_SUPPORT
+	rist_prometheus_stats_destroy(prom_stats_ctx);
+	free(prometheus_ip);
+	free(prometheus_tags);
+	free(prometheus_unix_sock);
+#endif
 	return 0;
 }

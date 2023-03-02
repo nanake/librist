@@ -27,6 +27,10 @@ typedef int socklen_t;
 #define write(fd, buf, size) _write(fd, buf, size)
 #endif
 
+#ifndef SHUT_RDWR
+#define SHUT_RDWR SD_BOTH
+#endif
+
 #else /* Unix like OSes */
 
 #include <sys/types.h>
