@@ -889,6 +889,8 @@ static int rist_sender_peer_create(struct rist_sender *ctx,
 	// TODO: Validate config data (virt_dst_port != 0 for example)
 
 	newpeer->is_data = true;
+	if (config->weight > 0)
+		newpeer->w_count = config->weight;
 	peer_append(newpeer);
 
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE)
