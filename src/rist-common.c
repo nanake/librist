@@ -906,7 +906,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							delay_rtc / RIST_CLOCK, delay / RIST_CLOCK,
 							recovery_buffer_ticks / RIST_CLOCK, f->time_offset / RIST_CLOCK,
 							drop? "dropping" : "releasing");
-					
+
 				}
 				else if (b->target_output_time > now) {
 					// This is how we keep the buffer at the correct level
@@ -2018,7 +2018,7 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 	}
 }
 
-static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t maxlen)
+static char *get_ip_str(struct sockaddr *sa, char *s, size_t maxlen)
 {
 	switch(sa->sa_family) {
 		case AF_INET:
@@ -2035,10 +2035,6 @@ static char *get_ip_str(struct sockaddr *sa, char *s, uint16_t *port, size_t max
 			strncpy(s, "Unknown AF", maxlen);
 			return NULL;
 	}
-
-	struct sockaddr_in *sin = (struct sockaddr_in *)s;
-	*port = htons (sin->sin_port);
-
 	return s;
 }
 
@@ -2324,25 +2320,23 @@ static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revent
 
 		socklen_t addrlen = peer->address_len;
 		ssize_t recv_bufsize = -1;
-		uint16_t family = AF_INET;
-		struct sockaddr_in addr4 = {0};
-		struct sockaddr_in6 addr6 = {0};
-		struct sockaddr *addr;
+		uint16_t family = peer->address_family;
+		struct sockaddr_storage ss = {0};
+		struct sockaddr *addr = (struct sockaddr *)&ss;
 		struct rist_peer *p = peer;
 		uint8_t *recv_buf = cctx->buf.recv;
 		size_t buffer_offset = 0;
+		uint16_t port = 0;
 
 		if (cctx->profile == RIST_PROFILE_SIMPLE)
 			buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
-		if (peer->address_family == AF_INET6) {
-			recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *) &addr6, &addrlen);
-			family = AF_INET6;
-			addr = (struct sockaddr *) &addr6;
-		} else {
-			recv_bufsize = recvfrom(peer->sd, (char *)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)&addr4, &addrlen);
-			addr = (struct sockaddr *) &addr4;
-		}
+		recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
+		if (ss.ss_family == AF_INET)
+			port = htons(((struct sockaddr_in *)addr)->sin_port);
+		else
+			port = htons(((struct sockaddr_in6 *)addr)->sin6_port);
+
 #ifndef _WIN32
 		if (recv_bufsize <= 0) {
 			*again = false;
@@ -2619,7 +2613,7 @@ protocol_bypass:
 				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 				{
 					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %d\n", addr4.sin_port);
+						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
 						p->log_repeat_timer = now;
 					}
 					// Do not process non EAP packets until the peer has been authenticated!
@@ -2719,9 +2713,9 @@ protocol_bypass:
 			peer_copy_settings(peer, p);
 			if (cctx->profile == RIST_PROFILE_SIMPLE) {
 				if (peer->address_family == AF_INET) {
-					p->remote_port = htons(addr4.sin_port);
+					p->remote_port = htons( ((struct sockaddr_in *)addr)->sin_port);
 				} else {
-					p->remote_port = htons(addr6.sin6_port);
+					p->remote_port = htons( ((struct sockaddr_in6 *)addr)->sin6_port);
 				}
 				p->local_port = peer->local_port;
 			}
@@ -2771,9 +2765,8 @@ protocol_bypass:
 			p->authenticated = false;
 			// Copy the event handler reference to prevent the creation of a new one (they are per socket)
 			p->event_recv = peer->event_recv;
-			uint16_t port = 0;
 			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
-			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], &port, INET6_ADDRSTRLEN);
+			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
 #if HAVE_MBEDTLS
 			eap_clone_ctx(peer->eap_ctx, p);
 			eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
@@ -2782,14 +2775,18 @@ protocol_bypass:
 			if (cctx->auth.conn_cb) {
 
 				char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-
-				uint16_t dummyport;
-
 				char *parent_ip_string =
-					get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], &dummyport, INET6_ADDRSTRLEN);
+					get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
 				if (!parent_ip_string){
 					parent_ip_string = "";
 				}
+
+				uint16_t parent_port = 0;
+				if (p->parent->u.storage.ss_family == AF_INET)
+					parent_port = htons(p->parent->u.inaddr.sin_port);
+				else
+					parent_port = htons(p->parent->u.inaddr6.sin6_port);
+
 				// Real source port vs virtual source port
 				if (cctx->profile == RIST_PROFILE_SIMPLE)
 					port = p->remote_port;
@@ -2798,7 +2795,7 @@ protocol_bypass:
 								incoming_ip_string,
 								port,
 								parent_ip_string,
-								p->parent->local_port,
+								parent_port,
 								p)) {
 						free(p);
 						return;
