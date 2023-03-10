@@ -48,20 +48,6 @@ build-win64:
           - build
         expire_in: 24 hours
 
-build-freebsd:
-    stage: build
-    only: [branches@rist/librist]
-    tags:
-        - freebsd
-    script:
-        - LDFLAGS="-L/usr/local/lib" CFLAGS="-I/usr/local/include" meson build --buildtype release --werror
-        - ninja -C build
-    artifacts:
-        paths:
-          - build
-        expire_in: 24 hours
-
-
 analyze-ubuntu:
     stage: analyze
     extends:
@@ -85,20 +71,4 @@ test-ubuntu:
         when: on_failure
         paths:
             - build/meson-logs/testlog.txt
-
-test-freebsd:
-    stage: test
-    only: [branches@rist/librist]
-    tags:
-        - freebsd
-    needs: ["build-freebsd"]
-    script:
-        - cd build && meson test --suite unicast --print-errorlogs
-    dependencies:
-        - build-freebsd
-    artifacts:
-        when: on_failure
-        paths:
-            - build/meson-logs/testlog.txt
-
 
