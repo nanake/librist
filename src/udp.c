@@ -6,6 +6,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "logging.h"
 #include "udp-private.h"
 #include "rist-private.h"
 #include "log-private.h"
@@ -499,7 +500,7 @@ void rist_create_socket(struct rist_peer *peer)
 			return;
 		}
 
-		peer->sd = udpsocket_open_bind(host, port, &peer->miface[0]);
+		peer->sd = udpsocket_open_bind(host, port, peer->miface);
 		if (peer->sd >= 0) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
@@ -530,6 +531,32 @@ void rist_create_socket(struct rist_peer *peer)
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL connect mode (%d)\n", peer->sd);
 		else {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not start in URL connect mode. %s\n", strerror(errno));
+		}
+		if (peer->miface[0] != '\0') {
+			struct sockaddr_storage ss = {0};
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Binding socket to %s\n", peer->miface);
+			if (inet_pton(AF_INET, peer->miface,  &((struct sockaddr_in *)&ss)->sin_addr) != 0) {
+				((struct sockaddr_in *)&ss)->sin_family = AF_INET;
+				if (bind(peer->sd, (struct sockaddr*)&ss, sizeof(struct sockaddr_in)) != 0) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
+				}
+			}
+			else if (inet_pton(AF_INET6, peer->miface, &((struct sockaddr_in6 *)&ss)->sin6_addr) != 0) {
+				((struct sockaddr_in6 *)&ss)->sin6_family = AF_INET6;
+				((struct sockaddr_in6 *)&ss)->sin6_port =0;
+				if (bind(peer->sd, (struct sockaddr*)&ss, sizeof(struct sockaddr_in6)) != 0) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
+				}
+			}
+#ifndef __WIN32
+			else {
+				struct ifreq ifr = {0};
+				strncpy(ifr.ifr_name, peer->miface, sizeof(ifr.ifr_name));
+				if (setsockopt(peer->sd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) != 0) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
+				}
+			}
+#endif
 		}
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
 	}
