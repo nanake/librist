@@ -548,13 +548,30 @@ void rist_create_socket(struct rist_peer *peer)
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
 				}
 			}
-#ifndef __WIN32
+#ifdef __linux__
 			else {
 				struct ifreq ifr = {0};
 				strncpy(ifr.ifr_name, peer->miface, sizeof(ifr.ifr_name));
 				if (setsockopt(peer->sd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) != 0) {
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
 				}
+			}
+#elif defined(__APPLE__)
+			else {
+				int idx = if_nametoindex(peer->miface);
+				if (idx == 0) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't get device %s index: %s\n", peer->miface, strerror(errno));
+				} else {
+					int proto = peer->u.address.sa_family == AF_INET? IPPROTO_IP : IPPROTO_IPV6;
+					int bound = peer->u.address.sa_family == AF_INET? IP_BOUND_IF : IPV6_BOUND_IF;
+					if (setsockopt(peer->sd, proto, bound, &idx, sizeof(idx)) != 0) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
+					}
+				}
+			}
+#else
+			else {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "No method available to bind to %s please supply an IP to bind to\n", peer->miface);
 			}
 #endif
 		}
