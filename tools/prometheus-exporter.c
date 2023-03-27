@@ -307,22 +307,22 @@ void rist_prometheus_handle_sender_peer_stats(struct rist_prometheus_stats *ctx,
 	if (s->tags == NULL) {
 		memcpy(s->cname, stats->cname, sizeof(s->cname)-1);
 		if (s->local_url == NULL) {
-			int res = snprintf(NULL, 0, "{%speer_id=\"%"PRIu32"\",peer_url=\"%s\"cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id, s->url, s->cname, sender_id);
+			int res = snprintf(NULL, 0, "{%speer_id=\"%"PRIu32"\",peer_url=\"%s\",cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id, s->url, s->cname, sender_id);
 			if (res < 0) {
 				return;
 			}
 			size_t len = res+1;
 			s->tags = calloc(1, len);
-			res = snprintf(s->tags, len, "{%speer_id=\"%"PRIu32"\",peer_url=\"%s\"cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id, s->url, s->cname, sender_id);
+			res = snprintf(s->tags, len, "{%speer_id=\"%"PRIu32"\",peer_url=\"%s\",cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id, s->url, s->cname, sender_id);
 			assert(res >=0);
 		} else {
-			int res = snprintf(NULL, 0, "{%speer_id=\"%"PRIu32"\"listening=\"%s\",peer_url=\"%s\"cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id,s->local_url, s->url, s->cname, sender_id);
+			int res = snprintf(NULL, 0, "{%speer_id=\"%"PRIu32"\",listening=\"%s\",peer_url=\"%s\",cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id,s->local_url, s->url, s->cname, sender_id);
 			if (res < 0) {
 				return;
 			}
 			size_t len = res+1;
 			s->tags = calloc(1, len);
-			res = snprintf(s->tags, len, "{%speer_id=\"%"PRIu32"\"listening=\"%s\",peer_url=\"%s\"cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id,s->local_url, s->url, s->cname, sender_id);
+			res = snprintf(s->tags, len, "{%speer_id=\"%"PRIu32"\",listening=\"%s\",peer_url=\"%s\",cname=\"%s\",sender_id=\"%"PRIu64"\"}",ctx->tags, s->peer_id,s->local_url, s->url, s->cname, sender_id);
 			assert(res >=0);
 		}
 	}
