@@ -6,6 +6,7 @@
 #include "socket-shim.h"
 #include "config.h"
 #include <errno.h>
+#include <stdbool.h>
 #if HAVE_SOCK_UN_H
 #include <sys/un.h>
 #endif
@@ -215,7 +216,7 @@ static int rist_prometheus_format_sender_peer_stats(struct rist_prometheus_stats
 	int offset = 0;
 	int remaining =out_size;
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_bandwidth_bps, "The current bandwidth transmitted to the peer", "bps")
-	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_bandwidth_bps, "The current retry bandwidth transmitted to the peer", "bps")
+	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_retry_bandwidth_bps, "The current retry bandwidth transmitted to the peer", "bps")
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_sent_packets, "Total number of packets sent", "packets")
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_retransmitted_packets, "Total number of packets retransmitted", "packets")
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_received_packets, "Total number of packets received (rtcp)", "packets")
@@ -541,6 +542,64 @@ void *rist_prometheus_stats_unix_socket_thread(void *arg) {
 }
 #endif
 
+
+//Ensure the tags input by the user are in the correct format and end on a comma
+//meaning: tag1="value",tag2="value",
+static char *rist_prometheus_user_tags(const char *tags) {
+	if (strchr(tags, '=') == NULL) {
+		return NULL;//Doesn't contain an =, we cannot parse this
+	}
+	int len_s = strlen(tags);
+	int len = len_s +2;//keep room for nullbyte & ending comma
+	char *out = NULL;
+	if (strchr(tags, '"') == NULL) {
+		int count = 0;
+		for (const char *t = tags; *t != '\0'; t++) {
+			if (*t == '=')
+				count++;
+		}
+		len += 2 *count;
+		len_s += 2*count;
+		out = calloc(len, 1);
+		char *p = out;
+		bool invar = false;
+		for (const char *t = tags; *t != '\0'; t++) {
+			if (*t == ',') {
+				if (invar) {
+					*p = '"';
+					p++;
+					invar = false;
+				} else {
+					free(out);
+					return NULL;
+				}
+			}
+			*p = *t;
+			p++;
+			if (*t == '=') {
+				if (!invar) {
+					*p = '"';
+					p++;
+					invar = true;
+				} else {
+					free(out);
+					return NULL;
+				}
+			}
+		}
+		if (*(p-1) != ',') {
+			*p = '"';
+			len_s++;
+		}
+	} else {
+		out = calloc(len, 1);
+		memcpy(out, tags, len_s);
+	}
+
+	out[len_s -1] = ',';
+	return out;
+}
+
 struct rist_prometheus_stats *rist_setup_prometheus_stats(struct rist_logging_settings *logging_settings, const char* tags, bool multiple_metric_datapoints, bool skipcreated, struct prometheus_httpd_options *httpd_opt, char *unix_socket) {
 	int fd = -1;
 #if HAVE_SOCK_UN_H
@@ -569,11 +628,11 @@ struct rist_prometheus_stats *rist_setup_prometheus_stats(struct rist_logging_se
 	if (tags == 0) {
 		stats->tags = calloc(1, 1);
 	} else {
-		size_t len = strlen(tags);
-		stats->tags = calloc(len +2, 1);
-		memcpy(stats->tags, tags, len);
-		if (stats->tags[len-1] != ',') {
-			stats->tags[len] = ',';
+		stats->tags = rist_prometheus_user_tags(tags);
+		if (stats->tags == NULL) {
+			rist_log(logging_settings, RIST_LOG_ERROR, "Prometheus: error couldn't parse user supplied tag value %s expected format: tag1=value,tag2=value OR tag1=\"value\",tag2=\"value\"\n", tags);
+			free(stats);
+			return NULL;
 		}
 	}
 	stats->format_buf = calloc(4096, 1);
