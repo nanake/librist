@@ -1638,7 +1638,7 @@ static bool rist_receiver_data_authenticate(struct rist_peer *peer,uint64_t pack
 	if (ctx->common.profile == RIST_PROFILE_SIMPLE && !peer->authenticated)
 	{
 		//assert(0);
-		if (peer->parent->peer_rtcp->authenticated) {
+		if (peer->parent->peer_rtcp && peer->parent->peer_rtcp->authenticated) {
 			peer->flow = peer->parent->peer_rtcp->flow;
 			/* find correct rtcp */
 			peer->peer_rtcp = NULL;
