@@ -3369,6 +3369,30 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		}
     }
 
+	if (peer->receiver_ctx != NULL && peer->flow != NULL) {
+		pthread_mutex_lock(&peer->flow->mutex);
+		bool found = false;
+		for (size_t i=0; i < peer->flow->peer_lst_len; i++) {
+			if (peer->flow->peer_lst[i] == peer) {
+				peer->flow->peer_lst[i] = peer->flow->peer_lst[(peer->flow->peer_lst_len -1)];
+				found = true;
+				break;
+			}
+		}
+
+		if (found) {
+			if (peer->flow->peer_lst_len > 1) {
+				peer->flow->peer_lst = realloc(peer->flow->peer_lst, sizeof(peer) * (peer->flow->peer_lst_len -1));
+				peer->flow->peer_lst_len--;
+			} else {
+				free(peer->flow->peer_lst);
+				peer->flow->peer_lst_len = 0;
+				peer->flow->peer_lst = NULL;
+			}
+		}
+		pthread_mutex_unlock(&peer->flow->mutex);
+	}
+
 
 	/* data receive event */
 	if (!peer->parent && peer->event_recv)
