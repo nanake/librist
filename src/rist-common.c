@@ -3103,7 +3103,11 @@ protocol_bypass:
 					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
 					rist_peer_remove(cctx, peer, NULL);
 				}
-			}
+			} else if (!peer->timed_out && peer->dead && peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK) {
+				peer->timed_out = 1;
+				if (cctx->connection_status_callback && peer->send_first_connection_event)
+					cctx->connection_status_callback( cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
+            }
 			peer = next;
 		}
 	}
@@ -3313,7 +3317,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 			*next = NULL;
 	}
 	atomic_store_explicit(&peer->shutdown, true, memory_order_release);
-	if (peer->send_first_connection_event && ctx->connection_status_callback && (ctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
+	if (peer->send_first_connection_event  && !peer->timed_out && ctx->connection_status_callback && (ctx->profile != RIST_PROFILE_SIMPLE || peer->is_rtcp))
 		ctx->connection_status_callback(ctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
 	if (peer->child)
 	{
