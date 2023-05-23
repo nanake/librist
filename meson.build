@@ -64,7 +64,17 @@ threads = []
 test_args = []
 if host_machine.system() == 'windows'
 	deps += [ cc.find_library('ws2_32') ]
-	add_project_arguments(['-D_WIN32_WINNT=0x0601'], language: 'c')
+
+windows_version_test = '''
+#include <windef.h>
+#if !defined(_WIN32_WINNT) || _WIN32_WINNT < 0x0600
+# error _WIN32_WINNT toolchain default not high enough
+#endif
+'''
+	if not cc.compiles(windows_version_test, name: '_WIN32_WINNT includes Vista')
+		add_project_arguments(['-D_WIN32_WINNT=0x0600'], language: 'c')
+	endif
+
 	if get_option('default_library') != 'static'
 		add_project_arguments(['-DLIBRIST_BUILDING_DLL'], language: 'c')
 	endif
