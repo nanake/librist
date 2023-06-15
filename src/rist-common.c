@@ -1390,6 +1390,8 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 void rist_peer_authenticate(struct rist_peer *peer)
 {
 	peer->authenticated = true;
+	if (peer->peer_data)
+		peer->peer_data->authenticated = true;
 
 	rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 			"Successfully Authenticated peer %"PRIu32"\n", peer->adv_peer_id);
@@ -2306,6 +2308,33 @@ static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revent
 	}
 }
 
+static void rist_new_connection(struct rist_peer *peer, struct rist_peer *p, uint32_t flow_id) {
+	char peer_type[5];
+	char id_name[8];
+	if (peer->is_rtcp) {
+		strcpy(peer_type, "RTCP");
+		strcpy(id_name, "flow_id");
+	} else if (peer->is_data) {
+		strcpy(peer_type, "RTP");
+		strcpy(id_name, "ssrc");
+	}
+	if (peer->receiver_mode) {
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New %s peer connecting, %s %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+		&peer_type, &id_name, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
+		p->adv_flow_id = flow_id;
+	}
+	else {
+		if (flow_id) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+			&peer_type, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
+		} else {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
+			&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
+		}
+		p->peer_ssrc = p->adv_flow_id = p->sender_ctx->adv_flow_id;
+	}
+}
+
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again)
 {
 	RIST_MARK_UNUSED(evctx);
@@ -2492,7 +2521,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		}
 
 		if (gre_proto != RIST_GRE_PROTOCOL_TYPE_REDUCED)
-			return;
+			goto protocol_bypass;
 
 		if (recv_bufsize < payload_offset + 4) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
@@ -2503,6 +2532,111 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		payload.src_port = recv_buf[payload_offset] << 8 | recv_buf[payload_offset +1];
 		payload.dst_port = recv_buf[payload_offset +2] << 8 | recv_buf[payload_offset +3];
 		payload_offset += 4;
+	}
+
+
+protocol_bypass:
+	;
+	bool inchild = false;
+	while (p) {
+		if (equal_address(family, addr, p))
+			break;
+
+		if (p->listening) {
+			if (!inchild)
+				p = p->child;
+			else
+				p = p->sibling_next;
+		} else {
+			p = p->next;
+		}
+	}
+
+	if (!p && (peer->listening || peer->multicast) && (gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL || cctx->profile == RIST_PROFILE_SIMPLE)) {
+		/* No match, new peer creation when on listening mode */
+		p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
+		p->handled_first = false;
+		p->adv_peer_id = ++cctx->peer_counter;
+		// Copy settings and init/update global variables that depend on settings
+		p->parent = peer;
+		peer_copy_settings(peer, p);
+		if (cctx->profile == RIST_PROFILE_SIMPLE) {
+			if (peer->address_family == AF_INET) {
+				p->remote_port = htons( ((struct sockaddr_in *)addr)->sin_port);
+			} else {
+				p->remote_port = htons( ((struct sockaddr_in6 *)addr)->sin6_port);
+			}
+				p->local_port = peer->local_port;
+			}
+		else if (peer->receiver_ctx){
+			// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
+			p->remote_port = payload.src_port;
+			p->local_port = payload.dst_port;
+		} else {
+			p->remote_port = peer->remote_port;
+			p->local_port = peer->local_port;
+		}
+
+		// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
+		p->address_family = family;
+		p->address_len = addrlen;
+		p->listening = 0;
+		p->is_rtcp = peer->is_rtcp;
+		p->is_data = peer->is_data;
+		p->peer_data = p;
+		if (peer->multicast)
+			p->peer_data = peer->peer_data;
+		memcpy(&p->u.address, addr, addrlen);
+		p->sd = peer->sd;
+		p->authenticated = false;
+		// Copy the event handler reference to prevent the creation of a new one (they are per socket)
+		p->event_recv = peer->event_recv;
+		char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+		char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
+		#if HAVE_MBEDTLS
+		eap_clone_ctx(peer->eap_ctx, p);
+		eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
+		#endif
+		// Optional validation of connecting sender
+		if (cctx->auth.conn_cb) {
+
+			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
+			char *parent_ip_string = get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
+			if (!parent_ip_string){
+				parent_ip_string = "";
+			}
+
+			uint16_t parent_port = 0;
+			if (p->parent->u.storage.ss_family == AF_INET)
+				parent_port = htons(p->parent->u.inaddr.sin_port);
+			else
+				parent_port = htons(p->parent->u.inaddr6.sin6_port);
+
+			// Real source port vs virtual source port
+			if (cctx->profile == RIST_PROFILE_SIMPLE)
+				port = p->remote_port;
+			if (incoming_ip_string) {
+				if (cctx->auth.conn_cb(cctx->auth.arg,incoming_ip_string,port,parent_ip_string, parent_port, p)) {
+					free(p);
+					return;
+				}
+			}
+		}
+
+		if (peer->receiver_mode)
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %d\n", p->adv_peer_id);
+		else {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling reverse keepalive for peer %d\n", p->adv_peer_id);
+			if (p->is_rtcp)
+				sender_peer_append(peer->sender_ctx, p);
+		}
+		p->send_keepalive = true;
+		peer_append(p);
+	}
+
+	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
+		p->last_rtcp_received = now;
+		return;
 	}
 
 	struct rist_rtp_hdr *rtp = (struct rist_rtp_hdr *)&recv_buf[payload_offset];
@@ -2567,261 +2701,135 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		}
 	}
 
-protocol_bypass:
 	// We need this protocol bypass to manage keepalives of any kind,
 	// they need to trigger peering at the bottom of this function
 
 	;
-	bool inchild = false;
 	bool failed_eap = false;
-	while (p) {
-		if (equal_address(family, addr, p)) {
-			if (p->eap_authentication_state != 1 && p->dead) {
-				uint64_t dead_time = (now - p->last_rtcp_received);
-				p->dead = false;
-				//Only used on main profile
-				if (p->parent)
-					++p->parent->child_alive_count;
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-						"Peer %u was dead for %"PRIu64" ms and it is now alive again\n",
-							p->adv_peer_id, dead_time / RIST_CLOCK);
-				if (p->peer_data)
-					p->peer_data->dead = 0;
-			}
-			p->last_rtcp_received = now;
-			if (p->flow)
-				p->flow->last_recv_ts = now;
-			payload.peer = p;
-			if (cctx->profile == RIST_PROFILE_SIMPLE)
-			{
-				payload.src_port = p->remote_port;
-				payload.dst_port = p->local_port;
-			}
-			//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
-#if HAVE_MBEDTLS
-			if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
-			{
-				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
-					p->log_repeat_timer = now;
-				}
-				// Do not process non EAP packets until the peer has been authenticated!
-				return;
-			}
-#endif
-			//Cobalt's implementation has an identity crisis in it's response to our echo packets & set's the wrong SSRC (ours) on the RTP packet. Work around this flaw.
-			if (peer && peer->receiver_ctx && flow_id == peer->peer_ssrc && peer->flow && peer->flow->flow_id && peer->flow->flow_id != flow_id)
-				flow_id = peer->flow->flow_id;
-
-			switch(payload.type) {
-				case RIST_PAYLOAD_TYPE_UNKNOWN:
-					// Do nothing ...TODO: check for port changes?
-					break;
-				case RIST_PAYLOAD_TYPE_DATA_OOB:
-					payload.size = recv_bufsize - payload_offset;
-					payload.data = (void *)(recv_buf + payload_offset);
-					rist_recv_oob_data(p, &payload);
-					break;
-				case RIST_PAYLOAD_TYPE_RTCP:
-				case RIST_PAYLOAD_TYPE_RTCP_NACK:
-				/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
-					if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
-						p->local_port = payload.dst_port;
-						p->remote_port = payload.src_port;
-					}
-					rist_recv_rtcp(p, seq, flow_id, &payload);
-					break;
-				case RIST_PAYLOAD_TYPE_DATA_RAW:
-					rtp_time = be32toh(rtp->ts);
-					if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
-						source_time = timestampNTP_u64();
-					else
-						source_time = convertRTPtoNTP(rtp->payload_type, time_extension, rtp_time);
-					seq = (uint32_t)be16toh(rtp->seq);
-					if (RIST_UNLIKELY(!p->receiver_mode))
-						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-								"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
-					else {
-						rist_calculate_bitrate((recv_bufsize - payload_offset), &p->bw);//use the unexpanded size to show real BW
-						rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, rtp->payload_type);
-					}
-					break;
-				case RIST_PAYLOAD_TYPE_EAPOL:
-#if HAVE_MBEDTLS
-					if (p->eap_ctx == NULL) {
-						rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
-					}
-					else {
-						int eapret = 0;
-						if ((eapret = eap_process_eapol(p->eap_ctx,
-														(void *)(recv_buf + payload_offset),
-														(recv_bufsize - payload_offset))) < 0) {
-							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
-							if (eapret == 255)//permanent failure, we allow a few retries
-								failed_eap = true;
-						}
-						else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
-							rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-								"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
-							p->eap_authentication_state = 2;
-
-						}
-					}
-#else
-					if (peer->eap_ctx == NULL) {
-						rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but EAP support not available!\n");
-						failed_eap = true;
-					}
-#endif
-					if (failed_eap) {
-						p->eap_authentication_state = 1;
-						kill_peer(p);
-					}
-					// Never create new peers using EAP packets (exit loop here)
-					return;
-					break;
-				default:
-					rist_recv_rtcp(p, seq, flow_id, &payload);
-					break;
-			}
-			return;
-		}
-		if (p->listening) {
-			if (!inchild)
-				p = p->child;
-			else
-				p = p->sibling_next;
-		} else
-			p = p->next;
+	if (p->eap_authentication_state != 1 && p->dead) {
+		uint64_t dead_time = (now - p->last_rtcp_received);
+		p->dead = false;
+		//Only used on main profile
+		if (p->parent)
+			++p->parent->child_alive_count;
+		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+				"Peer %u was dead for %"PRIu64" ms and it is now alive again\n",
+					p->adv_peer_id, dead_time / RIST_CLOCK);
+		if (p->peer_data)
+			p->peer_data->dead = 0;
 	}
-
-	// Peer was not found, create a new one
-	if ((peer->listening || peer->multicast) && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
-		/* No match, new peer creation when on listening mode */
-		p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
-		p->adv_peer_id = ++cctx->peer_counter;
-		// Copy settings and init/update global variables that depend on settings
-		p->parent = peer;
-		peer_copy_settings(peer, p);
-		if (cctx->profile == RIST_PROFILE_SIMPLE) {
-			if (peer->address_family == AF_INET) {
-				p->remote_port = htons( ((struct sockaddr_in *)addr)->sin_port);
-			} else {
-				p->remote_port = htons( ((struct sockaddr_in6 *)addr)->sin6_port);
-			}
-			p->local_port = peer->local_port;
-		}
-		else if (peer->receiver_ctx){
-			// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
-			p->remote_port = payload.src_port;
-			p->local_port = payload.dst_port;
-		} else {
-			p->remote_port = peer->remote_port;
-			p->local_port = peer->local_port;
-		}
-		char peer_type[5];
-		char id_name[8];
-		if (peer->is_rtcp) {
-			strcpy(peer_type, "RTCP");
-			strcpy(id_name, "flow_id");
-		} else if (peer->is_data) {
-			strcpy(peer_type, "RTP");
-			strcpy(id_name, "ssrc");
-		}
-		if (peer->receiver_mode) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New %s peer connecting, %s %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-				&peer_type, &id_name, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
-			p->adv_flow_id = flow_id;
-		}
-		else {
-			if (flow_id) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-						&peer_type, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
-			} else {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
-						&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
-			}
-			p->peer_ssrc = p->adv_flow_id = p->sender_ctx->adv_flow_id;
-		}
-		// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
-		p->address_family = family;
-		p->address_len = addrlen;
-		p->listening = 0;
-		p->is_rtcp = peer->is_rtcp;
-		p->is_data = peer->is_data;
-		p->peer_data = p;
-		if (peer->multicast)
-			p->peer_data = peer->peer_data;
-		memcpy(&p->u.address, addr, addrlen);
-		p->sd = peer->sd;
-		p->authenticated = false;
-		// Copy the event handler reference to prevent the creation of a new one (they are per socket)
-		p->event_recv = peer->event_recv;
-		char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
-		char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
+	p->last_rtcp_received = now;
+	if (p->flow)
+		p->flow->last_recv_ts = now;
+	payload.peer = p;
+	if (cctx->profile == RIST_PROFILE_SIMPLE)
+	{
+		payload.src_port = p->remote_port;
+		payload.dst_port = p->local_port;
+	}
+	//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
 #if HAVE_MBEDTLS
-		eap_clone_ctx(peer->eap_ctx, p);
-		eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
-#endif
-		// Optional validation of connecting sender
-		if (cctx->auth.conn_cb) {
-
-			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-			char *parent_ip_string = get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
-			if (!parent_ip_string){
-				parent_ip_string = "";
-			}
-
-			uint16_t parent_port = 0;
-			if (p->parent->u.storage.ss_family == AF_INET)
-				parent_port = htons(p->parent->u.inaddr.sin_port);
-			else
-				parent_port = htons(p->parent->u.inaddr6.sin6_port);
-
-			// Real source port vs virtual source port
-			if (cctx->profile == RIST_PROFILE_SIMPLE)
-				port = p->remote_port;
-			if (incoming_ip_string) {
-				if (cctx->auth.conn_cb(cctx->auth.arg,
-							incoming_ip_string,
-							port,
-							parent_ip_string,
-							parent_port,
-							p)) {
-					free(p);
-					return;
-				}
-			}
+	if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
+	{
+		if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
+			p->log_repeat_timer = now;
 		}
+		// Do not process non EAP packets until the peer has been authenticated!
+		return;
+	}
+#endif
+	//Cobalt's implementation has an identity crisis in it's response to our echo packets & set's the wrong SSRC (ours) on the RTP packet. Work around this flaw.
+	if (peer && peer->receiver_ctx && flow_id == peer->peer_ssrc && peer->flow && peer->flow->flow_id && peer->flow->flow_id != flow_id)
+		flow_id = peer->flow->flow_id;
 
-		if (payload.type == RIST_PAYLOAD_TYPE_RTCP && p->is_rtcp) {
-			if (peer->receiver_mode)
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %d\n", p->adv_peer_id);
+	switch(payload.type) {
+		case RIST_PAYLOAD_TYPE_UNKNOWN:
+			// Do nothing ...TODO: check for port changes?
+			break;
+		case RIST_PAYLOAD_TYPE_DATA_OOB:
+			payload.size = recv_bufsize - payload_offset;
+			payload.data = (void *)(recv_buf + payload_offset);
+			rist_recv_oob_data(p, &payload);
+			break;
+		case RIST_PAYLOAD_TYPE_RTCP:
+			if (p->is_rtcp && !p->handled_first) {
+				rist_new_connection(peer, p, flow_id);
+				if (!peer->receiver_mode) {
+					// only profile > simple
+					// authenticate sender now that we have an address
+					rist_peer_authenticate(p);
+				}
+				p->handled_first = true;
+			}
+			RIST_FALLTHROUGH;
+		case RIST_PAYLOAD_TYPE_RTCP_NACK:
+		/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
+			if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
+				p->local_port = payload.dst_port;
+				p->remote_port = payload.src_port;
+			}
+			rist_recv_rtcp(p, seq, flow_id, &payload);
+			break;
+		case RIST_PAYLOAD_TYPE_DATA_RAW:
+			if (p->is_data && !p->handled_first) {
+				rist_new_connection(peer, p, flow_id);
+				p->handled_first = true;
+			}
+			rtp_time = be32toh(rtp->ts);
+			if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
+				source_time = timestampNTP_u64();
+			else
+				source_time = convertRTPtoNTP(rtp->payload_type, time_extension, rtp_time);
+			seq = (uint32_t)be16toh(rtp->seq);
+			if (RIST_UNLIKELY(!p->receiver_mode))
+				rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+						"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 			else {
-				// only profile > simple
-				sender_peer_append(peer->sender_ctx, p);
-				// authenticate sender now that we have an address
-				rist_peer_authenticate(p);
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling reverse keepalive for peer %d\n", p->adv_peer_id);
+				rist_calculate_bitrate((recv_bufsize - payload_offset), &p->bw);//use the unexpanded size to show real BW
+				rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, rtp->payload_type);
 			}
-			p->send_keepalive = true;
-		}
-		peer_append(p);
-		// Final states happens during settings parsing event on next ping packet
-	} else {
-		if (!p) {
-			if (payload.type != RIST_PAYLOAD_TYPE_DATA_RAW) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d)\n",
-							payload.type, peer->authenticated);
-				rist_print_inet_info("Orphan ", peer);
+			break;
+		case RIST_PAYLOAD_TYPE_EAPOL:
+#if HAVE_MBEDTLS
+			if (p->eap_ctx == NULL) {
+				rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
 			}
-		} else {
-			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tRogue rist_peer_recv %x (%d)\n",
-						payload.type, p->authenticated);
-			rist_print_inet_info("Orphan ", p);
-		}
+			else {
+				int eapret = 0;
+				if ((eapret = eap_process_eapol(p->eap_ctx,
+												(void *)(recv_buf + payload_offset),
+												(recv_bufsize - payload_offset))) < 0) {
+					rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
+					if (eapret == 255)//permanent failure, we allow a few retries
+						failed_eap = true;
+				}
+				else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+						"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
+					p->eap_authentication_state = 2;
+
+				}
+			}
+#else
+			if (peer->eap_ctx == NULL) {
+				rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but EAP support not available!\n");
+				failed_eap = true;
+			}
+#endif
+			if (failed_eap) {
+				p->eap_authentication_state = 1;
+				kill_peer(p);
+			}
+			// Never create new peers using EAP packets (exit loop here)
+			return;
+			break;
+		default:
+			rist_recv_rtcp(p, seq, flow_id, &payload);
+			break;
 	}
+	return;
 }
 
 int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
@@ -3006,6 +3014,7 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_sender *se
 	p->sender_ctx = sender_ctx;
 	p->receiver_ctx = receiver_ctx;
 	p->birthtime_local = timestampNTP_u64();
+	p->handled_first = true;
 
 	return p;
 }

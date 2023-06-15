@@ -975,7 +975,7 @@ peer_select:
 						//do nothing
 					} else
 #endif
-					if (child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
+					if (child->authenticated && child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
 						uint8_t *payload = buffer->data;
 						rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, buffer->seq_rtp);
 					}
@@ -1007,7 +1007,7 @@ peer_select:
 						//do nothing
 					} else
 #endif
-				if (child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
+				if (child->authenticated && child->is_data && (!child->dead || (child->dead && (child->dead_since + peer->recovery_buffer_ticks) < now))) {
 					uint8_t *payload = buffer->data;
 					rist_send_common_rtcp(child, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port,  buffer->seq_rtp);
 				}

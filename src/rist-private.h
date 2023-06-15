@@ -464,6 +464,7 @@ struct rist_peer {
 	/* For simple profile authentication chain (data and rtcp on different ports) */
 	struct rist_peer *peer_rtcp;
 	struct rist_peer *peer_data;
+	bool handled_first;
 	bool is_rtcp;
 	bool is_data;
 	/* sender only: peer is known to respond to echo requests use those to calculate RTT instead */
