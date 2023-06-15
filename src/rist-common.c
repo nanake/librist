@@ -2620,6 +2620,10 @@ protocol_bypass:
 					return;
 				}
 #endif
+				//Cobalt's implementation has an identity crisis in it's response to our echo packets & set's the wrong SSRC (ours) on the RTP packet. Work around this flaw.
+				if (peer && peer->receiver_ctx && flow_id == peer->peer_ssrc && peer->flow && peer->flow->flow_id && peer->flow->flow_id != flow_id)
+					flow_id = peer->flow->flow_id;
+
 				switch(payload.type) {
 					case RIST_PAYLOAD_TYPE_UNKNOWN:
 						// Do nothing ...TODO: check for port changes?
