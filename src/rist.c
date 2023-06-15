@@ -779,8 +779,8 @@ int rist_peer_config_defaults_set(struct rist_peer_config *peer_config)
 		peer_config->recovery_mode = RIST_DEFAULT_RECOVERY_MODE;
 		peer_config->recovery_maxbitrate = RIST_DEFAULT_RECOVERY_MAXBITRATE;
 		peer_config->recovery_maxbitrate_return = RIST_DEFAULT_RECOVERY_MAXBITRATE_RETURN;
-		peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGHT_MIN;
-		peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGHT_MAX;
+		peer_config->recovery_length_min = RIST_DEFAULT_RECOVERY_LENGTH_MIN;
+		peer_config->recovery_length_max = RIST_DEFAULT_RECOVERY_LENGTH_MAX;
 		peer_config->recovery_reorder_buffer = RIST_DEFAULT_RECOVERY_REORDER_BUFFER;
 		peer_config->recovery_rtt_min = RIST_DEFAULT_RECOVERY_RTT_MIN;
 		peer_config->recovery_rtt_max = RIST_DEFAULT_RECOVERY_RTT_MAX;
