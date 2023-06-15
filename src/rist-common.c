@@ -2196,104 +2196,104 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	}
 }
 
-	static inline bool equal_address(uint16_t family, struct sockaddr *A_, struct rist_peer *p)
-	{
-		bool result = false;
+static inline bool equal_address(uint16_t family, struct sockaddr *A_, struct rist_peer *p)
+{
+	bool result = false;
 
-		if (!p) {
-			return result;
-		}
-
-		if (p->address_family != family) {
-			return result;
-		}
-
-		struct sockaddr *B_ = &p->u.address;
-
-		if (family == AF_INET) {
-			struct sockaddr_in *a = (struct sockaddr_in *)A_;
-			struct sockaddr_in *b = (struct sockaddr_in *)B_;
-			result = (a->sin_port == b->sin_port) &&
-				((!p->receiver_mode && p->listening) ||
-				 (a->sin_addr.s_addr == b->sin_addr.s_addr));
-			if (result && !p->remote_port)
-				p->remote_port = a->sin_port;
-		} else {
-			/* ipv6 */
-			struct sockaddr_in6 *a = (struct sockaddr_in6 *)A_;
-			struct sockaddr_in6 *b = (struct sockaddr_in6 *)B_;
-			result = a->sin6_port == b->sin6_port &&
-				((!p->receiver_mode && p->listening) ||
-				 !memcmp(&a->sin6_addr, &b->sin6_addr, sizeof(struct in6_addr)));
-			if (result && !p->remote_port)
-				p->remote_port = a->sin6_port;
-		}
-
+	if (!p) {
 		return result;
 	}
 
-	static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
-	{
-		RIST_MARK_UNUSED(evctx);
-		RIST_MARK_UNUSED(fd);
-		RIST_MARK_UNUSED(revents);
-		struct rist_peer *peer = (struct rist_peer *) arg;
+	if (p->address_family != family) {
+		return result;
+	}
+
+	struct sockaddr *B_ = &p->u.address;
+
+	if (family == AF_INET) {
+		struct sockaddr_in *a = (struct sockaddr_in *)A_;
+		struct sockaddr_in *b = (struct sockaddr_in *)B_;
+		result = (a->sin_port == b->sin_port) &&
+			((!p->receiver_mode && p->listening) ||
+				(a->sin_addr.s_addr == b->sin_addr.s_addr));
+		if (result && !p->remote_port)
+			p->remote_port = a->sin_port;
+	} else {
+		/* ipv6 */
+		struct sockaddr_in6 *a = (struct sockaddr_in6 *)A_;
+		struct sockaddr_in6 *b = (struct sockaddr_in6 *)B_;
+		result = a->sin6_port == b->sin6_port &&
+			((!p->receiver_mode && p->listening) ||
+				!memcmp(&a->sin6_addr, &b->sin6_addr, sizeof(struct in6_addr)));
+		if (result && !p->remote_port)
+			p->remote_port = a->sin6_port;
+	}
+
+	return result;
+}
+
+static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
+{
+	RIST_MARK_UNUSED(evctx);
+	RIST_MARK_UNUSED(fd);
+	RIST_MARK_UNUSED(revents);
+	struct rist_peer *peer = (struct rist_peer *) arg;
 #ifdef _WIN32
-		if (WSAGetLastError() == WSAECONNRESET) {
-			//recvfrom clears the WSAECONNRESET error
-			recvfrom(peer->sd, NULL, 0, 0, NULL, 0);
-			return;
-		}
+	if (WSAGetLastError() == WSAECONNRESET) {
+		//recvfrom clears the WSAECONNRESET error
+		recvfrom(peer->sd, NULL, 0, 0, NULL, 0);
+		return;
+	}
 #endif
-		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSocket error!\n");
+	rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\tSocket error!\n");
 
-		//rist_peer_remove(get_cctx(peer), peer, NULL);
-	}
+	//rist_peer_remove(get_cctx(peer), peer, NULL);
+}
 
-	void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
-	{
-		/* Add a reference to ctx->peer_lst */
-		ctx->peer_lst = realloc(ctx->peer_lst, (ctx->peer_lst_len + 1) * sizeof(*ctx->peer_lst));
-		ctx->peer_lst[ctx->peer_lst_len] = peer;
-		ctx->peer_lst_len++;
-	}
+void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
+{
+	/* Add a reference to ctx->peer_lst */
+	ctx->peer_lst = realloc(ctx->peer_lst, (ctx->peer_lst_len + 1) * sizeof(*ctx->peer_lst));
+	ctx->peer_lst[ctx->peer_lst_len] = peer;
+	ctx->peer_lst_len++;
+}
 
-	static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
-	{
-		_librist_crypto_psk_rist_key_clone(&peer_src->key_rx, &peer->key_rx);
-		_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx);
-		strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
-		strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
-		peer->config.weight = peer_src->config.weight;
-		peer->config.virt_dst_port = peer_src->config.virt_dst_port;
-		peer->config.recovery_mode = peer_src->config.recovery_mode;
-		peer->config.recovery_maxbitrate = peer_src->config.recovery_maxbitrate;
-		peer->config.recovery_maxbitrate_return = peer_src->config.recovery_maxbitrate_return;
-		peer->config.recovery_length_min = peer_src->config.recovery_length_min;
-		peer->config.recovery_length_max = peer_src->config.recovery_length_max;
-		peer->config.recovery_reorder_buffer = peer_src->config.recovery_reorder_buffer;
-		peer->config.recovery_rtt_min = peer_src->config.recovery_rtt_min;
-		peer->config.recovery_rtt_max = peer_src->config.recovery_rtt_max;
-		peer->config.congestion_control_mode = peer_src->config.congestion_control_mode;
-		peer->config.min_retries = peer_src->config.min_retries;
-		peer->config.max_retries = peer_src->config.max_retries;
-		peer->config.timing_mode = peer_src->config.timing_mode;
-		peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
-		peer->peer_ssrc = peer_src->peer_ssrc;
-		peer->session_timeout = peer_src->session_timeout;
-		peer->rist_gre_version = 1;
+static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
+{
+	_librist_crypto_psk_rist_key_clone(&peer_src->key_rx, &peer->key_rx);
+	_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx);
+	strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
+	strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
+	peer->config.weight = peer_src->config.weight;
+	peer->config.virt_dst_port = peer_src->config.virt_dst_port;
+	peer->config.recovery_mode = peer_src->config.recovery_mode;
+	peer->config.recovery_maxbitrate = peer_src->config.recovery_maxbitrate;
+	peer->config.recovery_maxbitrate_return = peer_src->config.recovery_maxbitrate_return;
+	peer->config.recovery_length_min = peer_src->config.recovery_length_min;
+	peer->config.recovery_length_max = peer_src->config.recovery_length_max;
+	peer->config.recovery_reorder_buffer = peer_src->config.recovery_reorder_buffer;
+	peer->config.recovery_rtt_min = peer_src->config.recovery_rtt_min;
+	peer->config.recovery_rtt_max = peer_src->config.recovery_rtt_max;
+	peer->config.congestion_control_mode = peer_src->config.congestion_control_mode;
+	peer->config.min_retries = peer_src->config.min_retries;
+	peer->config.max_retries = peer_src->config.max_retries;
+	peer->config.timing_mode = peer_src->config.timing_mode;
+	peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
+	peer->peer_ssrc = peer_src->peer_ssrc;
+	peer->session_timeout = peer_src->session_timeout;
+	peer->rist_gre_version = 1;
 
-		init_peer_settings(peer);
-	}
+	init_peer_settings(peer);
+}
 
-	static void kill_peer(struct rist_peer *peer)
-	{
-		bool current_state = peer->dead;
-		peer->dead = true;
-		if (peer->peer_data && (current_state != peer->peer_data->dead && peer->peer_data->parent))
-			--peer->peer_data->parent->child_alive_count;
-		peer->dead_since = timestampNTP_u64();
-	}
+static void kill_peer(struct rist_peer *peer)
+{
+	bool current_state = peer->dead;
+	peer->dead = true;
+	if (peer->peer_data && (current_state != peer->peer_data->dead && peer->peer_data->parent))
+		--peer->peer_data->parent->child_alive_count;
+	peer->dead_since = timestampNTP_u64();
+}
 
 static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revents, void *arg) {
 	bool again = true;
@@ -2305,958 +2305,958 @@ static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revent
 }
 
 
-	static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again)
-	{
-		RIST_MARK_UNUSED(evctx);
-		RIST_MARK_UNUSED(revents);
-		RIST_MARK_UNUSED(fd);
+static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again)
+{
+	RIST_MARK_UNUSED(evctx);
+	RIST_MARK_UNUSED(revents);
+	RIST_MARK_UNUSED(fd);
 
-		struct rist_peer *peer = (struct rist_peer *) arg;
-		if (atomic_load_explicit(&peer->shutdown, memory_order_acquire)) {
-			return;
-		}
-		uint64_t now = timestampNTP_u64();
-		struct rist_common_ctx *cctx = get_cctx(peer);
+	struct rist_peer *peer = (struct rist_peer *) arg;
+	if (atomic_load_explicit(&peer->shutdown, memory_order_acquire)) {
+		return;
+	}
+	uint64_t now = timestampNTP_u64();
+	struct rist_common_ctx *cctx = get_cctx(peer);
 
-		socklen_t addrlen = peer->address_len;
-		ssize_t recv_bufsize = -1;
-		uint16_t family = peer->address_family;
-		struct sockaddr_storage ss = {0};
-		struct sockaddr *addr = (struct sockaddr *)&ss;
-		struct rist_peer *p = peer;
-		uint8_t *recv_buf = cctx->buf.recv;
-		size_t buffer_offset = 0;
-		uint16_t port = 0;
+	socklen_t addrlen = peer->address_len;
+	ssize_t recv_bufsize = -1;
+	uint16_t family = peer->address_family;
+	struct sockaddr_storage ss = {0};
+	struct sockaddr *addr = (struct sockaddr *)&ss;
+	struct rist_peer *p = peer;
+	uint8_t *recv_buf = cctx->buf.recv;
+	size_t buffer_offset = 0;
+	uint16_t port = 0;
 
-		if (cctx->profile == RIST_PROFILE_SIMPLE)
-			buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
+	if (cctx->profile == RIST_PROFILE_SIMPLE)
+		buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
 
-		recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
-		if (ss.ss_family == AF_INET)
-			port = htons(((struct sockaddr_in *)addr)->sin_port);
-		else
-			port = htons(((struct sockaddr_in6 *)addr)->sin6_port);
+	recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
+	if (ss.ss_family == AF_INET)
+		port = htons(((struct sockaddr_in *)addr)->sin_port);
+	else
+		port = htons(((struct sockaddr_in6 *)addr)->sin6_port);
 
 #ifndef _WIN32
-		if (recv_bufsize <= 0) {
-			*again = false;
-			int errorcode = errno;
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-					return;
+	if (recv_bufsize <= 0) {
+		*again = false;
+		int errorcode = errno;
+		if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return;
 #else
-		if (recv_bufsize == SOCKET_ERROR) {
-			*again = false;
-			int errorcode = WSAGetLastError();
-			if (errorcode == WSAEWOULDBLOCK)
-				return;
-#endif
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errorcode, recv_bufsize, fd);
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "%s\n", strerror(errorcode));
+	if (recv_bufsize == SOCKET_ERROR) {
+		*again = false;
+		int errorcode = WSAGetLastError();
+		if (errorcode == WSAEWOULDBLOCK)
 			return;
-		}
-
-		struct rist_key *k = &peer->key_rx;
-		struct rist_gre *gre = NULL;
-		uint32_t seq = 0;
-		uint32_t time_extension = 0;
-		struct rist_protocol_hdr *proto_hdr = NULL;
-		uint8_t retry = 0;
-		struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
-		size_t gre_size = 0;
-		uint32_t flow_id = 0;
-
-		if (cctx->profile > RIST_PROFILE_SIMPLE)
-		{
-			// Make sure we have enough bytes
-			if (recv_bufsize < (int)sizeof(struct rist_gre)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
-				return;
-			}
-
-
-			gre = (void *) recv_buf;
-			if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL) &&
-				gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL)) {
-
-				if (htobe16(gre->prot_type) == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)
-				{
-					struct rist_gre_keepalive *gre_keepalive = (void *) recv_buf;
-					(void)gre_keepalive->capabilities1;
-					payload.type = RIST_PAYLOAD_TYPE_UNKNOWN;
-					// TODO: parse the capabilities and do something with it?
-				}
-				else
-				{
-					if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Protocol %d not supported (wrong profile?)\n", gre->prot_type);
-						peer->log_repeat_timer = now;
-					}
-					return;
-				}
-				goto protocol_bypass;
-			}
-
-			uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
-			uint8_t has_key = CHECK_BIT(gre->flags1, 5);
-			uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-			uint8_t rist_gre_version = (gre->flags2 >> 3) & 0x7;
-
-			if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
-				// Key bit is set, that means the other side want to send
-				// encrypted data.
-				//
-				// make sure we have a key before attempting to decrypt
-				if (!k->key_size) {
-					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receiving encrypted data, but configured without keysize!\n");
-						p->log_repeat_timer = now;
-					}
-					return;
-				}
-
-
-				while (p) {
-					if (equal_address(family, addr, p))
-						break;
-					p = p->next;
-				}
-				if (!p)
-					p = peer;
-#if ALLOW_INSECURE_IV_FALLBACK == 1
-				if (rist_gre_version < 1)
-					p->rist_gre_version = rist_gre_version;
 #endif
-				k = &p->key_rx;
-				//Read H bit and set keysize accordingly
-				if (p->rist_gre_version)
-				{
-					int bits = (CHECK_BIT(gre->flags2, 6))? 256 : 128;
-					k->key_size = bits;
-				}
-				p = peer;
-
-				// GRE
-				uint32_t nonce = 0;
-				struct rist_gre_key_seq *gre_key_seq = (void *) recv_buf;
-				gre_size = sizeof(*gre_key_seq);
-				if (has_checksum) {
-					seq = be32toh(gre_key_seq->seq);
-					nonce = gre_key_seq->nonce;
-				} else {
-					// shifted by 4 missing checksum bytes (non-librist senders)
-					seq = be32toh(gre_key_seq->nonce);
-					nonce = gre_key_seq->checksum_reserved1;
-					gre_size -= 4;
-				}
-				_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
-				if (k->bad_decryption)
-					return;
-			} else if (has_seq) {
-				// Key bit is not set, that means the other side does not want to send
-				//  encrypted data
-				//
-				// make sure we do not have a key
-				// (ie also interested in unencrypted communication)
-				if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
-					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-								"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
-						p->log_repeat_timer = now;
-					}
-					return;
-				}
-
-				struct rist_gre_seq *gre_seq = (void *) recv_buf;
-				gre_size = sizeof(*gre_seq);
-				if (has_checksum) {
-					seq = be32toh(gre_seq->seq);
-				} else {
-					// shifted by 4 missing checksum bytes (non-librist senders)
-					seq = be32toh(gre_seq->checksum_reserved1);
-					gre_size -= 4;
-				}
-
-			} else {
-				// No sequence and no key (checksum is optional)
-				gre_size = sizeof(*gre) - !has_checksum * 4;
-				seq = 0;
-			}
-			if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_FULL))
-			{
-				payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
-				goto protocol_bypass;
-			}
-			if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL))
-			{
-				payload.type = RIST_PAYLOAD_TYPE_EAPOL;
-				goto protocol_bypass;
-			}
-			// Make sure we have enough bytes
-			if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
-				return;
-			}
-			/* Map the first subheader and rtp payload area to our structure */
-			proto_hdr = (struct rist_protocol_hdr *)(recv_buf + gre_size);
-			payload.src_port = be16toh(proto_hdr->src_port);
-			payload.dst_port = be16toh(proto_hdr->dst_port);
-		}
-		else
-		{
-			// Simple profile support (not too elegant, but simple profile should not be used anymore)
-			seq = 0;
-			gre_size = 0;
-			recv_bufsize += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
-			// Make sure we have enough bytes
-			if (recv_bufsize < (int)sizeof(struct rist_protocol_hdr)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
-				return;
-			}
-			/* Map the first subheader and rtp payload area to our structure */
-			proto_hdr = (struct rist_protocol_hdr *)recv_buf;
-		}
-
-		/* Double check for a valid rtp header */
-		if ((proto_hdr->rtp.flags & 0xc0) != 0x80)
-		{
-			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
-						proto_hdr->rtp.flags);
-						p->log_repeat_timer = now;
-			}
-
-			if (k && k->key_size > 0) {
-				if (k->bad_count++ > 5) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
-					k->bad_decryption = true;
-				}
-			}
-			return;
-		}
-
-		uint32_t rtp_time = 0;
-		uint64_t source_time = 0;
-
-		// Finish defining the payload (we assume reduced header)
-		if(proto_hdr->rtp.payload_type < 200) {
-			flow_id = be32toh(proto_hdr->rtp.ssrc);
-			// If this is a retry, extract the information and restore correct flow_id
-			if (flow_id & 1UL)
-			{
-				flow_id ^= 1UL;
-				retry = 1;
-			}
-			uint8_t *data_payload = (recv_buf + gre_size + sizeof(*proto_hdr));
-			payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
-			if (CHECK_BIT(proto_hdr->rtp.flags, 4)) {
-				//RTP extension header
-				struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(recv_buf + gre_size + sizeof(*proto_hdr));
-				if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
-				{
-					payload.size -= 8;
-					data_payload += sizeof(*hdr_ext);
-					if (CHECK_BIT(hdr_ext->flags, 7))
-						expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
-				}
-			}
-			payload.data = (void *)data_payload;
-			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
-		} else {
-			// remap the rtp payload to the correct rtcp header
-			struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)(&proto_hdr->rtp);
-			flow_id = be32toh(rtcp->ssrc);
-			payload.size = recv_bufsize - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
-			payload.data = (void *)(recv_buf + gre_size + RIST_GRE_PROTOCOL_REDUCED_SIZE);
-			// Null this pointer to prevent code use below
-			// as only the first 8 bytes have valid data for RTCP packets
-			proto_hdr = NULL;
-			payload.type = RIST_PAYLOAD_TYPE_RTCP;
-		}
-
-		//rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-		//			"HTF gre_seq %"PRIu32" "
-		//			"flow_id %"PRIu32", peer_id %"PRIu32", gre_size %zu, ptype %u\n",
-		//			seq, flow_id, peer_id, gre_size, payload_type);
-
-protocol_bypass:
-		// We need this protocol bypass to manage keepalives of any kind,
-		// they need to trigger peering at the bottom of this function
-
-		;
-		bool inchild = false;
-		bool failed_eap = false;
-		while (p) {
-			if (equal_address(family, addr, p)) {
-				if (p->eap_authentication_state != 1 && p->dead) {
-					uint64_t dead_time = (now - p->last_rtcp_received);
-					p->dead = false;
-					//Only used on main profile
-					if (p->parent)
-						++p->parent->child_alive_count;
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-							"Peer %u was dead for %"PRIu64" ms and it is now alive again\n",
-								p->adv_peer_id, dead_time / RIST_CLOCK);
-					if (p->peer_data)
-						p->peer_data->dead = 0;
-				}
-				p->last_rtcp_received = now;
-				if (p->flow)
-					p->flow->last_recv_ts = now;
-				payload.peer = p;
-				if (cctx->profile == RIST_PROFILE_SIMPLE)
-				{
-					payload.src_port = p->remote_port;
-					payload.dst_port = p->local_port;
-				}
-				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
-#if HAVE_MBEDTLS
-				if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
-				{
-					if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
-						p->log_repeat_timer = now;
-					}
-					// Do not process non EAP packets until the peer has been authenticated!
-					return;
-				}
-#endif
-				//Cobalt's implementation has an identity crisis in it's response to our echo packets & set's the wrong SSRC (ours) on the RTP packet. Work around this flaw.
-				if (peer && peer->receiver_ctx && flow_id == peer->peer_ssrc && peer->flow && peer->flow->flow_id && peer->flow->flow_id != flow_id)
-					flow_id = peer->flow->flow_id;
-
-				switch(payload.type) {
-					case RIST_PAYLOAD_TYPE_UNKNOWN:
-						// Do nothing ...TODO: check for port changes?
-						break;
-					case RIST_PAYLOAD_TYPE_DATA_OOB:
-						payload.size = recv_bufsize - gre_size;
-						payload.data = (void *)(recv_buf + gre_size);
-						rist_recv_oob_data(p, &payload);
-						break;
-					case RIST_PAYLOAD_TYPE_RTCP:
-					case RIST_PAYLOAD_TYPE_RTCP_NACK:
-					/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
-						if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
-							rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
-							p->local_port = payload.dst_port;
-							p->remote_port = payload.src_port;
-						}
-						rist_recv_rtcp(p, seq, flow_id, &payload);
-						break;
-					case RIST_PAYLOAD_TYPE_DATA_RAW:
-						rtp_time = be32toh(proto_hdr->rtp.ts);
-						if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
-							source_time = timestampNTP_u64();
-						else
-							source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
-						seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
-						if (RIST_UNLIKELY(!p->receiver_mode))
-							rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
-									"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
-						else {
-							rist_calculate_bitrate((recv_bufsize - gre_size - sizeof(*proto_hdr)), &p->bw);//use the unexpanded size to show real BW
-							rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, proto_hdr->rtp.payload_type);
-						}
-						break;
-					case RIST_PAYLOAD_TYPE_EAPOL:
-#if HAVE_MBEDTLS
-						if (p->eap_ctx == NULL) {
-							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
-						}
-						else {
-							int eapret = 0;
-							if ((eapret = eap_process_eapol(p->eap_ctx,
-															(void *)(recv_buf + gre_size),
-															(recv_bufsize - gre_size))) < 0) {
-								rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
-								if (eapret == 255)//permanent failure, we allow a few retries
-									failed_eap = true;
-							}
-							else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
-								rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-									"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
-								p->eap_authentication_state = 2;
-
-							}
-						}
-#else
-						if (peer->eap_ctx == NULL) {
-							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but EAP support not available!\n");
-							failed_eap = true;
-						}
-#endif
-						if (failed_eap) {
-							p->eap_authentication_state = 1;
-							kill_peer(p);
-						}
-						// Never create new peers using EAP packets (exit loop here)
-						return;
-						break;
-					default:
-						rist_recv_rtcp(p, seq, flow_id, &payload);
-						break;
-				}
-				return;
-			}
-			if (p->listening) {
-				if (!inchild)
-					p = p->child;
-				else
-					p = p->sibling_next;
-			} else
-				p = p->next;
-		}
-
-		// Peer was not found, create a new one
-		if ((peer->listening || peer->multicast) && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
-			/* No match, new peer creation when on listening mode */
-			p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
-			p->adv_peer_id = ++cctx->peer_counter;
-			// Copy settings and init/update global variables that depend on settings
-			p->parent = peer;
-			peer_copy_settings(peer, p);
-			if (cctx->profile == RIST_PROFILE_SIMPLE) {
-				if (peer->address_family == AF_INET) {
-					p->remote_port = htons( ((struct sockaddr_in *)addr)->sin_port);
-				} else {
-					p->remote_port = htons( ((struct sockaddr_in6 *)addr)->sin6_port);
-				}
-				p->local_port = peer->local_port;
-			}
-			else if (peer->receiver_ctx){
-				// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
-				p->remote_port = payload.src_port;
-				p->local_port = payload.dst_port;
-			} else {
-				p->remote_port = peer->remote_port;
-				p->local_port = peer->local_port;
-			}
-			char peer_type[5];
-			char id_name[8];
-			if (peer->is_rtcp) {
-				strcpy(peer_type, "RTCP");
-				strcpy(id_name, "flow_id");
-			} else if (peer->is_data) {
-				strcpy(peer_type, "RTP");
-				strcpy(id_name, "ssrc");
-			}
-			if (peer->receiver_mode) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New %s peer connecting, %s %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-					&peer_type, &id_name, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
-				p->adv_flow_id = flow_id;
-			}
-			else {
-				if (flow_id) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
-							&peer_type, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
-				} else {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
-							&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
-				}
-				p->peer_ssrc = p->adv_flow_id = p->sender_ctx->adv_flow_id;
-			}
-			// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
-			p->address_family = family;
-			p->address_len = addrlen;
-			p->listening = 0;
-			p->is_rtcp = peer->is_rtcp;
-			p->is_data = peer->is_data;
-			p->peer_data = p;
-			if (peer->multicast)
-				p->peer_data = peer->peer_data;
-			memcpy(&p->u.address, addr, addrlen);
-			p->sd = peer->sd;
-			p->authenticated = false;
-			// Copy the event handler reference to prevent the creation of a new one (they are per socket)
-			p->event_recv = peer->event_recv;
-			char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
-			char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
-#if HAVE_MBEDTLS
-			eap_clone_ctx(peer->eap_ctx, p);
-			eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
-#endif
-			// Optional validation of connecting sender
-			if (cctx->auth.conn_cb) {
-
-				char parent_ip_string_buffer[INET6_ADDRSTRLEN];
-				char *parent_ip_string = get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
-				if (!parent_ip_string){
-					parent_ip_string = "";
-				}
-
-				uint16_t parent_port = 0;
-				if (p->parent->u.storage.ss_family == AF_INET)
-					parent_port = htons(p->parent->u.inaddr.sin_port);
-				else
-					parent_port = htons(p->parent->u.inaddr6.sin6_port);
-
-				// Real source port vs virtual source port
-				if (cctx->profile == RIST_PROFILE_SIMPLE)
-					port = p->remote_port;
-				if (incoming_ip_string) {
-					if (cctx->auth.conn_cb(cctx->auth.arg,
-								incoming_ip_string,
-								port,
-								parent_ip_string,
-								parent_port,
-								p)) {
-						free(p);
-						return;
-					}
-				}
-			}
-
-			if (payload.type == RIST_PAYLOAD_TYPE_RTCP && p->is_rtcp) {
-				if (peer->receiver_mode)
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %d\n", p->adv_peer_id);
-				else {
-					// only profile > simple
-					sender_peer_append(peer->sender_ctx, p);
-					// authenticate sender now that we have an address
-					rist_peer_authenticate(p);
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling reverse keepalive for peer %d\n", p->adv_peer_id);
-				}
-				p->send_keepalive = true;
-			}
-			peer_append(p);
-			// Final states happens during settings parsing event on next ping packet
-		} else {
-			if (!p) {
-				if (payload.type != RIST_PAYLOAD_TYPE_DATA_RAW) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d)\n",
-							 payload.type, peer->authenticated);
-					rist_print_inet_info("Orphan ", peer);
-				}
-			} else {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tRogue rist_peer_recv %x (%d)\n",
-						 payload.type, p->authenticated);
-				rist_print_inet_info("Orphan ", p);
-			}
-		}
-	}
-
-	int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
-	{
-		if (RIST_UNLIKELY(!ctx->oob_data_enabled)) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-					"Trying to send oob but oob was not enabled\n");
-			return -1;
-		}
-		else if ((ctx->oob_queue_write_index + 1) == ctx->oob_queue_read_index)
-		{
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-					"oob queue is full (%zu bytes), try again later\n", ctx->oob_queue_bytesize);
-			return -1;
-		}
-
-		/* insert into oob fifo queue */
-		pthread_rwlock_wrlock(&ctx->oob_queue_lock);
-		ctx->oob_queue[ctx->oob_queue_write_index] = rist_new_buffer(ctx, buf, len, RIST_PAYLOAD_TYPE_DATA_OOB, 0, 0, 0, 0);
-		if (RIST_UNLIKELY(!ctx->oob_queue[ctx->oob_queue_write_index])) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\t Could not create oob packet buffer, OOM\n");
-			pthread_rwlock_unlock(&ctx->oob_queue_lock);
-			return -1;
-		}
-		ctx->oob_queue[ctx->oob_queue_write_index]->peer = peer;
-		ctx->oob_queue_write_index = (ctx->oob_queue_write_index + 1);
-		ctx->oob_queue_bytesize += len;
-		pthread_rwlock_unlock(&ctx->oob_queue_lock);
-
-		return 0;
-	}
-
-	static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
-	{
-		int counter = 0;
-
-		while (1) {
-			// If we fall behind, only empty 100 every 5ms (master loop)
-			if (counter++ > maxcount) {
-				break;
-			}
-
-			if (ctx->oob_queue_read_index == ctx->oob_queue_write_index) {
-				//rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
-				//	"\tWe are all up to date, index is %u/%u and bytes = %zu\n",
-				//	ctx->oob_queue_read_index, ctx->oob_queue_write_index, ctx->oob_queue_bytesize);
-				break;
-			}
-
-			struct rist_buffer *oob_buffer = ctx->oob_queue[ctx->oob_queue_read_index];
-			if (!oob_buffer->data) {
-				rist_log_priv(ctx, RIST_LOG_ERROR, "Null oob buffer, skipping!!!\n");
-				ctx->oob_queue_read_index++;
-				continue;
-			}
-
-			uint8_t *payload = oob_buffer->data;
-			rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
-					oob_buffer->size, 0, 0, 0, 0);
-			ctx->oob_queue_bytesize -= oob_buffer->size;
-			ctx->oob_queue_read_index++;
-		}
-
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receive failed: errno=%d, ret=%d, socket=%d\n", errorcode, recv_bufsize, fd);
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "%s\n", strerror(errorcode));
 		return;
 	}
 
-	static void sender_send_nacks(struct rist_sender *ctx)
+	struct rist_key *k = &peer->key_rx;
+	struct rist_gre *gre = NULL;
+	uint32_t seq = 0;
+	uint32_t time_extension = 0;
+	struct rist_protocol_hdr *proto_hdr = NULL;
+	uint8_t retry = 0;
+	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
+	size_t gre_size = 0;
+	uint32_t flow_id = 0;
+
+	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
-		// Send retries from the queue (if any)
-		uint32_t counter = 1;
-		int errors = 0;
-		size_t total_bytes = 0;
+		// Make sure we have enough bytes
+		if (recv_bufsize < (int)sizeof(struct rist_gre)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
 
-		if (ctx->max_nacksperloop == 0)
-			return; // No peers yet
 
-		// Send nack retries. Stop when the retry queue is empty or when the data in the
-		// send fifo queue grows to 10 packets (we do not want to harm real-time data)
-		// We also stop on maxcounter (jitter control and max bandwidth protection)
-		size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
-		uint64_t start_time = timestampNTP_u64();
-		while (queued_items < 10) {
-			ssize_t ret = rist_retry_dequeue(ctx);
-			if (ret == 0) {
-				// ret == 0 is valid (nothing to send)
-				break;
-			} else if (ret < 0) {
-				errors++;
-			} else {
-				total_bytes += ret;
-				counter++;
-			}
-			if (counter > ctx->max_nacksperloop) {
-				break;
-			}
-			if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 100)
+		gre = (void *) recv_buf;
+		if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL) &&
+			gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL)) {
+
+			if (htobe16(gre->prot_type) == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)
 			{
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Nack processing loop took longer than 100ms. Something is wrong!\n");
-				// TODO: clear out the nack queue here?
-				break;
+				struct rist_gre_keepalive *gre_keepalive = (void *) recv_buf;
+				(void)gre_keepalive->capabilities1;
+				payload.type = RIST_PAYLOAD_TYPE_UNKNOWN;
+				// TODO: parse the capabilities and do something with it?
 			}
-			queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
+			else
+			{
+				if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Protocol %d not supported (wrong profile?)\n", gre->prot_type);
+					peer->log_repeat_timer = now;
+				}
+				return;
+			}
+			goto protocol_bypass;
 		}
-		if (ctx->common.debug && 2 * (counter - 1) > ctx->max_nacksperloop)
-		{
-			rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
-					"Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu, m=%zu\n",
-					counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx),
-					ctx->max_nacksperloop);
-		}
 
-	}
+		uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
+		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
+		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
+		uint8_t rist_gre_version = (gre->flags2 >> 3) & 0x7;
 
-	static void sender_send_data(struct rist_sender *ctx, int maxcount)
-	{
-		int counter = 0;
-
-		while (1) {
-			// If we fall behind, only empty 100 every 5ms (master loop)
-			if (counter++ > maxcount) {
-				break;
+		if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
+			// Key bit is set, that means the other side want to send
+			// encrypted data.
+			//
+			// make sure we have a key before attempting to decrypt
+			if (!k->key_size) {
+				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receiving encrypted data, but configured without keysize!\n");
+					p->log_repeat_timer = now;
+				}
+				return;
 			}
 
-			size_t idx = ((size_t)atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire) + 1)& (ctx->sender_queue_max-1);
 
-			if (idx == (size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed)) {
-				//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-				//    "\t[GOOD] We are all up to date, index is %d\n",
-				//    ctx->sender_queue_read_index);
-				break;
+			while (p) {
+				if (equal_address(family, addr, p))
+					break;
+				p = p->next;
 			}
+			if (!p)
+				p = peer;
+#if ALLOW_INSECURE_IV_FALLBACK == 1
+			if (rist_gre_version < 1)
+				p->rist_gre_version = rist_gre_version;
+#endif
+			k = &p->key_rx;
+			//Read H bit and set keysize accordingly
+			if (p->rist_gre_version)
+			{
+				int bits = (CHECK_BIT(gre->flags2, 6))? 256 : 128;
+				k->key_size = bits;
+			}
+			p = peer;
 
-			atomic_store_explicit(&ctx->sender_queue_read_index, idx, memory_order_release);
-			if (RIST_UNLIKELY(ctx->sender_queue[idx] == NULL)) {
-				// This should never happen!
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR,
-						"FIFO data block was null (read/write) (%zu/%zu)\n",
-						idx, atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed));
-				continue;
+			// GRE
+			uint32_t nonce = 0;
+			struct rist_gre_key_seq *gre_key_seq = (void *) recv_buf;
+			gre_size = sizeof(*gre_key_seq);
+			if (has_checksum) {
+				seq = be32toh(gre_key_seq->seq);
+				nonce = gre_key_seq->nonce;
 			} else {
-				struct rist_buffer *buffer =  ctx->sender_queue[idx];
-				// Send  fifo data (handshake and data payloads)
-				if (buffer->type == RIST_PAYLOAD_TYPE_RTCP) {
-					// TODO can we ever have a null or dead buffer->peer?
-					uint8_t *payload = buffer->data;
-					rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, 0);
-					buffer->seq = ctx->common.seq;
-					buffer->seq_rtp = ctx->common.seq_rtp;
+				// shifted by 4 missing checksum bytes (non-librist senders)
+				seq = be32toh(gre_key_seq->nonce);
+				nonce = gre_key_seq->checksum_reserved1;
+				gre_size -= 4;
+			}
+			_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
+			if (k->bad_decryption)
+				return;
+		} else if (has_seq) {
+			// Key bit is not set, that means the other side does not want to send
+			//  encrypted data
+			//
+			// make sure we do not have a key
+			// (ie also interested in unencrypted communication)
+			if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
+				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
+					p->log_repeat_timer = now;
 				}
-				else {
-					rist_sender_send_data_balanced(ctx, buffer);
-					// For non-advanced mode seq to index mapping
-					ctx->seq_index[buffer->seq_rtp] = (uint32_t)idx;
-				}
+				return;
 			}
 
+			struct rist_gre_seq *gre_seq = (void *) recv_buf;
+			gre_size = sizeof(*gre_seq);
+			if (has_checksum) {
+				seq = be32toh(gre_seq->seq);
+			} else {
+				// shifted by 4 missing checksum bytes (non-librist senders)
+				seq = be32toh(gre_seq->checksum_reserved1);
+				gre_size -= 4;
+			}
+
+		} else {
+			// No sequence and no key (checksum is optional)
+			gre_size = sizeof(*gre) - !has_checksum * 4;
+			seq = 0;
 		}
+		if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_FULL))
+		{
+			payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
+			goto protocol_bypass;
+		}
+		if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL))
+		{
+			payload.type = RIST_PAYLOAD_TYPE_EAPOL;
+			goto protocol_bypass;
+		}
+		// Make sure we have enough bytes
+		if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
+		/* Map the first subheader and rtp payload area to our structure */
+		proto_hdr = (struct rist_protocol_hdr *)(recv_buf + gre_size);
+		payload.src_port = be16toh(proto_hdr->src_port);
+		payload.dst_port = be16toh(proto_hdr->dst_port);
+	}
+	else
+	{
+		// Simple profile support (not too elegant, but simple profile should not be used anymore)
+		seq = 0;
+		gre_size = 0;
+		recv_bufsize += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
+		// Make sure we have enough bytes
+		if (recv_bufsize < (int)sizeof(struct rist_protocol_hdr)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
+		/* Map the first subheader and rtp payload area to our structure */
+		proto_hdr = (struct rist_protocol_hdr *)recv_buf;
 	}
 
-	static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
-			struct rist_receiver *receiver_ctx)
+	/* Double check for a valid rtp header */
+	if ((proto_hdr->rtp.flags & 0xc0) != 0x80)
 	{
-		struct rist_common_ctx *cctx;
-		if (receiver_ctx)
-			cctx = &receiver_ctx->common;
-		else
-			cctx = &sender_ctx->common;
+		if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
+					proto_hdr->rtp.flags);
+					p->log_repeat_timer = now;
+		}
 
-		struct rist_peer *p = calloc(1, sizeof(*p));
+		if (k && k->key_size > 0) {
+			if (k->bad_count++ > 5) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
+				k->bad_decryption = true;
+			}
+		}
+		return;
+	}
+
+	uint32_t rtp_time = 0;
+	uint64_t source_time = 0;
+
+	// Finish defining the payload (we assume reduced header)
+	if(proto_hdr->rtp.payload_type < 200) {
+		flow_id = be32toh(proto_hdr->rtp.ssrc);
+		// If this is a retry, extract the information and restore correct flow_id
+		if (flow_id & 1UL)
+		{
+			flow_id ^= 1UL;
+			retry = 1;
+		}
+		uint8_t *data_payload = (recv_buf + gre_size + sizeof(*proto_hdr));
+		payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
+		if (CHECK_BIT(proto_hdr->rtp.flags, 4)) {
+			//RTP extension header
+			struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(recv_buf + gre_size + sizeof(*proto_hdr));
+			if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
+			{
+				payload.size -= 8;
+				data_payload += sizeof(*hdr_ext);
+				if (CHECK_BIT(hdr_ext->flags, 7))
+					expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+			}
+		}
+		payload.data = (void *)data_payload;
+		payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
+	} else {
+		// remap the rtp payload to the correct rtcp header
+		struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)(&proto_hdr->rtp);
+		flow_id = be32toh(rtcp->ssrc);
+		payload.size = recv_bufsize - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
+		payload.data = (void *)(recv_buf + gre_size + RIST_GRE_PROTOCOL_REDUCED_SIZE);
+		// Null this pointer to prevent code use below
+		// as only the first 8 bytes have valid data for RTCP packets
+		proto_hdr = NULL;
+		payload.type = RIST_PAYLOAD_TYPE_RTCP;
+	}
+
+	//rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+	//			"HTF gre_seq %"PRIu32" "
+	//			"flow_id %"PRIu32", peer_id %"PRIu32", gre_size %zu, ptype %u\n",
+	//			seq, flow_id, peer_id, gre_size, payload_type);
+
+protocol_bypass:
+	// We need this protocol bypass to manage keepalives of any kind,
+	// they need to trigger peering at the bottom of this function
+
+	;
+	bool inchild = false;
+	bool failed_eap = false;
+	while (p) {
+		if (equal_address(family, addr, p)) {
+			if (p->eap_authentication_state != 1 && p->dead) {
+				uint64_t dead_time = (now - p->last_rtcp_received);
+				p->dead = false;
+				//Only used on main profile
+				if (p->parent)
+					++p->parent->child_alive_count;
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+						"Peer %u was dead for %"PRIu64" ms and it is now alive again\n",
+							p->adv_peer_id, dead_time / RIST_CLOCK);
+				if (p->peer_data)
+					p->peer_data->dead = 0;
+			}
+			p->last_rtcp_received = now;
+			if (p->flow)
+				p->flow->last_recv_ts = now;
+			payload.peer = p;
+			if (cctx->profile == RIST_PROFILE_SIMPLE)
+			{
+				payload.src_port = p->remote_port;
+				payload.dst_port = p->local_port;
+			}
+			//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
+#if HAVE_MBEDTLS
+			if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
+			{
+				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
+					p->log_repeat_timer = now;
+				}
+				// Do not process non EAP packets until the peer has been authenticated!
+				return;
+			}
+#endif
+			//Cobalt's implementation has an identity crisis in it's response to our echo packets & set's the wrong SSRC (ours) on the RTP packet. Work around this flaw.
+			if (peer && peer->receiver_ctx && flow_id == peer->peer_ssrc && peer->flow && peer->flow->flow_id && peer->flow->flow_id != flow_id)
+				flow_id = peer->flow->flow_id;
+
+			switch(payload.type) {
+				case RIST_PAYLOAD_TYPE_UNKNOWN:
+					// Do nothing ...TODO: check for port changes?
+					break;
+				case RIST_PAYLOAD_TYPE_DATA_OOB:
+					payload.size = recv_bufsize - gre_size;
+					payload.data = (void *)(recv_buf + gre_size);
+					rist_recv_oob_data(p, &payload);
+					break;
+				case RIST_PAYLOAD_TYPE_RTCP:
+				case RIST_PAYLOAD_TYPE_RTCP_NACK:
+				/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
+					if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
+						rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
+						p->local_port = payload.dst_port;
+						p->remote_port = payload.src_port;
+					}
+					rist_recv_rtcp(p, seq, flow_id, &payload);
+					break;
+				case RIST_PAYLOAD_TYPE_DATA_RAW:
+					rtp_time = be32toh(proto_hdr->rtp.ts);
+					if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
+						source_time = timestampNTP_u64();
+					else
+						source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
+					seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
+					if (RIST_UNLIKELY(!p->receiver_mode))
+						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
+								"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
+					else {
+						rist_calculate_bitrate((recv_bufsize - gre_size - sizeof(*proto_hdr)), &p->bw);//use the unexpanded size to show real BW
+						rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, proto_hdr->rtp.payload_type);
+					}
+					break;
+				case RIST_PAYLOAD_TYPE_EAPOL:
+#if HAVE_MBEDTLS
+					if (p->eap_ctx == NULL) {
+						rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
+					}
+					else {
+						int eapret = 0;
+						if ((eapret = eap_process_eapol(p->eap_ctx,
+														(void *)(recv_buf + gre_size),
+														(recv_bufsize - gre_size))) < 0) {
+							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
+							if (eapret == 255)//permanent failure, we allow a few retries
+								failed_eap = true;
+						}
+						else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
+							rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+								"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
+							p->eap_authentication_state = 2;
+
+						}
+					}
+#else
+					if (peer->eap_ctx == NULL) {
+						rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but EAP support not available!\n");
+						failed_eap = true;
+					}
+#endif
+					if (failed_eap) {
+						p->eap_authentication_state = 1;
+						kill_peer(p);
+					}
+					// Never create new peers using EAP packets (exit loop here)
+					return;
+					break;
+				default:
+					rist_recv_rtcp(p, seq, flow_id, &payload);
+					break;
+			}
+			return;
+		}
+		if (p->listening) {
+			if (!inchild)
+				p = p->child;
+			else
+				p = p->sibling_next;
+		} else
+			p = p->next;
+	}
+
+	// Peer was not found, create a new one
+	if ((peer->listening || peer->multicast) && (payload.type == RIST_PAYLOAD_TYPE_RTCP || cctx->profile == RIST_PROFILE_SIMPLE)) {
+		/* No match, new peer creation when on listening mode */
+		p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
+		p->adv_peer_id = ++cctx->peer_counter;
+		// Copy settings and init/update global variables that depend on settings
+		p->parent = peer;
+		peer_copy_settings(peer, p);
+		if (cctx->profile == RIST_PROFILE_SIMPLE) {
+			if (peer->address_family == AF_INET) {
+				p->remote_port = htons( ((struct sockaddr_in *)addr)->sin_port);
+			} else {
+				p->remote_port = htons( ((struct sockaddr_in6 *)addr)->sin6_port);
+			}
+			p->local_port = peer->local_port;
+		}
+		else if (peer->receiver_ctx){
+			// TODO: what happens if the first packet is a keepalive?? are we caching the wrong port?
+			p->remote_port = payload.src_port;
+			p->local_port = payload.dst_port;
+		} else {
+			p->remote_port = peer->remote_port;
+			p->local_port = peer->local_port;
+		}
+		char peer_type[5];
+		char id_name[8];
+		if (peer->is_rtcp) {
+			strcpy(peer_type, "RTCP");
+			strcpy(id_name, "flow_id");
+		} else if (peer->is_data) {
+			strcpy(peer_type, "RTP");
+			strcpy(id_name, "ssrc");
+		}
+		if (peer->receiver_mode) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New %s peer connecting, %s %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+				&peer_type, &id_name, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
+			p->adv_flow_id = flow_id;
+		}
+		else {
+			if (flow_id) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting with old flow_id %"PRIu32", peer_id %"PRIu32", ports %u <- %u\n",
+						&peer_type, flow_id, p->adv_peer_id, p->local_port, p->remote_port);
+			} else {
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "New reverse %s peer connecting, peer_id %"PRIu32", ports %u <- %u\n",
+						&peer_type, p->adv_peer_id, p->local_port, p->remote_port);
+			}
+			p->peer_ssrc = p->adv_flow_id = p->sender_ctx->adv_flow_id;
+		}
+		// TODO: what if sender mode and flow_id != 0 and p->adv_flow_id != flow_id
+		p->address_family = family;
+		p->address_len = addrlen;
+		p->listening = 0;
+		p->is_rtcp = peer->is_rtcp;
+		p->is_data = peer->is_data;
+		p->peer_data = p;
+		if (peer->multicast)
+			p->peer_data = peer->peer_data;
+		memcpy(&p->u.address, addr, addrlen);
+		p->sd = peer->sd;
+		p->authenticated = false;
+		// Copy the event handler reference to prevent the creation of a new one (they are per socket)
+		p->event_recv = peer->event_recv;
+		char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
+		char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
+#if HAVE_MBEDTLS
+		eap_clone_ctx(peer->eap_ctx, p);
+		eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
+#endif
+		// Optional validation of connecting sender
+		if (cctx->auth.conn_cb) {
+
+			char parent_ip_string_buffer[INET6_ADDRSTRLEN];
+			char *parent_ip_string = get_ip_str(&p->parent->u.address, &parent_ip_string_buffer[0], INET6_ADDRSTRLEN);
+			if (!parent_ip_string){
+				parent_ip_string = "";
+			}
+
+			uint16_t parent_port = 0;
+			if (p->parent->u.storage.ss_family == AF_INET)
+				parent_port = htons(p->parent->u.inaddr.sin_port);
+			else
+				parent_port = htons(p->parent->u.inaddr6.sin6_port);
+
+			// Real source port vs virtual source port
+			if (cctx->profile == RIST_PROFILE_SIMPLE)
+				port = p->remote_port;
+			if (incoming_ip_string) {
+				if (cctx->auth.conn_cb(cctx->auth.arg,
+							incoming_ip_string,
+							port,
+							parent_ip_string,
+							parent_port,
+							p)) {
+					free(p);
+					return;
+				}
+			}
+		}
+
+		if (payload.type == RIST_PAYLOAD_TYPE_RTCP && p->is_rtcp) {
+			if (peer->receiver_mode)
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %d\n", p->adv_peer_id);
+			else {
+				// only profile > simple
+				sender_peer_append(peer->sender_ctx, p);
+				// authenticate sender now that we have an address
+				rist_peer_authenticate(p);
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling reverse keepalive for peer %d\n", p->adv_peer_id);
+			}
+			p->send_keepalive = true;
+		}
+		peer_append(p);
+		// Final states happens during settings parsing event on next ping packet
+	} else {
 		if (!p) {
-			rist_log_priv(cctx, RIST_LOG_ERROR, "\tNot enough memory creating peer!\n");
-			return NULL;
+			if (payload.type != RIST_PAYLOAD_TYPE_DATA_RAW) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tOrphan rist_peer_recv %x (%d)\n",
+							payload.type, peer->authenticated);
+				rist_print_inet_info("Orphan ", peer);
+			}
+		} else {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "\tRogue rist_peer_recv %x (%d)\n",
+						payload.type, p->authenticated);
+			rist_print_inet_info("Orphan ", p);
 		}
+	}
+}
 
-		if (url) {
-			p->url = strdup(url);
-		}
-
-		p->receiver_mode = (receiver_ctx != NULL);
-		p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
-		p->rtcp_keepalive_interval = RIST_PING_INTERVAL * RIST_CLOCK;
-		p->sender_ctx = sender_ctx;
-		p->receiver_ctx = receiver_ctx;
-		p->birthtime_local = timestampNTP_u64();
-
-		return p;
+int rist_oob_enqueue(struct rist_common_ctx *ctx, struct rist_peer *peer, const void *buf, size_t len)
+{
+	if (RIST_UNLIKELY(!ctx->oob_data_enabled)) {
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+				"Trying to send oob but oob was not enabled\n");
+		return -1;
+	}
+	else if ((ctx->oob_queue_write_index + 1) == ctx->oob_queue_read_index)
+	{
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+				"oob queue is full (%zu bytes), try again later\n", ctx->oob_queue_bytesize);
+		return -1;
 	}
 
-	static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
+	/* insert into oob fifo queue */
+	pthread_rwlock_wrlock(&ctx->oob_queue_lock);
+	ctx->oob_queue[ctx->oob_queue_write_index] = rist_new_buffer(ctx, buf, len, RIST_PAYLOAD_TYPE_DATA_OOB, 0, 0, 0, 0);
+	if (RIST_UNLIKELY(!ctx->oob_queue[ctx->oob_queue_write_index])) {
+		rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "\t Could not create oob packet buffer, OOM\n");
+		pthread_rwlock_unlock(&ctx->oob_queue_lock);
+		return -1;
+	}
+	ctx->oob_queue[ctx->oob_queue_write_index]->peer = peer;
+	ctx->oob_queue_write_index = (ctx->oob_queue_write_index + 1);
+	ctx->oob_queue_bytesize += len;
+	pthread_rwlock_unlock(&ctx->oob_queue_lock);
+
+	return 0;
+}
+
+static void rist_oob_dequeue(struct rist_common_ctx *ctx, int maxcount)
+{
+	int counter = 0;
+
+	while (1) {
+		// If we fall behind, only empty 100 every 5ms (master loop)
+		if (counter++ > maxcount) {
+			break;
+		}
+
+		if (ctx->oob_queue_read_index == ctx->oob_queue_write_index) {
+			//rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+			//	"\tWe are all up to date, index is %u/%u and bytes = %zu\n",
+			//	ctx->oob_queue_read_index, ctx->oob_queue_write_index, ctx->oob_queue_bytesize);
+			break;
+		}
+
+		struct rist_buffer *oob_buffer = ctx->oob_queue[ctx->oob_queue_read_index];
+		if (!oob_buffer->data) {
+			rist_log_priv(ctx, RIST_LOG_ERROR, "Null oob buffer, skipping!!!\n");
+			ctx->oob_queue_read_index++;
+			continue;
+		}
+
+		uint8_t *payload = oob_buffer->data;
+		rist_send_common_rtcp(oob_buffer->peer, RIST_PAYLOAD_TYPE_DATA_OOB, &payload[RIST_MAX_PAYLOAD_OFFSET],
+				oob_buffer->size, 0, 0, 0, 0);
+		ctx->oob_queue_bytesize -= oob_buffer->size;
+		ctx->oob_queue_read_index++;
+	}
+
+	return;
+}
+
+static void sender_send_nacks(struct rist_sender *ctx)
+{
+	// Send retries from the queue (if any)
+	uint32_t counter = 1;
+	int errors = 0;
+	size_t total_bytes = 0;
+
+	if (ctx->max_nacksperloop == 0)
+		return; // No peers yet
+
+	// Send nack retries. Stop when the retry queue is empty or when the data in the
+	// send fifo queue grows to 10 packets (we do not want to harm real-time data)
+	// We also stop on maxcounter (jitter control and max bandwidth protection)
+	size_t queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) &ctx->sender_queue_max;
+	uint64_t start_time = timestampNTP_u64();
+	while (queued_items < 10) {
+		ssize_t ret = rist_retry_dequeue(ctx);
+		if (ret == 0) {
+			// ret == 0 is valid (nothing to send)
+			break;
+		} else if (ret < 0) {
+			errors++;
+		} else {
+			total_bytes += ret;
+			counter++;
+		}
+		if (counter > ctx->max_nacksperloop) {
+			break;
+		}
+		if (((timestampNTP_u64() - start_time) / RIST_CLOCK) > 100)
+		{
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Nack processing loop took longer than 100ms. Something is wrong!\n");
+			// TODO: clear out the nack queue here?
+			break;
+		}
+		queued_items = (atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_acquire) - atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire)) & ctx->sender_queue_max;
+	}
+	if (ctx->common.debug && 2 * (counter - 1) > ctx->max_nacksperloop)
 	{
-		struct rist_flow *flow = (struct rist_flow *)arg;
-		struct rist_receiver *receiver_ctx = (void *)flow->receiver_id;
+		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
+				"Had to process multiple fifo nacks: c=%d, e=%d, b=%zu, s=%zu, m=%zu\n",
+				counter - 1, errors, total_bytes, rist_get_sender_retry_queue_size(ctx),
+				ctx->max_nacksperloop);
+	}
+
+}
+
+static void sender_send_data(struct rist_sender *ctx, int maxcount)
+{
+	int counter = 0;
+
+	while (1) {
+		// If we fall behind, only empty 100 every 5ms (master loop)
+		if (counter++ > maxcount) {
+			break;
+		}
+
+		size_t idx = ((size_t)atomic_load_explicit(&ctx->sender_queue_read_index, memory_order_acquire) + 1)& (ctx->sender_queue_max-1);
+
+		if (idx == (size_t)atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed)) {
+			//rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+			//    "\t[GOOD] We are all up to date, index is %d\n",
+			//    ctx->sender_queue_read_index);
+			break;
+		}
+
+		atomic_store_explicit(&ctx->sender_queue_read_index, idx, memory_order_release);
+		if (RIST_UNLIKELY(ctx->sender_queue[idx] == NULL)) {
+			// This should never happen!
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR,
+					"FIFO data block was null (read/write) (%zu/%zu)\n",
+					idx, atomic_load_explicit(&ctx->sender_queue_write_index, memory_order_relaxed));
+			continue;
+		} else {
+			struct rist_buffer *buffer =  ctx->sender_queue[idx];
+			// Send  fifo data (handshake and data payloads)
+			if (buffer->type == RIST_PAYLOAD_TYPE_RTCP) {
+				// TODO can we ever have a null or dead buffer->peer?
+				uint8_t *payload = buffer->data;
+				rist_send_common_rtcp(buffer->peer, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, buffer->src_port, buffer->dst_port, 0);
+				buffer->seq = ctx->common.seq;
+				buffer->seq_rtp = ctx->common.seq_rtp;
+			}
+			else {
+				rist_sender_send_data_balanced(ctx, buffer);
+				// For non-advanced mode seq to index mapping
+				ctx->seq_index[buffer->seq_rtp] = (uint32_t)idx;
+			}
+		}
+
+	}
+}
+
+static struct rist_peer *peer_initialize(const char *url, struct rist_sender *sender_ctx,
+		struct rist_receiver *receiver_ctx)
+{
+	struct rist_common_ctx *cctx;
+	if (receiver_ctx)
+		cctx = &receiver_ctx->common;
+	else
+		cctx = &sender_ctx->common;
+
+	struct rist_peer *p = calloc(1, sizeof(*p));
+	if (!p) {
+		rist_log_priv(cctx, RIST_LOG_ERROR, "\tNot enough memory creating peer!\n");
+		return NULL;
+	}
+
+	if (url) {
+		p->url = strdup(url);
+	}
+
+	p->receiver_mode = (receiver_ctx != NULL);
+	p->config.recovery_mode = RIST_RECOVERY_MODE_UNCONFIGURED;
+	p->rtcp_keepalive_interval = RIST_PING_INTERVAL * RIST_CLOCK;
+	p->sender_ctx = sender_ctx;
+	p->receiver_ctx = receiver_ctx;
+	p->birthtime_local = timestampNTP_u64();
+
+	return p;
+}
+
+static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
+{
+	struct rist_flow *flow = (struct rist_flow *)arg;
+	struct rist_receiver *receiver_ctx = (void *)flow->receiver_id;
 
 #ifndef _WIN32
-		int prio_max = sched_get_priority_max(SCHED_RR);
-		struct sched_param param = { 0 };
-		param.sched_priority = prio_max;
-		if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0)
-			rist_log_priv(&receiver_ctx->common, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
+	int prio_max = sched_get_priority_max(SCHED_RR);
+	struct sched_param param = { 0 };
+	param.sched_priority = prio_max;
+	if (pthread_setschedparam(pthread_self(), SCHED_RR, &param) != 0)
+		rist_log_priv(&receiver_ctx->common, RIST_LOG_WARN, "Failed to set data output thread to RR scheduler with prio of %i\n", prio_max);
 #else
-		SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
+	SetThreadPriority(GetCurrentThread(), THREAD_PRIORITY_TIME_CRITICAL);
 #endif
-		// Default max jitter is 5ms
-		int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
-		if (max_output_jitter_ms > 100)
-			max_output_jitter_ms = 100;
+	// Default max jitter is 5ms
+	int max_output_jitter_ms = flow->max_output_jitter / RIST_CLOCK;
+	if (max_output_jitter_ms > 100)
+		max_output_jitter_ms = 100;
 
-		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
+	rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
 
-		while (true) {
-			pthread_mutex_lock(&(flow->mutex));
-			int ret = pthread_cond_timedwait_ms(&flow->condition, &flow->mutex, max_output_jitter_ms);
-			if (ret && ret != ETIMEDOUT)
-				rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
-			if (atomic_load_explicit(&flow->shutdown,memory_order_acquire) > 0)
-				break;
-			if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
-				receiver_output(receiver_ctx, flow);
-			}
-			pthread_mutex_unlock(&(flow->mutex));
+	while (true) {
+		pthread_mutex_lock(&(flow->mutex));
+		int ret = pthread_cond_timedwait_ms(&flow->condition, &flow->mutex, max_output_jitter_ms);
+		if (ret && ret != ETIMEDOUT)
+			rist_log_priv(&receiver_ctx->common, RIST_LOG_ERROR, "Error %d in receiver data out loop\n", ret);
+		if (atomic_load_explicit(&flow->shutdown,memory_order_acquire) > 0)
+			break;
+		if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
+			receiver_output(receiver_ctx, flow);
 		}
-		rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Data output thread shutting down\n");
-		atomic_store_explicit(&flow->shutdown, 2, memory_order_release);
-		pthread_mutex_unlock(&flow->mutex);
-		return 0;
+		pthread_mutex_unlock(&(flow->mutex));
 	}
+	rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Data output thread shutting down\n");
+	atomic_store_explicit(&flow->shutdown, 2, memory_order_release);
+	pthread_mutex_unlock(&flow->mutex);
+	return 0;
+}
 
-	static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
-	{
-		pthread_mutex_lock(&ctx->common.peerlist_lock);
-		for (size_t j = 0; j < ctx->peer_lst_len; j++) {
-			struct rist_peer *peer = ctx->peer_lst[j];
-			if (peer->send_keepalive) {
-				if (now > peer->keepalive_next_time) {
-					peer->keepalive_next_time = now + peer->rtcp_keepalive_interval;
-					rist_peer_rtcp(NULL, peer);
-				}
+static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
+{
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
+	for (size_t j = 0; j < ctx->peer_lst_len; j++) {
+		struct rist_peer *peer = ctx->peer_lst[j];
+		if (peer->send_keepalive) {
+			if (now > peer->keepalive_next_time) {
+				peer->keepalive_next_time = now + peer->rtcp_keepalive_interval;
+				rist_peer_rtcp(NULL, peer);
 			}
+		}
 #if HAVE_MBEDTLS
-			if (!peer->listening || peer->parent)
-				eap_periodic(peer->eap_ctx);
+		if (!peer->listening || peer->parent)
+			eap_periodic(peer->eap_ctx);
 #endif
-		}
-
-		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 	}
 
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
+}
 
-	void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
+
+void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
+{
+	struct rist_peer *peer = cctx->PEERS;
+	while (peer)
 	{
-		struct rist_peer *peer = cctx->PEERS;
-		while (peer)
+		struct rist_peer *next = peer->next;
+		uint64_t last_rtcp_received = peer->last_rtcp_received;
+		if (cctx->profile == RIST_PROFILE_SIMPLE &&
+			!peer->is_rtcp && peer->peer_rtcp != NULL &&
+			peer->peer_rtcp->last_rtcp_received > last_rtcp_received)
+			last_rtcp_received = peer->peer_rtcp->last_rtcp_received;
+		if (!peer->dead && now > last_rtcp_received && last_rtcp_received > 0)
 		{
-			struct rist_peer *next = peer->next;
-			uint64_t last_rtcp_received = peer->last_rtcp_received;
-			if (cctx->profile == RIST_PROFILE_SIMPLE &&
-				!peer->is_rtcp && peer->peer_rtcp != NULL &&
-				peer->peer_rtcp->last_rtcp_received > last_rtcp_received)
-				last_rtcp_received = peer->peer_rtcp->last_rtcp_received;
-			if (!peer->dead && now > last_rtcp_received && last_rtcp_received > 0)
+			if ((now - last_rtcp_received) > peer->session_timeout)
 			{
-				if ((now - last_rtcp_received) > peer->session_timeout)
-				{
-					rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
-						(now - last_rtcp_received)/ RIST_CLOCK);
-					kill_peer(peer);
-				}
-			} else if (peer->dead && peer->parent)
-			{
-				if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
-				{
-					rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
-					rist_peer_remove(cctx, peer, NULL);
-				}
-			} else if (!peer->timed_out && peer->dead && peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK) {
-				peer->timed_out = 1;
-				if (cctx->connection_status_callback && peer->send_first_connection_event)
-					cctx->connection_status_callback( cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
-            }
-			peer = next;
-		}
-	}
-
-	PTHREAD_START_FUNC(sender_pthread_protocol, arg)
-	{
-		struct rist_sender *ctx = (struct rist_sender *) arg;
-		// loop behavior parameters
-		int max_dataperloop = 100;
-		int max_oobperloop = 100;
-
-		int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
-		uint64_t rist_stats_interval = ctx->common.stats_report_time; // 1 second
-
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting master sender loop at %d ms max jitter\n",
-				max_jitter_ms);
-
-		uint64_t now  = timestampNTP_u64();
-		ctx->stats_next_time = now;
-		ctx->checks_next_time = now;
-		uint64_t nacks_next_time = now;
-		while(!atomic_load_explicit(&ctx->common.shutdown, memory_order_acquire)) {
-			// Conditional 5ms sleep that is woken by data coming in
-			pthread_mutex_lock(&(ctx->mutex));
-			int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
-			if (RIST_UNLIKELY(!atomic_load_explicit(&ctx->common.startup_complete, memory_order_acquire))) {
-				pthread_mutex_unlock(&(ctx->mutex));
-				continue;
+				rist_log_priv2(cctx->logging_settings, RIST_LOG_WARN, "Listening peer %u timed out after %"PRIu64" ms\n", peer->adv_peer_id,
+					(now - last_rtcp_received)/ RIST_CLOCK);
+				kill_peer(peer);
 			}
+		} else if (peer->dead && peer->parent)
+		{
+			if ( peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK)
+			{
+				rist_log_priv2(cctx->logging_settings, RIST_LOG_INFO, "Removing timed-out peer %u\n", peer->adv_peer_id);
+				rist_peer_remove(cctx, peer, NULL);
+			}
+		} else if (!peer->timed_out && peer->dead && peer->dead_since < now && (now - peer->dead_since) > 5000 * RIST_CLOCK) {
+			peer->timed_out = 1;
+			if (cctx->connection_status_callback && peer->send_first_connection_event)
+				cctx->connection_status_callback( cctx->connection_status_callback_argument, peer, RIST_CONNECTION_TIMED_OUT);
+		}
+		peer = next;
+	}
+}
+
+PTHREAD_START_FUNC(sender_pthread_protocol, arg)
+{
+	struct rist_sender *ctx = (struct rist_sender *) arg;
+	// loop behavior parameters
+	int max_dataperloop = 100;
+	int max_oobperloop = 100;
+
+	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
+	uint64_t rist_stats_interval = ctx->common.stats_report_time; // 1 second
+
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting master sender loop at %d ms max jitter\n",
+			max_jitter_ms);
+
+	uint64_t now  = timestampNTP_u64();
+	ctx->stats_next_time = now;
+	ctx->checks_next_time = now;
+	uint64_t nacks_next_time = now;
+	while(!atomic_load_explicit(&ctx->common.shutdown, memory_order_acquire)) {
+		// Conditional 5ms sleep that is woken by data coming in
+		pthread_mutex_lock(&(ctx->mutex));
+		int ret = pthread_cond_timedwait_ms(&(ctx->condition), &(ctx->mutex), max_jitter_ms);
+		if (RIST_UNLIKELY(!atomic_load_explicit(&ctx->common.startup_complete, memory_order_acquire))) {
 			pthread_mutex_unlock(&(ctx->mutex));
-			if (ret && ret != ETIMEDOUT)
-				rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d in sender protocol loop, loop time was %d us\n", ret, (timestampNTP_u64() - now));
+			continue;
+		}
+		pthread_mutex_unlock(&(ctx->mutex));
+		if (ret && ret != ETIMEDOUT)
+			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Error %d in sender protocol loop, loop time was %d us\n", ret, (timestampNTP_u64() - now));
 
-			now  = timestampNTP_u64();
+		now  = timestampNTP_u64();
 
-			/* marks peer as dead, run every second */
-			if (now > ctx->checks_next_time)
-			{
-				ctx->checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
-				pthread_mutex_lock(&ctx->common.peerlist_lock);
-				rist_timeout_check(&ctx->common, now);
-				pthread_mutex_unlock(&ctx->common.peerlist_lock);
-			}
-
-			// stats timer
-			if (now > ctx->stats_next_time) {
-				ctx->stats_next_time += rist_stats_interval;
-
-				pthread_mutex_lock(&ctx->common.peerlist_lock);
-				for (size_t j = 0; j < ctx->peer_lst_len; j++) {
-					struct rist_peer *peer = ctx->peer_lst[j];
-					// TODO: print warning if the peer is dead?, i.e. no stats
-					if (!peer->dead) {
-						rist_sender_peer_statistics(peer);
-					}
-				}
-				pthread_mutex_unlock(&ctx->common.peerlist_lock);
-				// TODO: remove dead peers after stale flow time (both sender list and peer chain)
-				// sender_peer_delete(peer->sender_ctx, peer);
-			}
-
-			// socket polls (returns as fast as possible and processes the next 100 socket events)
+		/* marks peer as dead, run every second */
+		if (now > ctx->checks_next_time)
+		{
+			ctx->checks_next_time += (uint64_t)1000 * (uint64_t)RIST_CLOCK;
 			pthread_mutex_lock(&ctx->common.peerlist_lock);
-			evsocket_loop_single(ctx->common.evctx, 0, 100);
+			rist_timeout_check(&ctx->common, now);
 			pthread_mutex_unlock(&ctx->common.peerlist_lock);
+		}
 
-			// keepalive timer
-			sender_peer_events(ctx, now);
+		// stats timer
+		if (now > ctx->stats_next_time) {
+			ctx->stats_next_time += rist_stats_interval;
 
-
-			// Send data and process nacks
-			pthread_mutex_lock(&ctx->queue_lock);
-			if (ctx->sender_queue_bytesize > 0) {
-				pthread_mutex_lock(&ctx->common.peerlist_lock);
-				sender_send_data(ctx, max_dataperloop);
-				pthread_mutex_unlock(&ctx->common.peerlist_lock);
-				// Group nacks and send them all at rist_max_jitter intervals
-				if (now > nacks_next_time) {
-					sender_send_nacks(ctx);
-					nacks_next_time += ctx->common.rist_max_jitter;
+			pthread_mutex_lock(&ctx->common.peerlist_lock);
+			for (size_t j = 0; j < ctx->peer_lst_len; j++) {
+				struct rist_peer *peer = ctx->peer_lst[j];
+				// TODO: print warning if the peer is dead?, i.e. no stats
+				if (!peer->dead) {
+					rist_sender_peer_statistics(peer);
 				}
-				/* perform queue cleanup */
-				rist_clean_sender_enqueue(ctx);
 			}
-			pthread_mutex_unlock(&ctx->queue_lock);
-			// Send oob data
-			if (ctx->common.oob_queue_bytesize > 0)
-				rist_oob_dequeue(&ctx->common, max_oobperloop);
-
+			pthread_mutex_unlock(&ctx->common.peerlist_lock);
+			// TODO: remove dead peers after stale flow time (both sender list and peer chain)
+			// sender_peer_delete(peer->sender_ctx, peer);
 		}
 
-#ifdef _WIN32
-		WSACleanup();
-#endif
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Exiting master sender loop\n");
-		atomic_store_explicit(&ctx->common.shutdown, 2, memory_order_release);
+		// socket polls (returns as fast as possible and processes the next 100 socket events)
+		pthread_mutex_lock(&ctx->common.peerlist_lock);
+		evsocket_loop_single(ctx->common.evctx, 0, 100);
+		pthread_mutex_unlock(&ctx->common.peerlist_lock);
 
-		return 0;
+		// keepalive timer
+		sender_peer_events(ctx, now);
+
+
+		// Send data and process nacks
+		pthread_mutex_lock(&ctx->queue_lock);
+		if (ctx->sender_queue_bytesize > 0) {
+			pthread_mutex_lock(&ctx->common.peerlist_lock);
+			sender_send_data(ctx, max_dataperloop);
+			pthread_mutex_unlock(&ctx->common.peerlist_lock);
+			// Group nacks and send them all at rist_max_jitter intervals
+			if (now > nacks_next_time) {
+				sender_send_nacks(ctx);
+				nacks_next_time += ctx->common.rist_max_jitter;
+			}
+			/* perform queue cleanup */
+			rist_clean_sender_enqueue(ctx);
+		}
+		pthread_mutex_unlock(&ctx->queue_lock);
+		// Send oob data
+		if (ctx->common.oob_queue_bytesize > 0)
+			rist_oob_dequeue(&ctx->common, max_oobperloop);
+
 	}
 
-	int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
-	{
 #ifdef _WIN32
-		int ret;
-		WSADATA wsaData;
-		ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
-		if (ret < 0) {
-			rist_log_priv3(RIST_LOG_ERROR, "Failed to initialize WSA\n");
-			return -1;
-		}
+	WSACleanup();
 #endif
-		ctx->evctx = evsocket_create();
-		ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
-		if (profile > RIST_PROFILE_ADVANCED) {
-			rist_log_priv3( RIST_LOG_ERROR, "Profile not supported (%d), using main profile instead\n", profile);
-			profile = RIST_PROFILE_MAIN;
-		}
-		if (profile == RIST_PROFILE_SIMPLE)
-			rist_log_priv3( RIST_LOG_INFO, "Starting in Simple Profile Mode\n");
-		else if (profile == RIST_PROFILE_MAIN)
-			rist_log_priv3( RIST_LOG_INFO, "Starting in Main Profile Mode\n");
-		else if (profile == RIST_PROFILE_ADVANCED)
-			rist_log_priv3( RIST_LOG_INFO, "Starting in Advanced Profile Mode\n");
+	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Exiting master sender loop\n");
+	atomic_store_explicit(&ctx->common.shutdown, 2, memory_order_release);
 
-		ctx->profile = profile;
-		ctx->stats_report_time = 0;
+	return 0;
+}
 
-		if (pthread_mutex_init(&ctx->peerlist_lock, NULL) != 0) {
-			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->peerlist_lock\n");
-			return -1;
-		}
-		if (pthread_mutex_init(&ctx->rist_free_buffer_mutex, NULL) != 0) {
-			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->rist_free_buffer_mutex\n");
-			return -1;
-		}
-		if (pthread_mutex_init(&ctx->flows_lock, NULL) != 0) {
-			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->flows_lock\n");
-			return -1;
-		}
-		if (pthread_mutex_init(&ctx->stats_lock, NULL) != 0) {
-			rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->stats_lock\n");
-			return -1;
-		}
-		return 0;
+int init_common_ctx(struct rist_common_ctx *ctx, enum rist_profile profile)
+{
+#ifdef _WIN32
+	int ret;
+	WSADATA wsaData;
+	ret = WSAStartup(MAKEWORD(2, 2), &wsaData);
+	if (ret < 0) {
+		rist_log_priv3(RIST_LOG_ERROR, "Failed to initialize WSA\n");
+		return -1;
 	}
+#endif
+	ctx->evctx = evsocket_create();
+	ctx->rist_max_jitter = RIST_MAX_JITTER * RIST_CLOCK;
+	if (profile > RIST_PROFILE_ADVANCED) {
+		rist_log_priv3( RIST_LOG_ERROR, "Profile not supported (%d), using main profile instead\n", profile);
+		profile = RIST_PROFILE_MAIN;
+	}
+	if (profile == RIST_PROFILE_SIMPLE)
+		rist_log_priv3( RIST_LOG_INFO, "Starting in Simple Profile Mode\n");
+	else if (profile == RIST_PROFILE_MAIN)
+		rist_log_priv3( RIST_LOG_INFO, "Starting in Main Profile Mode\n");
+	else if (profile == RIST_PROFILE_ADVANCED)
+		rist_log_priv3( RIST_LOG_INFO, "Starting in Advanced Profile Mode\n");
+
+	ctx->profile = profile;
+	ctx->stats_report_time = 0;
+
+	if (pthread_mutex_init(&ctx->peerlist_lock, NULL) != 0) {
+		rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->peerlist_lock\n");
+		return -1;
+	}
+	if (pthread_mutex_init(&ctx->rist_free_buffer_mutex, NULL) != 0) {
+		rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->rist_free_buffer_mutex\n");
+		return -1;
+	}
+	if (pthread_mutex_init(&ctx->flows_lock, NULL) != 0) {
+		rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->flows_lock\n");
+		return -1;
+	}
+	if (pthread_mutex_init(&ctx->stats_lock, NULL) != 0) {
+		rist_log_priv3( RIST_LOG_ERROR, "Failed to init ctx->stats_lock\n");
+		return -1;
+	}
+	return 0;
+}
 
 static inline void peer_remove_child(struct rist_peer *peer) {
 	assert(peer->parent);
