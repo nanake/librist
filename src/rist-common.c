@@ -7,6 +7,7 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "proto/gre.h"
 #include "rist-private.h"
 #include "log-private.h"
 #include "crypto/psk.h"
@@ -14,6 +15,7 @@
 #include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
+#include <sys/types.h>
 #if HAVE_MBEDTLS
 #include "eap.h"
 #endif
@@ -2304,7 +2306,6 @@ static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revent
 	}
 }
 
-
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again)
 {
 	RIST_MARK_UNUSED(evctx);
@@ -2319,32 +2320,28 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct rist_common_ctx *cctx = get_cctx(peer);
 
 	socklen_t addrlen = peer->address_len;
-	ssize_t recv_bufsize = -1;
+	size_t recv_bufsize = 0;
 	uint16_t family = peer->address_family;
 	struct sockaddr_storage ss = {0};
 	struct sockaddr *addr = (struct sockaddr *)&ss;
 	struct rist_peer *p = peer;
 	uint8_t *recv_buf = cctx->buf.recv;
-	size_t buffer_offset = 0;
 	uint16_t port = 0;
 
-	if (cctx->profile == RIST_PROFILE_SIMPLE)
-		buffer_offset = RIST_GRE_PROTOCOL_REDUCED_SIZE;
-
-	recv_bufsize = recvfrom(peer->sd, (char*)recv_buf + buffer_offset, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
+	ssize_t ret = recvfrom(peer->sd, (char*)recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
 	if (ss.ss_family == AF_INET)
 		port = htons(((struct sockaddr_in *)addr)->sin_port);
 	else
 		port = htons(((struct sockaddr_in6 *)addr)->sin6_port);
 
 #ifndef _WIN32
-	if (recv_bufsize <= 0) {
+	if (ret <= 0) {
 		*again = false;
 		int errorcode = errno;
 		if (errno == EAGAIN || errno == EWOULDBLOCK)
 				return;
 #else
-	if (recv_bufsize == SOCKET_ERROR) {
+	if (ret == SOCKET_ERROR) {
 		*again = false;
 		int errorcode = WSAGetLastError();
 		if (errorcode == WSAEWOULDBLOCK)
@@ -2355,53 +2352,55 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		return;
 	}
 
+	recv_bufsize = ret;
+
 	struct rist_key *k = &peer->key_rx;
-	struct rist_gre *gre = NULL;
 	uint32_t seq = 0;
 	uint32_t time_extension = 0;
-	struct rist_protocol_hdr *proto_hdr = NULL;
 	uint8_t retry = 0;
+	size_t payload_offset = 0;
 	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
-	size_t gre_size = 0;
 	uint32_t flow_id = 0;
+	uint16_t gre_proto = 0;
 
 	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
+		struct rist_gre_hdr *gre = NULL;
 		// Make sure we have enough bytes
-		if (recv_bufsize < (int)sizeof(struct rist_gre)) {
+		if (recv_bufsize < (int)sizeof(*gre)) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
 			return;
 		}
 
-
 		gre = (void *) recv_buf;
-		if (gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_REDUCED) && gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_FULL) &&
-			gre->prot_type != htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL)) {
-
-			if (htobe16(gre->prot_type) == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)
-			{
-				struct rist_gre_keepalive *gre_keepalive = (void *) recv_buf;
-				(void)gre_keepalive->capabilities1;
-				payload.type = RIST_PAYLOAD_TYPE_UNKNOWN;
-				// TODO: parse the capabilities and do something with it?
-			}
-			else
-			{
-				if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Protocol %d not supported (wrong profile?)\n", gre->prot_type);
-					peer->log_repeat_timer = now;
-				}
-				return;
-			}
-			goto protocol_bypass;
-		}
-
+		payload_offset += sizeof(*gre);
+		gre_proto = be16toh(gre->prot_type);
 		uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
 		uint8_t rist_gre_version = (gre->flags2 >> 3) & 0x7;
 
-		if (has_seq && has_key && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
+		if (recv_bufsize < (sizeof(*gre) + has_checksum*4 + has_key *4 + has_seq *4)) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
+
+		if (has_checksum) {
+			payload_offset += 4;
+		}
+
+		uint32_t nonce = 0;
+		if (has_key) {
+			memcpy(&nonce, &recv_buf[payload_offset], sizeof(nonce));//We consume this in network byte order!
+			payload_offset += 4;
+		}
+
+		if (has_seq) {
+			seq =  recv_buf[payload_offset] << 24 | recv_buf[payload_offset+ 1] << 16 | recv_buf[payload_offset+ 2] << 8 | recv_buf[payload_offset+ 3];
+			payload_offset += 4;
+		}
+
+		if (has_seq && has_key && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 			// Key bit is set, that means the other side want to send
 			// encrypted data.
 			//
@@ -2413,7 +2412,6 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 				}
 				return;
 			}
-
 
 			while (p) {
 				if (equal_address(family, addr, p))
@@ -2435,148 +2433,139 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			}
 			p = peer;
 
-			// GRE
-			uint32_t nonce = 0;
-			struct rist_gre_key_seq *gre_key_seq = (void *) recv_buf;
-			gre_size = sizeof(*gre_key_seq);
-			if (has_checksum) {
-				seq = be32toh(gre_key_seq->seq);
-				nonce = gre_key_seq->nonce;
-			} else {
-				// shifted by 4 missing checksum bytes (non-librist senders)
-				seq = be32toh(gre_key_seq->nonce);
-				nonce = gre_key_seq->checksum_reserved1;
-				gre_size -= 4;
-			}
-			_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,(unsigned char *)(recv_buf + gre_size),  (unsigned char *)(recv_buf + gre_size), (recv_bufsize - gre_size));
+			_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
 			if (k->bad_decryption)
 				return;
-		} else if (has_seq) {
-			// Key bit is not set, that means the other side does not want to send
-			//  encrypted data
-			//
-			// make sure we do not have a key
-			// (ie also interested in unencrypted communication)
-			if (k->key_size && be16toh(gre->prot_type) != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
-				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-							"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
-					p->log_repeat_timer = now;
-				}
-				return;
+		} else if (k->key_size && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL && (!has_seq || !has_key)) {
+			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+						"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
+				p->log_repeat_timer = now;
 			}
-
-			struct rist_gre_seq *gre_seq = (void *) recv_buf;
-			gre_size = sizeof(*gre_seq);
-			if (has_checksum) {
-				seq = be32toh(gre_seq->seq);
-			} else {
-				// shifted by 4 missing checksum bytes (non-librist senders)
-				seq = be32toh(gre_seq->checksum_reserved1);
-				gre_size -= 4;
-			}
-
-		} else {
-			// No sequence and no key (checksum is optional)
-			gre_size = sizeof(*gre) - !has_checksum * 4;
-			seq = 0;
+			return;
 		}
-		if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_FULL))
+
+		if (gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL)
 		{
 			payload.type = RIST_PAYLOAD_TYPE_DATA_OOB;
 			goto protocol_bypass;
 		}
-		if (gre->prot_type == htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL))
+		if (gre_proto == RIST_GRE_PROTOCOL_TYPE_EAPOL)
 		{
 			payload.type = RIST_PAYLOAD_TYPE_EAPOL;
 			goto protocol_bypass;
 		}
-		// Make sure we have enough bytes
-		if (recv_bufsize < (int)(sizeof(struct rist_protocol_hdr)+gre_size)) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
-			return;
-		}
-		/* Map the first subheader and rtp payload area to our structure */
-		proto_hdr = (struct rist_protocol_hdr *)(recv_buf + gre_size);
-		payload.src_port = be16toh(proto_hdr->src_port);
-		payload.dst_port = be16toh(proto_hdr->dst_port);
-	}
-	else
-	{
-		// Simple profile support (not too elegant, but simple profile should not be used anymore)
-		seq = 0;
-		gre_size = 0;
-		recv_bufsize += buffer_offset; // pretend the REDUCED_HEADER was read (needed for payload_len calculation below)
-		// Make sure we have enough bytes
-		if (recv_bufsize < (int)sizeof(struct rist_protocol_hdr)) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
-			return;
-		}
-		/* Map the first subheader and rtp payload area to our structure */
-		proto_hdr = (struct rist_protocol_hdr *)recv_buf;
-	}
 
-	/* Double check for a valid rtp header */
-	if ((proto_hdr->rtp.flags & 0xc0) != 0x80)
-	{
-		if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
-					proto_hdr->rtp.flags);
-					p->log_repeat_timer = now;
-		}
+		if (gre_proto == RIST_GRE_PROTOCOL_TYPE_VSF) {
+			if (recv_bufsize < payload_offset + 4) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			}
 
-		if (k && k->key_size > 0) {
-			if (k->bad_count++ > 5) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
-				k->bad_decryption = true;
+			uint16_t vsf_proto = 0;
+			uint16_t vsf_subtype = 0;
+			vsf_proto = recv_buf[payload_offset] << 8 | recv_buf[payload_offset +1];
+			vsf_subtype = recv_buf[payload_offset + 2] << 8 | recv_buf[payload_offset +3];
+
+			payload_offset += 4;
+
+			if (vsf_proto != 0) {//0 = RIST, rest: reserved
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown VSF Proto");
+				return;
+			}
+
+			if (vsf_subtype == 0) {
+				gre_proto = RIST_GRE_PROTOCOL_TYPE_REDUCED;
+			} else if (vsf_subtype >= 0x8000){//Control messages
+				if (vsf_subtype == 0x8000) {
+					gre_proto = RIST_GRE_PROTOCOL_TYPE_KEEPALIVE;
+				} else if (vsf_subtype == 0x8001) {
+					//nonce announcements, we don't care
+					return;
+				} else {
+					rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST control packet");
+					return;
+				}
+			} else {
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST packet");
+				return;
 			}
 		}
-		return;
+
+		if (gre_proto != RIST_GRE_PROTOCOL_TYPE_REDUCED)
+			return;
+
+		if (recv_bufsize < payload_offset + 4) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
+			return;
+		}
+
+		/* Map the first subheader and rtp payload area to our structure */
+		payload.src_port = recv_buf[payload_offset] << 8 | recv_buf[payload_offset +1];
+		payload.dst_port = recv_buf[payload_offset +2] << 8 | recv_buf[payload_offset +3];
+		payload_offset += 4;
 	}
+
+	struct rist_rtp_hdr *rtp = (struct rist_rtp_hdr *)&recv_buf[payload_offset];
 
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
-
-	// Finish defining the payload (we assume reduced header)
-	if(proto_hdr->rtp.payload_type < 200) {
-		flow_id = be32toh(proto_hdr->rtp.ssrc);
-		// If this is a retry, extract the information and restore correct flow_id
-		if (flow_id & 1UL)
+	if (cctx->profile == RIST_PROFILE_SIMPLE || gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED) {
+		/* Double check for a valid rtp header */
+		if ((rtp->flags & 0xc0) != 0x80)
 		{
-			flow_id ^= 1UL;
-			retry = 1;
-		}
-		uint8_t *data_payload = (recv_buf + gre_size + sizeof(*proto_hdr));
-		payload.size = recv_bufsize - gre_size - sizeof(*proto_hdr);
-		if (CHECK_BIT(proto_hdr->rtp.flags, 4)) {
-			//RTP extension header
-			struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(recv_buf + gre_size + sizeof(*proto_hdr));
-			if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
-			{
-				payload.size -= 8;
-				data_payload += sizeof(*hdr_ext);
-				if (CHECK_BIT(hdr_ext->flags, 7))
-					expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
+						rtp->flags);
+						p->log_repeat_timer = now;
 			}
-		}
-		payload.data = (void *)data_payload;
-		payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
-	} else {
-		// remap the rtp payload to the correct rtcp header
-		struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)(&proto_hdr->rtp);
-		flow_id = be32toh(rtcp->ssrc);
-		payload.size = recv_bufsize - gre_size - RIST_GRE_PROTOCOL_REDUCED_SIZE;
-		payload.data = (void *)(recv_buf + gre_size + RIST_GRE_PROTOCOL_REDUCED_SIZE);
-		// Null this pointer to prevent code use below
-		// as only the first 8 bytes have valid data for RTCP packets
-		proto_hdr = NULL;
-		payload.type = RIST_PAYLOAD_TYPE_RTCP;
-	}
 
-	//rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
-	//			"HTF gre_seq %"PRIu32" "
-	//			"flow_id %"PRIu32", peer_id %"PRIu32", gre_size %zu, ptype %u\n",
-	//			seq, flow_id, peer_id, gre_size, payload_type);
+			if (k && k->key_size > 0) {
+				if (k->bad_count++ > 5) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
+					k->bad_decryption = true;
+				}
+			}
+			return;
+		}
+
+		// Finish defining the payload (we assume reduced header)
+		if(rtp->payload_type < 200) {
+			flow_id = be32toh(rtp->ssrc);
+			// If this is a retry, extract the information and restore correct flow_id
+			if (flow_id & 1UL)
+			{
+				flow_id ^= 1UL;
+				retry = 1;
+			}
+            payload_offset += sizeof(*rtp);
+            uint8_t *data_payload = &recv_buf[payload_offset];
+			payload.size = recv_bufsize - (payload_offset);
+			payload.data = (void *)data_payload;
+
+			if (CHECK_BIT(rtp->flags, 4)) {
+				//RTP extension header
+				struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(&recv_buf[payload_offset]);
+				if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
+				{
+					payload.size -= sizeof(*hdr_ext);
+					data_payload += sizeof(*hdr_ext);
+					if (CHECK_BIT(hdr_ext->flags, 7))
+						expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+				}
+				payload.data = (void *)data_payload;
+			}
+			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
+		} else {
+			// remap the rtp payload to the correct rtcp header
+			struct rist_rtcp_hdr *rtcp = (struct rist_rtcp_hdr *)rtp;
+            //payload_offset += sizeof(*rtcp);
+            uint8_t *data_payload = &recv_buf[payload_offset];
+			payload.size = recv_bufsize - (payload_offset);
+			payload.data = (void *)data_payload;
+			flow_id = be32toh(rtcp->ssrc);
+			payload.type = RIST_PAYLOAD_TYPE_RTCP;
+		}
+	}
 
 protocol_bypass:
 	// We need this protocol bypass to manage keepalives of any kind,
@@ -2629,8 +2618,8 @@ protocol_bypass:
 					// Do nothing ...TODO: check for port changes?
 					break;
 				case RIST_PAYLOAD_TYPE_DATA_OOB:
-					payload.size = recv_bufsize - gre_size;
-					payload.data = (void *)(recv_buf + gre_size);
+					payload.size = recv_bufsize - payload_offset;
+					payload.data = (void *)(recv_buf + payload_offset);
 					rist_recv_oob_data(p, &payload);
 					break;
 				case RIST_PAYLOAD_TYPE_RTCP:
@@ -2644,18 +2633,18 @@ protocol_bypass:
 					rist_recv_rtcp(p, seq, flow_id, &payload);
 					break;
 				case RIST_PAYLOAD_TYPE_DATA_RAW:
-					rtp_time = be32toh(proto_hdr->rtp.ts);
+					rtp_time = be32toh(rtp->ts);
 					if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
 						source_time = timestampNTP_u64();
 					else
-						source_time = convertRTPtoNTP(proto_hdr->rtp.payload_type, time_extension, rtp_time);
-					seq = (uint32_t)be16toh(proto_hdr->rtp.seq);
+						source_time = convertRTPtoNTP(rtp->payload_type, time_extension, rtp_time);
+					seq = (uint32_t)be16toh(rtp->seq);
 					if (RIST_UNLIKELY(!p->receiver_mode))
 						rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 								"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 					else {
-						rist_calculate_bitrate((recv_bufsize - gre_size - sizeof(*proto_hdr)), &p->bw);//use the unexpanded size to show real BW
-						rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, proto_hdr->rtp.payload_type);
+						rist_calculate_bitrate((recv_bufsize - payload_offset), &p->bw);//use the unexpanded size to show real BW
+						rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, rtp->payload_type);
 					}
 					break;
 				case RIST_PAYLOAD_TYPE_EAPOL:
@@ -2666,8 +2655,8 @@ protocol_bypass:
 					else {
 						int eapret = 0;
 						if ((eapret = eap_process_eapol(p->eap_ctx,
-														(void *)(recv_buf + gre_size),
-														(recv_bufsize - gre_size))) < 0) {
+														(void *)(recv_buf + payload_offset),
+														(recv_bufsize - payload_offset))) < 0) {
 							rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
 							if (eapret == 255)//permanent failure, we allow a few retries
 								failed_eap = true;
