@@ -137,8 +137,8 @@ static void _librist_crypto_aes_key(struct rist_key *key)
 		nettle_aes128_set_encrypt_key(&key->nettle_ctx.u.ctx128, aes_key);
     }
 #elif defined(LINUX_CRYPTO)
-        if (key->linux_crypto_ctx) linux_crypto_set_key(
-            aes_key, key->key_size / 8, key->linux_crypto_ctx);
+    if (key->linux_crypto_ctx)
+		linux_crypto_set_key(aes_key, key->key_size / 8, key->linux_crypto_ctx);
     else
         aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
 #else
@@ -147,18 +147,10 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     key->used_times = 0;
 }
 
-static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version,const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+static void _librist_crypto_psk_aes_ctr(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
-    /* Prepare AES iv */
-    uint8_t iv[AES_BLOCK_SIZE];
-    // The byte array needs to be zeroes and then the seq in network byte order
-	uint8_t copy_offset = gre_version == 1? 0 : 12;
-    memset(iv, 0, 16);
-    memcpy(iv + copy_offset, &seq_nbe, sizeof(seq_nbe));
 #if HAVE_MBEDTLS
-        size_t aes_offset = 0;
-        unsigned char buf[16];
-        mbedtls_aes_crypt_ctr(&key->mbedtls_aes_ctx, payload_len, &aes_offset, iv, buf, inbuf, outbuf);
+	mbedtls_aes_crypt_ctr(&key->mbedtls_aes_ctx, payload_len, &key->aes_offset, key->iv, key->strean_block, inbuf, outbuf);
 #elif HAVE_NETTLE
 	nettle_cipher_func *f;
 	switch(key->key_size) {
@@ -172,22 +164,28 @@ static void _librist_crypto_psk_aes_ctr(struct rist_key *key, uint32_t seq_nbe, 
 		RIST_FALLTHROUGH;
 	default:
 		f = (nettle_cipher_func *)nettle_aes128_encrypt;
-        }
-	nettle_ctr_crypt(&key->nettle_ctx.u, f, AES_BLOCK_SIZE, iv,payload_len, outbuf, inbuf);
+	}
+	nettle_ctr_crypt(&key->nettle_ctx.u, f, AES_BLOCK_SIZE, key->iv,payload_len, outbuf, inbuf);
 #elif defined(LINUX_CRYPTO)
-        if (key->linux_crypto_ctx)
-            linux_crypto_decrypt(inbuf, outbuf, payload_len, iv, key->linux_crypto_ctx);
-        else
-            aes_decrypt_ctr(inbuf, payload_len, outbuf,
-                    key->aes_key_sched, key->key_size, iv);
+	if (key->linux_crypto_ctx)
+		linux_crypto_decrypt(inbuf, outbuf, payload_len, key->iv, key->linux_crypto_ctx);
+	else
+		aes_decrypt_ctr(inbuf, payload_len, outbuf,	key->aes_key_sched, key->key_size, key->iv);
 #else
-        aes_decrypt_ctr(inbuf, payload_len, outbuf,
-                key->aes_key_sched, key->key_size, iv);
+	aes_decrypt_ctr(inbuf, payload_len, outbuf, key->aes_key_sched, key->key_size, key->iv);
 #endif
     key->used_times++;
 }
 
-void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version,const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+static void _librist_crypto_psk_prepare_iv(struct rist_key *key, uint8_t gre_version, uint32_t seq_nbe) {
+    /* Prepare AES iv */
+    // The byte array needs to be zeroes and then the seq in network byte order
+    uint8_t copy_offset = gre_version >= 1 ? 0 : 12;
+    memset(key->iv, 0, 16);
+    memcpy(key->iv + copy_offset, &seq_nbe, sizeof(seq_nbe));
+}
+
+void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
     if (!nonce)
         return;
@@ -198,10 +196,15 @@ void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t 
         key->bad_decryption = false;
         key->bad_count = 0;
     }
+
     if (key->used_times > RIST_AES_KEY_REUSE_TIMES)
         return;
 
-    _librist_crypto_psk_aes_ctr(key, seq_nbe, gre_version, inbuf, outbuf, payload_len);
+    _librist_crypto_psk_prepare_iv(key, gre_version, seq_nbe);
+#if HAVE_MBEDTLS
+    key->aes_offset = 0;
+#endif
+    _librist_crypto_psk_aes_ctr(key, inbuf, outbuf, payload_len);
     return;
 }
 
@@ -213,8 +216,11 @@ void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t
         } while (!key->gre_nonce);
         _librist_crypto_aes_key(key);
     }
-
-    _librist_crypto_psk_aes_ctr(key, seq_nbe, gre_version, inbuf, outbuf, payload_len);
+    _librist_crypto_psk_prepare_iv(key, gre_version, seq_nbe);
+#if HAVE_MBEDTLS
+    key->aes_offset = 0;
+#endif
+    _librist_crypto_psk_aes_ctr(key, inbuf, outbuf, payload_len);
     return;
 }
 
@@ -228,4 +234,7 @@ int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, 
 	} while (!key->gre_nonce);
 	_librist_crypto_aes_key(key);
 	return 0;
+}
+void _librist_crypto_psk_encrypt_continue(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len) {
+	_librist_crypto_psk_aes_ctr(key, inbuf, outbuf, payload_len);
 }
