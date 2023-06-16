@@ -15,6 +15,7 @@
 #include "rist-private.h"
 #include "udp-private.h"
 #include "log-private.h"
+#include "proto/rist_time.h"
 
 #include <stddef.h>
 #include <stdio.h>

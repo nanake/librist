@@ -10,6 +10,7 @@
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
+#include "proto/rist_time.h"
 #include <string.h>
 #include "cjson/cJSON.h"
 

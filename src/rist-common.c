@@ -15,6 +15,7 @@
 #include "udpsocket.h"
 #include "endian-shim.h"
 #include "time-shim.h"
+#include "proto/rist_time.h"
 #include <sys/types.h>
 #if HAVE_SRP_SUPPORT
 #include "eap.h"

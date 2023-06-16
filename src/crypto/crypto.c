@@ -6,6 +6,7 @@
  */
 
 #include "crypto-private.h"
+#include "proto/rist_time.h"
 #include "udp-private.h"
 #include "sha256.h"
 #include <string.h>

@@ -42,12 +42,8 @@
 #define RIST_DATAOUT_QUEUE_BUFFERS (1024)
 // This will restrict the use of the library to the configured maximum packet size
 #define RIST_MAX_PACKET_SIZE (10000)
-
 #define RIST_RTT_MIN (3)
-// this value is UINT32_MAX 4294967.296
-#define RIST_CLOCK (4294967LL)
-#define ONE_SECOND (1000 * RIST_CLOCK)
-#define RIST_LOG_QUIESCE_TIMER  ONE_SECOND
+
 /* nack requests are sent every time a data packet is received. */
 /* this timer will be triggered to ensure we output nacks even when there is no data coming in */
 #define RIST_MAX_JITTER (5) /* In milliseconds */

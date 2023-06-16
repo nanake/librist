@@ -12,6 +12,7 @@
 #include "udp-private.h"
 #include "vcs_version.h"
 #include "rist-thread.h"
+#include "proto/rist_time.h"
 #include <librist/version.h>
 #include "crypto/crypto-private.h"
 #include <assert.h>
@@ -1187,14 +1188,14 @@ int rist_set_opt(struct rist_ctx *ctx, enum rist_opt opt, void* optval1, void* o
 		cctx = &ctx->sender_ctx->common;
 	else
 		return -1;
-	
+
 	switch(opt) {
 	case RIST_OPT_THREAD_CALLBACK:
 		;
 		rist_thread_callback_t *thread_callback  = optval1;
 		if (thread_callback == NULL || thread_callback->thread_callback == NULL || optval3 != NULL)
 			return -1;
-		if (atomic_load_explicit(&cctx->startup_complete, memory_order_acquire)) 
+		if (atomic_load_explicit(&cctx->startup_complete, memory_order_acquire))
 			return -1;
 		cctx->thread_callback = thread_callback->thread_callback;
 		cctx->thread_callback_arg = optval2;

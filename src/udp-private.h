@@ -30,9 +30,6 @@
 // Maximum offset before the payload that the code can use to put in headers
 #define RIST_MAX_PAYLOAD_OFFSET (sizeof(struct rist_gre_key_seq) + sizeof(struct rist_protocol_hdr))
 
-/* Time conversion */
-#define SEVENTY_YEARS_OFFSET (2208988800ULL)
-
 /* shared functions in udp.c */
 RIST_PRIV void rist_send_nacks(struct rist_flow *f, struct rist_peer *peer);
 RIST_PRIV int rist_receiver_send_nacks(struct rist_peer *peer, uint32_t seq_array[], size_t array_len);
@@ -50,10 +47,5 @@ RIST_PRIV int rist_set_url(struct rist_peer *peer);
 RIST_PRIV void rist_create_socket(struct rist_peer *peer);
 RIST_PRIV size_t rist_get_sender_retry_queue_size(struct rist_sender *ctx);
 
-RIST_PRIV uint64_t timestampNTP_u64(void);
-RIST_PRIV uint64_t timestampNTP_RTC_u64(void);
-RIST_PRIV uint32_t timestampRTP_u32(int advanced, uint64_t i_ntp);
-RIST_PRIV uint64_t convertRTPtoNTP(uint8_t ptype, uint32_t time_extension, uint32_t i_rtp);
-RIST_PRIV uint64_t calculate_rtt_delay(uint64_t request, uint64_t response, uint32_t delay);
 
 #endif

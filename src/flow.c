@@ -9,6 +9,7 @@
 #include "rist-private.h"
 #include "log-private.h"
 #include "udp-private.h"
+#include "proto/rist_time.h"
 #include <assert.h>
 
 void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt)
@@ -309,7 +310,7 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 	if (f->recovery_buffer_ticks > f->flow_timeout)
 		f->flow_timeout = f->recovery_buffer_ticks;
 	uint64_t stats_report_time = get_cctx(p)->stats_report_time;
-	if (stats_report_time != 0 && stats_report_time != f->stats_report_time) 
+	if (stats_report_time != 0 && stats_report_time != f->stats_report_time)
 		f->stats_report_time = stats_report_time;
 
 	// Set/update max missing counter
