@@ -127,4 +127,11 @@ RIST_PACKED_STRUCT(rist_vsf_proto,{
 	uint16_t subtype;
 })
 
+RIST_PACKED_STRUCT(rist_reduced,{
+	uint16_t src_port;
+	uint16_t dst_port;
+})
+
+#define MAX_GRE_SIZE (sizeof(struct rist_gre_key_seq_real) + sizeof(struct rist_vsf_proto) + sizeof(struct rist_reduced))
+
 #endif /* RIST_PROTO_GRE_H */

@@ -7,6 +7,8 @@
  */
 
 #include "logging.h"
+#include "proto/gre.h"
+#include "proto/protocol_gre.h"
 #include "udp-private.h"
 #include "rist-private.h"
 #include "log-private.h"
@@ -75,56 +77,22 @@ void rist_clean_sender_enqueue(struct rist_sender *ctx)
 size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload_type, uint8_t *payload, size_t payload_len, uint64_t source_time, uint16_t src_port, uint16_t dst_port, bool retry)
 {
 	struct rist_common_ctx *ctx = get_cctx(p);
-	struct rist_key *k = &p->key_tx;
 	uint8_t *data;
-	size_t len, gre_len;
+	size_t len;
 	size_t hdr_len = 0;
 	ssize_t ret = 0;
-	uint32_t seq = p->seq++;
-	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
-	   so we create a local pointer that points to the payload pointer, if we would either encrypt or compress we instead
-	   malloc and mempcy, to ensure our source stays clean. We only do this with RAW data as these buffers are the only
-	   assumed to be reused by retransmits */
+
 	uint8_t *_payload = NULL;
-
-	bool modifyingbuffer = (ctx->profile > RIST_PROFILE_SIMPLE
-							&& (payload_type == RIST_PAYLOAD_TYPE_DATA_RAW || payload_type == RIST_PAYLOAD_TYPE_DATA_RAW_RTP_EXT)
-							&& (k->key_size || p->compression));
-
-	assert(payload != NULL);
-
-	if (modifyingbuffer) {
-		_payload = malloc(payload_len + RIST_MAX_PAYLOAD_OFFSET);
-		_payload  = _payload + RIST_MAX_PAYLOAD_OFFSET;
-		memcpy(_payload, payload, payload_len);
-	} else {
-		_payload = payload;
-	}
-
-	//if (p->receiver_mode)
-	//	rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Sending seq %"PRIu32" and rtp_seq %"PRIu16" payload is %d\n",
-	//		seq, seq_rtp, payload_type);
-	//else
-	//	rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Sending seq %"PRIu32" and idx is %zu/%zu/%zu (read/write/delete) and payload is %d\n",
-	//		seq, p->sender_ctx->sender_queue_read_index,
-	//		p->sender_ctx->sender_queue_write_index,
-	//		p->sender_ctx->sender_queue_delete_index,
-	//		payload_type);
+	_payload = payload;
 
 	// TODO: write directly on the payload to make it faster
 	uint8_t header_buf[RIST_MAX_HEADER_SIZE] = {0};
-	if (k->key_size) {
-		gre_len = sizeof(struct rist_gre_key_seq_real);
-	} else {
-		gre_len = sizeof(struct rist_gre_hdr);
-	}
-
 	uint16_t proto_type;
 	if (RIST_UNLIKELY(payload_type == RIST_PAYLOAD_TYPE_DATA_OOB)) {
 		proto_type = RIST_GRE_PROTOCOL_TYPE_FULL;
 	} else {
 		proto_type = RIST_GRE_PROTOCOL_TYPE_REDUCED;
-		struct rist_protocol_hdr *hdr = (void *) (header_buf + gre_len);
+		struct rist_protocol_hdr *hdr = (void *) (header_buf);
 		hdr->src_port = htobe16(src_port);
 		hdr->dst_port = htobe16(dst_port);
 		if (payload_type == RIST_PAYLOAD_TYPE_RTCP || payload_type == RIST_PAYLOAD_TYPE_RTCP_NACK)
@@ -144,7 +112,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 			{
 				// This is a retransmission
 				//rist_log_priv(&ctx->common, RIST_LOG_ERROR, "\tResending: %"PRIu32"/%"PRIu16"/%"PRIu32"\n", seq, seq_rtp, ctx->seq);
-				/* Mark SSID for retransmission (change the last bit of the ssrc to 1) */
+				/* Mark SSRC for retransmission (change the last bit of the ssrc to 1) */
 				//hdr->rtp.ssrc |= (1 << 31);
 				hdr->rtp.ssrc = htobe32(p->adv_flow_id | 0x01);
 			}
@@ -155,35 +123,6 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 		memcpy(_payload - hdr_len, hdr, hdr_len);
 	}
 
-	if (ctx->profile > RIST_PROFILE_SIMPLE) {
-		/* Encrypt everything except GRE */
-		if (k->key_size) {
-			// Prepare GRE header
-			struct rist_gre_key_seq_real *gre_key_seq = (void *) header_buf;
-			gre_key_seq->flags2 |= (p->rist_gre_version &0x7) << 3;
-			if (p->rist_gre_version && k->key_size == 256)
-			{
-				gre_key_seq->flags2 |= (1 & 1UL) << 6;
-			}
-			SET_BIT(gre_key_seq->flags1, 5); // set key flag
-			SET_BIT(gre_key_seq->flags1, 4); // set seq bit
-
-			gre_key_seq->prot_type = htobe16(proto_type);
-			gre_key_seq->seq = htobe32(seq);
-
-			_librist_crypto_psk_encrypt(&p->key_tx, gre_key_seq->seq, p->rist_gre_version, (unsigned char *)(_payload - hdr_len), (unsigned char *)(_payload - hdr_len), (hdr_len + payload_len));
-			gre_key_seq->nonce = k->gre_nonce;
-		} else {
-			struct rist_gre_hdr *gre_seq = (struct rist_gre_hdr *) header_buf;
-			gre_seq->prot_type = htobe16(proto_type);
-		}
-
-		// now copy the GRE header data
-		len = gre_len + hdr_len + payload_len;
-		data = _payload - gre_len - hdr_len;
-		memcpy(data, header_buf, gre_len);
-	}
-	else
 	{
 		len =  hdr_len + payload_len - RIST_GRE_PROTOCOL_REDUCED_SIZE;
 		data = _payload - hdr_len + RIST_GRE_PROTOCOL_REDUCED_SIZE;
@@ -204,7 +143,10 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 		}
 	}
 
-	ret = sendto(p->sd,(const char*)data, len, 0, &(p->u.address), p->address_len);
+	if (ctx->profile == RIST_PROFILE_SIMPLE)
+		ret = sendto(p->sd,(const char*)data, len, 0, &(p->u.address), p->address_len);
+	else
+		ret = rist_send_data_main_profile(p, payload_type, proto_type, data, len, src_port, dst_port);
 
 out:
 	if (RIST_UNLIKELY(ret <= 0)) {
@@ -212,10 +154,6 @@ out:
 	} else {
 		p->stats_sender_instant.sent++;
 		p->stats_receiver_instant.sent_rtcp++;
-	}
-
-	if (modifyingbuffer) {
-		free(_payload - RIST_MAX_PAYLOAD_OFFSET);
 	}
 
 	return ret;

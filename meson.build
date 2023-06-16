@@ -264,6 +264,7 @@ config_file = configure_file(output: 'config.h', configuration: cdata)
 librist = library('librist',
 	'src/crypto/crypto.c',
 	'src/crypto/psk.c',
+	'src/proto/gre.c',
 	'src/proto/rtp.c',
 	'src/proto/rist_time.c',
 	'src/flow.c',

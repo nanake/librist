@@ -3,7 +3,7 @@
 #include "rtp.h"
 #include "rist_time.h"
 
-#include "socket-shim.h"
+#include "endian-shim.h"
 #include "rist-private.h"
 #include "udp-private.h"
 
