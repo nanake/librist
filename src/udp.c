@@ -15,6 +15,7 @@
 #include "socket-shim.h"
 #include "endian-shim.h"
 #include "proto/rist_time.h"
+#include "proto/protocol_rtp.h"
 #if HAVE_SRP_SUPPORT
 #include "eap.h"
 #endif

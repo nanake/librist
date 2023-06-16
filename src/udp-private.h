@@ -12,7 +12,6 @@
 #include "rist-private.h"
 #include "proto/gre.h"
 #include "proto/rtp.h"
-#include "proto/proto_rtp.h"
 
 #define SET_BIT(value, pos) (value |= (1U<< pos))
 #define UNSET_BIT(value, pos) (value &= (1U << pos))

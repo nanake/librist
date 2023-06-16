@@ -1,7 +1,7 @@
 #include "rist_time.h"
 
 #include "endian-shim.h"
-#include "proto_rtp.h"
+#include "rtp.h"
 #include "time-shim.h"
 
 #include <stdint.h>
