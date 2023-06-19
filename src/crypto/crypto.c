@@ -10,7 +10,7 @@
 #include "sha256.h"
 #include <string.h>
 #include <stdlib.h>
-
+/*
 // This is intended for verifying that the peer has the same passphrase
 // Usecase: "reply attack protection"
 uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase)
@@ -39,6 +39,7 @@ uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase)
 
 	return out;
 }
+*/
 
 static bool seeded = false;
 //Generate pseudo-random 32 bit

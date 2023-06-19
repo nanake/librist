@@ -26,7 +26,6 @@
 #include "libevsocket.h"
 #include "librist.h"
 #include "udpsocket.h"
-#include "aes.h"
 #include "crypto/psk.h"
 #include <errno.h>
 #include <stdatomic.h>

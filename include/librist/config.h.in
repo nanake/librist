@@ -10,4 +10,6 @@
 
 #define HAVE_MBEDTLS @HAVE_MBEDTLS@
 
+#define HAVE_NETTLE @HAVE_NETTLE@
+
 #endif /* LIBRIST_CONFIG_H */

@@ -45,6 +45,7 @@ inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
 builtin_cjson = get_option('builtin_cjson')
 builtin_mbedtls = get_option('builtin_mbedtls')
 use_mbedtls = get_option('use_mbedtls')
+use_nettle = get_option('use_nettle')
 cdata.set10('ALLOW_INSECURE_IV_FALLBACK', get_option('allow_insecure_iv_fallback'))
 
 required_library = false
@@ -203,6 +204,8 @@ mbedcrypto_lib_found = false
 if use_mbedtls
 	message('Building mbedtls')
 	subdir('contrib/mbedtls')
+elif use_nettle
+	deps += dependency('nettle')
 endif
 
 subdir('include')
@@ -223,6 +226,14 @@ if get_option('allow_obj_filter') and get_option('default_library') != 'shared' 
 	endif
 endif
 
+if not mbedcrypto_lib_found and not use_nettle
+	platform_files += [
+		'contrib/aes.c',
+		'contrib/sha256.c',
+		'contrib/fastpbkdf2.c',
+	]
+endif
+
 librist = library('librist',
 	'src/crypto/crypto.c',
 	'src/crypto/psk.c',
@@ -237,9 +248,6 @@ librist = library('librist',
 	'src/stats.c',
 	'src/udpsocket.c',
 	'src/libevsocket.c',
-	'contrib/aes.c',
-	'contrib/sha256.c',
-	'contrib/fastpbkdf2.c',
 	'contrib/stdio-shim.c',
 	'contrib/time-shim.c',
 	'contrib/pthread-shim.c',
