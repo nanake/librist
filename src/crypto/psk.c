@@ -5,9 +5,11 @@
  * SPDX-License-Identifier: BSD-2-Clause
  */
 
+#include "config.h"
 #include "psk.h"
 #include "log-private.h"
 #include "crypto-private.h"
+#include <string.h>
 
 #if HAVE_MBEDTLS
 #include "mbedtls/aes.h"
@@ -214,4 +216,16 @@ void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t
 
     _librist_crypto_psk_aes_ctr(key, seq_nbe, gre_version, inbuf, outbuf, payload_len);
     return;
+}
+
+int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, size_t passphrase_len) {
+	if (passphrase_len > sizeof(key->password) -1) {
+		return -1;
+	}
+	memcpy(key->password, passsphrase, passphrase_len);
+	do {
+		key->gre_nonce = prand_u32();
+	} while (!key->gre_nonce);
+	_librist_crypto_aes_key(key);
+	return 0;
 }

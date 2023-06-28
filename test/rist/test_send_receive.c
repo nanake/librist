@@ -56,11 +56,11 @@ struct rist_ctx *setup_rist_receiver(int profile, const char *url) {
 		rist_log(logging_settings_receiver, RIST_LOG_ERROR, "Could not add peer connector to receiver\n");
 		return NULL;
 	}
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
     if (strlen(peer_config->srp_username) > 0 &&
         strlen(peer_config->srp_password) > 0) {
         int srp_error =
-            rist_enable_eap_srp(peer, peer_config->srp_username,
+            rist_enable_eap_srp_2(peer, peer_config->srp_username,
                                 peer_config->srp_password, NULL, NULL);
         if (srp_error)
           rist_log(logging_settings_receiver, RIST_LOG_WARN,
@@ -95,11 +95,11 @@ struct rist_ctx *setup_rist_sender(int profile, const char *url) {
 		return NULL;
 	}
 
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
     if (strlen(peer_config_link->srp_username) > 0 &&
         strlen(peer_config_link->srp_password) > 0) {
         int srp_error =
-            rist_enable_eap_srp(peer, peer_config_link->srp_username,
+            rist_enable_eap_srp_2(peer, peer_config_link->srp_username,
                                 peer_config_link->srp_password, NULL, NULL);
         if (srp_error)
           rist_log(logging_settings_sender, RIST_LOG_WARN,

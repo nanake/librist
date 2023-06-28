@@ -12,7 +12,7 @@
 #include "log-private.h"
 #include "socket-shim.h"
 #include "endian-shim.h"
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 #include "eap.h"
 #endif
 #include "crypto/psk.h"
@@ -944,7 +944,7 @@ peer_select:
 
 		if (!peer->is_data || peer->parent)
 			continue;
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 		if (!peer->listening && !eap_is_authenticated(peer->eap_ctx))
 			continue;
 #endif
@@ -969,7 +969,7 @@ peer_select:
 			if (peer->listening) {
 				struct rist_peer *child = peer->child;
 				while (child) {
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 					if (!eap_is_authenticated(child->eap_ctx))
 					{
 						//do nothing
@@ -1001,7 +1001,7 @@ peer_select:
 		if (peer->listening) {
 			struct rist_peer *child = peer->child;
 			while (child) {
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 					if (!eap_is_authenticated(child->eap_ctx))
 					{
 						//do nothing
@@ -1059,7 +1059,7 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 
 	// If they request a non-sense seq number, we will catch it when we check the seq number against
 	// the one on that buffer position and it does not match
-	
+
 	size_t idx = rist_sender_index_get(ctx, retry->seq);
 	if (RIST_UNLIKELY(ctx->sender_queue[idx] == NULL)) {
 		rist_log_priv(&ctx->common, RIST_LOG_DEBUG,

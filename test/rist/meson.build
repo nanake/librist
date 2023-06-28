@@ -1,27 +1,7 @@
 # librist. Copyright (c) 2020 SipRadius LLC. All right reserved.
 # SPDX-License-Identifier: BSD-2-Clause
 
-risttest_sources = [
-    'example-test.c'
-]
-
-cmocka = meson.get_compiler('c').find_library('cmocka', required: false)
-risttest_deps = [
-    cmocka
-]
-
-risttest_lib_deps = [
-    librist
-]
-comockatests = cmocka.found()
-if cmocka.found()
-    risttest = executable('risttest',
-                            risttest_sources,
-                            include_directories : inc,
-                            dependencies : [risttest_deps,test_deps],
-                            link_with : [risttest_lib_deps, test_dep_libs])
-
-endif
+subdir('unit')
 
 extra_sources = ['../../contrib/time-shim.c','../../contrib/pthread-shim.c']
 
@@ -40,10 +20,6 @@ test_send_receive = executable('test_send_receive',
 									stdatomic_dependency
                                 ])
 
-
-if comockatests
-    test('rist test', risttest)
-endif
 
 ###Simple profile tests
 #Unicast
@@ -74,7 +50,7 @@ test('Main profile encryption receive server mode, sender client mode unencrypte
 test('Main profile encryption client mode unencrypted, sender server mode', test_send_receive, args: ['1', 'rist://127.0.0.1:6005', 'rist://@127.0.0.1:6005?secret=12345678&aes-type=128', '0'], should_fail: true)
 test('Main profile encryption client mode, sender server mode unencrypted', test_send_receive, args: ['1', 'rist://127.0.0.1:6006?secret=12345678&aes-type=128', 'rist://@127.0.0.1:6006', '0'], should_fail: true)
 #Test SRP Auth
-if use_mbedtls
+if have_srp
 	test('Main profile encryption receive client mode, sender server mode, SRP auth', test_send_receive, args: ['1', 'rist://127.0.0.1:6008?secret=12345678&aes-type=128&username=testuser&password=testpassword', 'rist://@127.0.0.1:6008?secret=12345678&aes-type=128&username=testuser&password=testpassword', '0'],suite: ['main', 'unicast', 'server', 'encryption', 'srp'], should_fail: false)
 	test('Main profile encryption receive client mode, sender server mode, SRP auth, client no SRP', test_send_receive, args: ['1', 'rist://127.0.0.1:6009?secret=12345678&aes-type=128', 'rist://@127.0.0.1:6009?secret=12345678&aes-type=128&username=testuser&password=testpassword', '0'], suite: ['main', 'unicast', 'server', 'encryption', 'srp'], should_fail: true)
 	test('Main profile encryption receive client mode, sender server mode, SRP auth, server no SRP', test_send_receive, args: ['1', 'rist://127.0.0.1:6010?secret=12345678&aes-type=128&username=testuser&password=testpassword', 'rist://@127.0.0.1:6010?secret=12345678&aes-type=128', '0'], suite: ['main', 'unicast', 'server', 'encryption', 'srp'], should_fail: true)

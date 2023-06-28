@@ -12,6 +12,11 @@ if not builtin_mbedtls
     endif
     if mbedcrypto_lib.found()
         mbedcrypto_lib_found = true
+		mpi_random_test = '''
+#include <mbedtls/bignum.h>
+void test_has_func() { mbedtls_mpi_random(NULL, 0, NULL, NULL, NULL); }
+'''
+		cdata.set10('MBEDTLS_HAS_MPI_RANDOM', cc.compiles(mpi_random_test, name: 'MbedTLS has mbedtls_mpi_random()', dependencies: mbedcrypto_lib))
     endif
 endif
 if builtin_mbedtls and not mbedcrypto_lib_found
@@ -93,13 +98,9 @@ if builtin_mbedtls and not mbedcrypto_lib_found
         )
     inc += mbedcrypto_lib_includes
     mbedcrypto_lib_found = true
+	cdata.set10('MBEDTLS_HAS_MPI_RANDOM', false)
     # We could compile libmbedcrypto.a using make on contrib/mbedtls and copy to the build folder instead
     #my_mbedcrypto_inc = mbedcrypto_lib_includes
     #my_mbedcrypto_lib = static_library('mbedcrypto')
     #mbedcrypto_lib = declare_dependency(link_with : my_mbedcrypto_lib, include_directories : my_mbedcrypto_inc)
-endif
-if mbedcrypto_lib_found
-    deps += mbedcrypto_lib
-    platform_files += 'contrib/srp.c'
-    platform_files += 'src/eap.c'
 endif

@@ -8,6 +8,7 @@
 #ifndef RIST_CRYPTO_PSK_H
 #define RIST_CRYPTO_PSK_H
 
+#include "config.h"
 #include "common/attributes.h"
 #include "librist/librist_config.h"
 #if HAVE_MBEDTLS
@@ -46,6 +47,6 @@ RIST_PRIV int _librist_crypto_psk_rist_key_destroy(struct rist_key *key);
 RIST_PRIV int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key *key_out);
 RIST_PRIV void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version,const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version,const uint8_t inbuf[],uint8_t outbuf[], size_t payload_len);
-
+RIST_PRIV int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, size_t passphrase_len);
 
 #endif

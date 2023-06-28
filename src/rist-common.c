@@ -16,7 +16,7 @@
 #include "endian-shim.h"
 #include "time-shim.h"
 #include <sys/types.h>
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 #include "eap.h"
 #endif
 #include "mpegts.h"
@@ -2391,7 +2391,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 	uint32_t flow_id = 0;
 	uint16_t gre_proto = 0;
-
+	uint8_t rist_gre_version = 1;
 	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
 		struct rist_gre_hdr *gre = NULL;
@@ -2407,7 +2407,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
-		uint8_t rist_gre_version = (gre->flags2 >> 3) & 0x7;
+		rist_gre_version = (gre->flags2 >> 3) & 0x7;
 
 		if (recv_bufsize < (sizeof(*gre) + has_checksum*4 + has_key *4 + has_seq *4)) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Packet too small: %d bytes, ignoring ...\n", recv_bufsize);
@@ -2593,7 +2593,7 @@ protocol_bypass:
 		p->event_recv = peer->event_recv;
 		char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 		char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
-		#if HAVE_MBEDTLS
+		#if HAVE_SRP_SUPPORT
 		eap_clone_ctx(peer->eap_ctx, p);
 		eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
 		#endif
@@ -2728,7 +2728,7 @@ protocol_bypass:
 		payload.dst_port = p->local_port;
 	}
 	//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 	if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 	{
 		if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
@@ -2792,15 +2792,15 @@ protocol_bypass:
 			}
 			break;
 		case RIST_PAYLOAD_TYPE_EAPOL:
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 			if (p->eap_ctx == NULL) {
 				rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "EAP authentication requested but credentials have not been configured!\n");
 			}
 			else {
 				int eapret = 0;
 				if ((eapret = eap_process_eapol(p->eap_ctx,
-												(void *)(recv_buf + payload_offset),
-												(recv_bufsize - payload_offset))) < 0) {
+												(recv_buf + payload_offset),
+												(recv_bufsize - payload_offset), rist_gre_version)) < 0) {
 					rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
 					if (eapret == 255)//permanent failure, we allow a few retries
 						failed_eap = true;
@@ -3069,7 +3069,7 @@ static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
 				rist_peer_rtcp(NULL, peer);
 			}
 		}
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 		if (!peer->listening || peer->parent)
 			eap_periodic(peer->eap_ctx);
 #endif
@@ -3424,7 +3424,7 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 	}
 	_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
 	_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 	eap_delete_ctx(&peer->eap_ctx);
 #endif
 	if (peer->url)
@@ -3612,7 +3612,7 @@ void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 				rist_peer_rtcp(NULL, p);
 			}
 		}
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 		if (!p->listening && p->parent)
 			eap_periodic(p->eap_ctx);
 #endif

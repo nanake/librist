@@ -11,7 +11,7 @@
 #include "librist/version.h"
 #include "risturlhelp.h"
 #include "config.h"
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 #include "librist/librist_srp.h"
 #include "srp_shared.h"
 #endif
@@ -56,7 +56,7 @@ static struct option long_options[] = {
 { "statsinterval",   required_argument, NULL, 'S' },
 { "verbose-level",   required_argument, NULL, 'v' },
 { "remote-logging",  required_argument, NULL, 'r' },
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
 { "help",            no_argument,       NULL, 'h' },
@@ -72,7 +72,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -N | --cname identifier                   | Manually configured identifier                           |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 "       -F | --srpfile filepath                   | When in listening mode, use this file to hold the list   |\n"
 "                                                 | of usernames and passwords to validate against. Use the  |\n"
 "                                                 | ristsrppasswd tool to create the line entries.           |\n"
@@ -84,8 +84,8 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       --statsinterval 1000      \\\n"
 "       --verbose-level 6         \n";
 
-#if HAVE_MBEDTLS
-	FILE *srpfile = NULL;
+#if HAVE_SRP_SUPPORT
+	char *srpfile = NULL;
 #endif
 
 static void usage(char *cmd)
@@ -208,17 +208,17 @@ static struct rist_ctx* setup_rist_sender(struct rist_sender_args *setup) {
 		exit(1);
 	}
 
-#if HAVE_MBEDTLS
+#if HAVE_SRP_SUPPORT
 	int srp_error = 0;
 	if (strlen(peer_config->srp_username) > 0 && strlen(peer_config->srp_password) > 0)
 	{
-		srp_error = rist_enable_eap_srp(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
+		srp_error = rist_enable_eap_srp_2(peer, peer_config->srp_username, peer_config->srp_password, NULL, NULL);
 		if (srp_error)
 			rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP for peer\n", srp_error);
 	}
 	if (srpfile)
 	{
-		srp_error = rist_enable_eap_srp(peer, NULL, NULL, user_verifier_lookup, srpfile);
+		srp_error = rist_enable_eap_srp_2(peer, NULL, NULL, user_verifier_lookup, srpfile);
 		if (srp_error)
 			rist_log(&logging_settings, RIST_LOG_WARN, "Error %d trying to enable SRP global authenticator, file %s\n", srp_error, srpfile);
 	}
@@ -246,7 +246,7 @@ static int cb_recv(void *arg, struct rist_data_block *b)
 		rist_sender_flow_id_set(cb_arg->sender_ctx, b->flow_id);
 	}
 	b->virt_src_port = cb_arg->src_port;
-	b->virt_dst_port = cb_arg->dst_port; 
+	b->virt_dst_port = cb_arg->dst_port;
 	block->flags = RIST_DATA_FLAGS_USE_SEQ;//We only need this flag set, this way we don't have to null it beforehand.
 	int ret = rist_sender_data_write(cb_arg->sender_ctx, b);
 	rist_receiver_data_block_free2(&b);
@@ -303,17 +303,17 @@ int main (int argc, char **argv) {
 		case 'i':
 			if (inputurl != NULL)
 				goto usage;
-			inputurl = strdup(optarg); 
+			inputurl = strdup(optarg);
 			break;
 		case 'o':
 			if (outputurl != NULL)
 				goto usage;
-			outputurl = strdup(optarg); 
+			outputurl = strdup(optarg);
 			break;
 		case 's':
 			if (client_args.shared_secret != NULL)
 				goto usage;
-			client_args.shared_secret = strdup(optarg); 
+			client_args.shared_secret = strdup(optarg);
 			break;
 		case 'e':
 			client_args.encryption_type =atoi(optarg);
@@ -321,7 +321,7 @@ int main (int argc, char **argv) {
 		case 'N':
 			if (cname != NULL)
 				goto usage;
-			cname = strdup(optarg); 
+			cname = strdup(optarg);
 			break;
 		case 'v':
 			loglevel = (enum rist_log_level) atoi(optarg);
@@ -331,14 +331,15 @@ int main (int argc, char **argv) {
 				goto usage;
 			remote_log_address = strdup(optarg);
 		break;
-#if HAVE_MBEDTLS
-		case 'F':
-			srpfile = fopen(optarg, "r");
-			if (!srpfile) {
+#if HAVE_SRP_SUPPORT
+		case 'F': {
+			FILE* f = fopen(optarg, "r");
+			if (!f) {
 				rist_log(&logging_settings, RIST_LOG_ERROR, "Could not open srp file %s\n", optarg);
-				exitcode = 1;
-				goto out;
+				return 1;
 			}
+			srpfile = strdup(optarg);
+		}
 		break;
 #endif
 		case 'S':
@@ -480,7 +481,7 @@ out:
 		free(outputurl);
 	if (remote_log_address)
 		free(remote_log_address);
-	
+
 
 
 	return exitcode;

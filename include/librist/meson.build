@@ -16,8 +16,7 @@ version_h_target = configure_file(input: 'version.h.in',
 								  configuration: version_h_data)
 
 config_h_data = configuration_data()
-config_h_data.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
-config_h_data.set10('HAVE_NETTLE', use_nettle)
+config_h_data.set10('HAVE_SRP_SUPPORT', mbedcrypto_lib_found or use_nettle)
 config_h_target = configure_file(input: 'config.h.in',
 								 output: 'librist_config.h',
 								 configuration: config_h_data)

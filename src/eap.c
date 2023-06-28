@@ -6,15 +6,18 @@
  */
 
 #include "eap.h"
+#include "config.h"
 #include "endian-shim.h"
-#include "srp.h"
 #include "crypto/crypto-private.h"
+#include "crypto/srp.h"
+#include "crypto/srp_constants.h"
+#include "librist_srp.h"
 #include "rist-private.h"
 #include "udp-private.h"
 #include "log-private.h"
 
-#include <mbedtls/bignum.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -32,34 +35,29 @@ void eap_reset_data(struct eapsrp_ctx *ctx)
 {
 	if (ctx->role == EAP_ROLE_AUTHENTICATOR)
 	{
+#if HAVE_MBEDTLS
+		free(ctx->authenticator_bytes_salt_old);
+		free(ctx->authenticator_bytes_verifier_old);
+		ctx->authenticator_bytes_salt_old = NULL;
+		ctx->authenticator_bytes_verifier_old = NULL;
+#endif
 		free(ctx->authenticator_bytes_salt);
 		free(ctx->authenticator_bytes_verifier);
+		ctx->authenticator_bytes_salt = NULL;
+		ctx->authenticator_bytes_verifier = NULL;
 	}
-	free(ctx->ascii_g);
-	free(ctx->ascii_n);
+	librist_crypto_srp_authenticator_ctx_free(ctx->auth_ctx);
+	ctx->auth_ctx = NULL;
+	librist_crypto_srp_client_ctx_free(ctx->client_ctx);
+	ctx->client_ctx = NULL;
 	free(ctx->last_pkt);
-	free(ctx->salt);
-	free(ctx->verifier);
-	if (ctx->srp_user)
-		srp_user_delete(ctx->srp_user);
-	if (ctx->srp_session)
-		srp_session_delete(ctx->srp_session);
-	if (ctx->srp_verifier)
-		srp_verifier_delete(ctx->srp_verifier);
-	ctx->ascii_g = NULL;
-	ctx->ascii_n = NULL;
+
 	ctx->last_pkt = NULL;
-	ctx->salt = NULL;
-	ctx->salt_len = 0;
-	ctx->verifier = NULL;
-	ctx->srp_user = NULL;
-	ctx->srp_session = NULL;
-	ctx->srp_verifier = NULL;
-	ctx->authenticator_bytes_salt = NULL;
-	ctx->authenticator_bytes_verifier = NULL;
+
+	ctx->authenticated = false;
 }
 
-static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eapcode, uint8_t identifier, size_t payload_len, uint8_t buf[])
+static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eapcode, uint8_t identifier, size_t payload_len, uint8_t buf[], uint8_t gre_version)
 {
 	size_t offset = 0;
 	struct rist_gre_hdr *gre = (struct rist_gre_hdr *)&buf[offset];
@@ -70,6 +68,7 @@ static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eap
 	offset += sizeof(*eap_hdr);
 	memset(gre, 0, sizeof(*gre));
 	gre->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL);
+	gre->flags2 = (gre_version &0x7) << 3;
 	eapol_hdr->eapversion = 2;
 	eapol_hdr->eaptype = eapoltype;
 	eap_hdr->code = eapcode;
@@ -109,13 +108,19 @@ static int process_eap_request_identity(struct eapsrp_ctx *ctx, uint8_t identifi
 	offset += strlen(ctx->username);
 	size_t len = offset;
 	len -= EAPOL_EAP_HDRS_OFFSET;
-	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, len, eapolpkt);
+	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, len, eapolpkt, ctx->use_correct_hashing? 1 :0);
 }
 
-static int process_eap_request_srp_challenge(struct eapsrp_ctx *ctx, uint8_t identifier, size_t len, uint8_t pkt[])
+static int process_eap_request_srp_challenge(struct eapsrp_ctx *ctx, uint8_t identifier, size_t len, uint8_t pkt[], uint8_t gre_version)
 {
 	if (len < 6)
 		return EAP_LENERR;
+
+#if HAVE_MBEDTLS
+	ctx->use_correct_hashing = (gre_version >= 1);
+#elif HAVE_NETTLE
+	(void)(gre_version);
+#endif
 	size_t offset = 0;
 	uint16_t *tmp_swap = (uint16_t *)&pkt[offset];
 	size_t name_len = be16toh(*tmp_swap);
@@ -129,10 +134,12 @@ static int process_eap_request_srp_challenge(struct eapsrp_ctx *ctx, uint8_t ide
 	offset += 2;
 	if (len < (offset + salt_len))
 		return EAP_LENERR;
-	if (salt_len > ctx->salt_len)
-		ctx->salt = realloc(ctx->salt, salt_len);
-	memcpy(ctx->salt, &pkt[offset], salt_len);
-	ctx->salt_len = salt_len;
+
+	bool use_default_2048 = true;
+	uint8_t *salt = &pkt[offset];
+	uint8_t *g = NULL;
+	uint8_t *N = NULL;
+	size_t N_len = 0;
 	offset += salt_len;
 	tmp_swap = (uint16_t *)&pkt[offset];
 	size_t generator_len = be16toh(*tmp_swap);
@@ -141,74 +148,33 @@ static int process_eap_request_srp_challenge(struct eapsrp_ctx *ctx, uint8_t ide
 	{
 		if (len < (offset + generator_len))
 			return EAP_LENERR;
-		mbedtls_mpi tmp;
-		mbedtls_mpi_init(&tmp);
-		mbedtls_mpi_read_binary(&tmp, (const unsigned char *)&pkt[offset], generator_len);
-		char generator[16];
-		char *generator_buf = generator;
-		size_t olen = 0;
-		int ret = 0;
-		if ((ret = mbedtls_mpi_write_string(&tmp, 16, generator, 16, &olen)) !=0)
-		{
-			if (ret == MBEDTLS_ERR_MPI_BUFFER_TOO_SMALL)
-			{
-				generator_buf = malloc(olen);
-				mbedtls_mpi_write_string(&tmp, 16, generator_buf, olen, &olen);
-			} else
-				return ret;
-		}
+
+		g = &pkt[offset];
 		offset += generator_len;
-		size_t remaining_bytes = len - offset;
-		mbedtls_mpi_read_binary(&tmp, (const unsigned char *)&pkt[offset], remaining_bytes);
-		olen = 0;
-		char *n_modulus = NULL;
-		mbedtls_mpi_write_string(&tmp, 16, n_modulus, 0, &olen);
-		n_modulus = malloc(olen);
-		mbedtls_mpi_write_string(&tmp, 16, n_modulus, olen, &olen);
-		mbedtls_mpi_free(&tmp);
-		if (ctx->srp_session)
-			srp_session_delete(ctx->srp_session);
-		ctx->srp_session = srp_session_new(HASH_ALGO, SRP_NG_CUSTOM, n_modulus, generator_buf);
-		free(n_modulus);
-		if (generator_buf != generator)
-			free(generator_buf);
-	} else {
-		if (ctx->srp_session)
-			srp_session_delete(ctx->srp_session);
-		ctx->srp_session = srp_session_new(HASH_ALGO, SRP_NG_2048, NULL, NULL);
+		N = &pkt[offset];
+		N_len = len - offset;
 	}
-	if (ctx->srp_user)
-		srp_user_delete(ctx->srp_user);
-	ctx->srp_user = srp_user_new(ctx->srp_session, ctx->username, (const unsigned char*)ctx->password, strlen(ctx->password));
+	librist_crypto_srp_client_ctx_free(ctx->client_ctx);
+	ctx->client_ctx = librist_crypto_srp_client_ctx_create(use_default_2048, N, N_len, g, generator_len, salt, salt_len, ctx->use_correct_hashing);
 	size_t len_A;
-	char * bytes_A;
-	char * username;
-	srp_user_start_authentication(ctx->srp_user, (const char **)&username, (const unsigned char **)&bytes_A, &len_A);
-	uint8_t *response = malloc(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + len_A);
+	uint8_t response[1500] = {0};
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&response[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_CHALLENGE;
-	memcpy(&response[EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr)], bytes_A, len_A);
-	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, (len_A + sizeof(*hdr)), response);
-	free(response);
+	len_A = librist_crypto_srp_client_write_A_bytes(ctx->client_ctx, &response[EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr)], sizeof(response) -(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr)));
+	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, (len_A + sizeof(*hdr)), response, ctx->use_correct_hashing? 1 :0);
 	return ret;
 }
 
 static int process_eap_request_srp_server_key(struct eapsrp_ctx *ctx, uint8_t identifier, size_t len, uint8_t pkt[])
 {
-	char *bytes_B = (char *)pkt;
-	size_t len_B = len;
-	size_t len_M = 0;
-	char *bytes_M;
-	srp_user_process_challenge(ctx->srp_user, (const unsigned char *)ctx->salt, ctx->salt_len,(const unsigned char *) bytes_B, len_B, (const unsigned char**)&bytes_M, &len_M);
-	if (!bytes_M)
+	if (librist_crypto_srp_client_handle_B(ctx->client_ctx, pkt, len, ctx->username, ctx->password) != 0)
 	{
 		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		//"must disconnect immediately, set tries past limit"
 		ctx->tries = 255;
 		return -255;
 	}
-	assert(len_M == DIGEST_LENGTH);
 	size_t out_len = sizeof(struct eap_srp_hdr) + 4 + DIGEST_LENGTH;
 	uint8_t response[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + 4 + DIGEST_LENGTH)];
 	size_t offset = EAPOL_EAP_HDRS_OFFSET;
@@ -218,8 +184,8 @@ static int process_eap_request_srp_server_key(struct eapsrp_ctx *ctx, uint8_t id
 	offset += 4;
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_KEY;
-	memcpy(&response[offset], bytes_M, len_M);
-	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, out_len, response);
+	librist_crypto_srp_client_write_M1_bytes(ctx->client_ctx, &response[offset]);
+	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, out_len, response, ctx->use_correct_hashing? 1 :0);
 	return ret;
 }
 
@@ -227,8 +193,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 {
 	if (len < (4 + DIGEST_LENGTH))
 		return EAP_LENERR;
-	srp_user_verify_session(ctx->srp_user, &pkt[4]);
-	if (srp_user_is_authenticated(ctx->srp_user))
+	if (librist_crypto_srp_client_verify_m2(ctx->client_ctx, &pkt[4]) == 0)
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated\n");
@@ -239,7 +204,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 		struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 		hdr->type = EAP_TYPE_SRP_SHA1;
 		hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
-		return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(*hdr), outpkt);
+		return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(*hdr), outpkt, ctx->use_correct_hashing? 1 :0);
 	}
 	//perm failure
 	ctx->authentication_state = EAP_AUTH_STATE_FAILED;
@@ -248,7 +213,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 	return -1;
 }
 
-static int process_eap_request(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, uint8_t identifier)
+static int process_eap_request(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, uint8_t identifier, uint8_t gre_version)
 {
 	uint8_t type = pkt[0];
 	if (type == EAP_TYPE_IDENTITY)
@@ -259,7 +224,7 @@ static int process_eap_request(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len
 		switch (subtype)
 		{
 			case EAP_SRP_SUBTYPE_CHALLENGE:
-				return process_eap_request_srp_challenge(ctx, identifier, (len -2), &pkt[2]);
+				return process_eap_request_srp_challenge(ctx, identifier, (len -2), &pkt[2], gre_version);
 				break;
 			case EAP_SRP_SUBTYPE_SERVER_KEY:
 				return process_eap_request_srp_server_key(ctx, identifier, (len -2), &pkt[2]);
@@ -279,7 +244,7 @@ static int process_eap_request(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len
 
 //EAP RESPONSE HANDLING
 
-static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uint8_t pkt[])
+static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uint8_t pkt[], uint8_t gre_version)
 {
 	if (len > 255)
 		return -1;
@@ -292,7 +257,24 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 	bool std_2048_ng = false;
 	char *ascii_n = NULL;
 	char *ascii_g = NULL;
-	ctx->lookup_func(ctx->username, &len_v, &bytes_v, &len_s, &bytes_s, &std_2048_ng, &ascii_n, &ascii_g, ctx->lookup_func_userdata);
+#if HAVE_MBEDTLS
+	int hashversion = gre_version >= 1 ? 1 : 0;
+#elif HAVE_NETTLE
+	(void)gre_version;
+	int hashversion = 1;
+#endif
+	uint64_t generation = 0;
+	ctx->lookup_func(ctx->username, &len_v, &bytes_v, &len_s, &bytes_s, &std_2048_ng, &ascii_n, &ascii_g, &hashversion, &generation, ctx->lookup_func_userdata);
+#if HAVE_NETTLE
+	if (hashversion == 0) {
+		rist_log_priv2(ctx->logging_settings, RIST_LOG_ERROR, EAP_LOG_PREFIX"Lookup from SRP File got hashversion 0 response, Nettle backend does not support this, authentication likely to fail\n");
+	}
+	hashversion = 1;
+#endif
+	ctx->generation = generation;
+	ctx->use_correct_hashing = (hashversion >= 1);
+	const char *n_hex = ascii_n;
+	const char *g_hex = ascii_g;
 	bool found = (len_v != 0 && bytes_v && len_s != 0 && bytes_s);
 	uint8_t outpkt[1500] = { 0 };//TUNE THIS
 	size_t offset = EAPOL_EAP_HDRS_OFFSET;
@@ -302,12 +284,16 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 	hdr->subtype = EAP_SRP_SUBTYPE_CHALLENGE;
 	if (found)
 	{
-		ctx->salt = malloc(len_s);
-		memcpy(ctx->salt, bytes_s, len_s);
-		ctx->verifier = malloc(len_v);
-		memcpy(ctx->verifier, bytes_v, len_v);
-		ctx->salt_len = len_s;
-		ctx->verifier_len = len_v;
+		struct librist_crypto_srp_authenticator_ctx *auth_ctx = NULL;
+		if (std_2048_ng)
+			librist_get_ng_constants(LIBRIST_SRP_NG_DEFAULT, &n_hex, &g_hex);
+
+		auth_ctx = librist_crypto_srp_authenticator_ctx_create(n_hex, g_hex, (uint8_t*)bytes_v, len_v, (uint8_t*)bytes_s, len_s, ctx->use_correct_hashing);
+		if (!auth_ctx) {
+			return -1;//Log some error?
+		}
+		librist_crypto_srp_authenticator_ctx_free(ctx->auth_ctx);
+		ctx->auth_ctx = auth_ctx;
 		memset(&pkt[offset], 0, 2);
 		offset += 2;//we dont send the server name
 		uint16_t *tmp_swap = (uint16_t *)&outpkt[offset];
@@ -317,27 +303,21 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 		offset += len_s;
 		if (std_2048_ng)
 		{
-			if (ctx->srp_session)
-				srp_session_delete(ctx->srp_session);
-			ctx->srp_session = srp_session_new(HASH_ALGO, SRP_NG_2048, NULL, NULL);
 			memset(&outpkt[offset], 0, 2);
 			offset += 2;
 		} else {
-			mbedtls_mpi tmp;
-			mbedtls_mpi_init(&tmp);
-			mbedtls_mpi_read_string(&tmp, 16, ascii_g);
 			tmp_swap = (uint16_t *)&outpkt[offset];
-			*tmp_swap = htobe16((uint16_t)mbedtls_mpi_size(&tmp));
 			offset += 2;
-			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], mbedtls_mpi_size(&tmp));
-			offset += mbedtls_mpi_size(&tmp);
-			mbedtls_mpi_read_string(&tmp, 16, ascii_n);
-			mbedtls_mpi_write_binary(&tmp, &outpkt[offset], mbedtls_mpi_size(&tmp));
-			offset += mbedtls_mpi_size(&tmp);
-			mbedtls_mpi_free(&tmp);
-			if (ctx->srp_session)
-				srp_session_delete(ctx->srp_session);
-			ctx->srp_session = srp_session_new(HASH_ALGO, SRP_NG_CUSTOM, ascii_n, ascii_g);
+			int g_size = librist_crypto_srp_authenticator_write_g_bytes(auth_ctx, &outpkt[offset], sizeof(outpkt) -offset);
+			if (g_size < 0)
+				return -1;
+			*tmp_swap = htobe16(g_size);
+			offset += g_size;
+
+			int n_len = librist_crypto_srp_authenticator_write_n_bytes(auth_ctx, &outpkt[offset], sizeof(outpkt) -offset);
+			if (n_len < 0)
+				return -1;
+			offset += n_len;
 		}
 	}
 	free(bytes_v);
@@ -349,36 +329,20 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 	ctx->last_identifier++;
 	size_t out_len = offset;
 	out_len -= EAPOL_EAP_HDRS_OFFSET;
-	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, out_len, outpkt);
+	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, out_len, outpkt, ctx->use_correct_hashing? 1 :0);
 }
 
 static int process_eap_response_client_key(struct eapsrp_ctx *ctx, size_t len, uint8_t pkt[])
 {
-	char *bytes_B;
-	size_t len_B;
-	if (ctx->srp_verifier)
-		srp_verifier_delete(ctx->srp_verifier);
+	librist_crypto_srp_authenticator_handle_A(ctx->auth_ctx, pkt, len);
 
-	ctx->srp_verifier = srp_verifier_new(ctx->srp_session, ctx->username,
-										 (const unsigned char*)ctx->salt, ctx->salt_len,
-										 (const unsigned char*)ctx->verifier, ctx->verifier_len,
-										 pkt, len,
-										 (const unsigned char **)&bytes_B, &len_B);
-	if (!bytes_B || !ctx->srp_verifier)
-	{
-		//perm failure set tries to max
-		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
-		ctx->tries = 255;
-		return -255;
-	}
-	uint8_t *outpkt = malloc((EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + len_B));
+	uint8_t outpkt[1500];
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_KEY;
-	memcpy(&outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr))], bytes_B, len_B);
+	size_t len_B = librist_crypto_srp_authenticator_write_B_bytes(ctx->auth_ctx, &outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr))], sizeof(outpkt) - (EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr)));
 	ctx->last_identifier++;
-	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, (sizeof(struct eap_srp_hdr) + len_B), outpkt);
-	free(outpkt);
+	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, (sizeof(struct eap_srp_hdr) + len_B), outpkt, ctx->use_correct_hashing? 1 :0);
 	return ret;
 }
 
@@ -386,14 +350,13 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 {
 	if (len < (4 + DIGEST_LENGTH))
 		return EAP_LENERR;
-	char *bytes_HAMK;
-	if (!ctx->srp_verifier) {
+
+	if (!ctx->auth_ctx) {
 		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		return -254;
 	}
-	srp_verifier_verify_session(ctx->srp_verifier, &pkt[4], (const unsigned char**)&bytes_HAMK);
-	if (!bytes_HAMK)
-	{
+
+	if (librist_crypto_srp_authenticator_verify_m1(ctx->auth_ctx, ctx->username, &pkt[4]) != 0) {
 		rist_log_priv2(ctx->logging_settings, RIST_LOG_WARN, EAP_LOG_PREFIX"Authentication failed for %s@%s\n", ctx->username, ctx->ip_string);
 		ctx->authentication_state = EAP_AUTH_STATE_FAILED;
 		ctx->tries++;
@@ -403,22 +366,24 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 			ret = -255;
 		}
 		uint8_t buf[EAPOL_EAP_HDRS_OFFSET];
-		send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_FAILURE, ctx->last_identifier, 0, buf);
+		send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_FAILURE, ctx->last_identifier, 0, buf, ctx->use_correct_hashing? 1 :0);
 		eap_reset_data(ctx);
 		return ret;
 	}
+	ctx->authenticated = true;
+
 	uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + 4 + DIGEST_LENGTH)];
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
-	memcpy(&outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 4)], bytes_HAMK, DIGEST_LENGTH);
+	librist_crypto_srp_authenticator_write_M2_bytes(ctx->auth_ctx, &outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 4)]);
 	ctx->last_identifier++;
-	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, (sizeof(*hdr) + 4 + DIGEST_LENGTH), outpkt);
+	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, (sizeof(*hdr) + 4 + DIGEST_LENGTH), outpkt, ctx->use_correct_hashing? 1 :0);
 }
 
 static int process_eap_response_srp_server_validator(struct eapsrp_ctx *ctx)
 {
-	if (srp_verifier_is_authenticated(ctx->srp_verifier))
+	if (ctx->authenticated)
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated %s@%s\n", ctx->username, ctx->ip_string);
@@ -427,13 +392,13 @@ static int process_eap_response_srp_server_validator(struct eapsrp_ctx *ctx)
 		ctx->tries = 0;
 		ctx->last_identifier++;
 		uint8_t buf[EAPOL_EAP_HDRS_OFFSET];
-		send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_SUCCESS, ctx->last_identifier, 0, buf);
+		send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_SUCCESS, ctx->last_identifier, 0, buf, ctx->use_correct_hashing? 1 :0);
 		return 0;
 	}
 	return 0;
 }
 
-static int process_eap_response(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len)
+static int process_eap_response(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, uint8_t gre_version)
 {
 	uint8_t type = pkt[0];
 	ctx->timeout_retries = 0;
@@ -441,7 +406,7 @@ static int process_eap_response(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t le
 	ctx->last_pkt_size = 0;
 	ctx->last_pkt = NULL;
 	if (type == EAP_TYPE_IDENTITY)
-		return process_eap_response_identity(ctx, (len -1), &pkt[1]);
+		return process_eap_response_identity(ctx, (len -1), &pkt[1], gre_version);
 	if (type == EAP_TYPE_SRP_SHA1)
 	{
 		uint8_t subtype = pkt[1];
@@ -466,7 +431,7 @@ static int process_eap_response(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t le
 	return -1;
 }
 
-static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len)
+static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, uint8_t gre_version)
 {
 	if (ctx == NULL)
 		return -1;
@@ -486,10 +451,10 @@ static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len)
 	switch (code)
 	{
 		case EAP_CODE_REQUEST:
-			return process_eap_request(ctx, &pkt[sizeof(*hdr)], (len - sizeof(*hdr)), identifier);
+			return process_eap_request(ctx, &pkt[sizeof(*hdr)], (len - sizeof(*hdr)), identifier, gre_version);
 			break;
 		case EAP_CODE_RESPONSE:
-			return process_eap_response(ctx, &pkt[sizeof(*hdr)], (len - sizeof(*hdr)));
+			return process_eap_response(ctx, &pkt[sizeof(*hdr)], (len - sizeof(*hdr)), gre_version);
 			break;
 		case EAP_CODE_SUCCESS:
 			//handle eap success
@@ -510,7 +475,7 @@ int eap_request_identity(struct eapsrp_ctx *ctx)
 	uint8_t outpkt[EAPOL_EAP_HDRS_OFFSET +1];
 	outpkt[EAPOL_EAP_HDRS_OFFSET] = EAP_TYPE_IDENTITY;
 	ctx->last_identifier = (uint8_t)(prand_u32() >> 24);
-	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, 1, outpkt);
+	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, 1, outpkt, ctx->use_correct_hashing? 1 :0);
 }
 
 int eap_start(struct eapsrp_ctx *ctx)
@@ -545,18 +510,38 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 	peer->eap_ctx = ctx;
 	ctx->peer = peer;
 	ctx->logging_settings = in->logging_settings;
+	ctx->use_correct_hashing = true;
 	if (ctx->role == EAP_ROLE_AUTHENTICATOR)
 	{
-		ctx->authenticator_bytes_salt = malloc(1024);
-		ctx->authenticator_bytes_verifier = malloc(1024);
-		ctx->lookup_func = in->lookup_func;
+		ctx->lookup_func_old = in->lookup_func_old;
 		ctx->lookup_func_userdata = in->lookup_func_userdata;
+		ctx->lookup_func = in->lookup_func;
+		ctx->lookup_func_old = in->lookup_func_old;
 		strcpy(ctx->authenticator_username, in->authenticator_username);
-		if (in->authenticator_len_verifier >0 && in->authenticator_bytes_verifier != NULL)
+#if HAVE_MBEDTLS
+		if (in->authenticator_len_verifier_old >0 && in->authenticator_bytes_verifier_old != NULL) {
+			ctx->authenticator_bytes_verifier_old = malloc(in->authenticator_len_verifier_old);
+			memcpy(ctx->authenticator_bytes_verifier_old, in->authenticator_bytes_verifier_old, in->authenticator_len_verifier_old);
+			ctx->authenticator_len_verifier_old = in->authenticator_len_verifier_old;
+		}
+
+		if (in->authenticator_len_salt_old > 0 && in->authenticator_bytes_salt_old != NULL) {
+			ctx->authenticator_bytes_salt_old = malloc(in->authenticator_len_salt_old  );
+			memcpy(ctx->authenticator_bytes_salt_old, in->authenticator_bytes_salt_old, in->authenticator_len_salt_old);
+			ctx->authenticator_len_salt_old = in->authenticator_len_salt_old;
+		}
+#endif
+		if (in->authenticator_len_verifier >0 && in->authenticator_bytes_verifier != NULL) {
+			ctx->authenticator_bytes_verifier = malloc(in->authenticator_len_verifier);
 			memcpy(ctx->authenticator_bytes_verifier, in->authenticator_bytes_verifier, in->authenticator_len_verifier);
-		if (in->authenticator_len_salt > 0 && in->authenticator_bytes_salt != NULL)
+			ctx->authenticator_len_verifier = in->authenticator_len_verifier;
+		}
+
+		if (in->authenticator_len_salt > 0 && in->authenticator_bytes_salt != NULL) {
+			ctx->authenticator_bytes_salt= malloc(in->authenticator_len_salt  );
 			memcpy(ctx->authenticator_bytes_salt, in->authenticator_bytes_salt, in->authenticator_len_salt);
-		ctx->authenticator_len_salt = in->authenticator_len_salt;
+			ctx->authenticator_len_salt = in->authenticator_len_salt;
+		}
 		ctx->authenticator_len_verifier = in->authenticator_len_verifier;
 		if (!ctx->last_pkt)
 			eap_request_identity(ctx);//immediately request identity
@@ -581,7 +566,7 @@ void eap_delete_ctx(struct eapsrp_ctx **in)
 	*in = NULL;
 }
 
-int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len)
+int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len, uint8_t gre_version)
 {
 	assert(ctx != NULL);
 	struct eapol_hdr *hdr = (struct eapol_hdr *)pkt;
@@ -591,7 +576,7 @@ int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len)
 	switch (hdr->eaptype)
 	{
 		case EAPOL_TYPE_EAP:
-			return process_eap_pkt(ctx, &pkt[sizeof(*hdr)], body_len);
+			return process_eap_pkt(ctx, &pkt[sizeof(*hdr)], body_len, gre_version);
 			break;
 		case EAPOL_TYPE_START:
 			if (ctx->role == EAP_ROLE_AUTHENTICATOR && !ctx->last_pkt)
@@ -638,6 +623,15 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 		}
 	} else if (ctx->role == EAP_ROLE_AUTHENTICATOR && ctx->authentication_state == EAP_AUTH_STATE_SUCCESS &&
 	           now > ctx->last_auth_timestamp + reauth_period) {
+		if (ctx->generation > 0) {
+			uint64_t generation = ctx->generation;
+			//If our cached data matches whatever lookup function would return re-auth is pointless.
+			ctx->lookup_func(ctx->username, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &generation, ctx->lookup_func_userdata);
+			if (generation == ctx->generation) {
+				ctx->last_auth_timestamp = now;
+				return;
+			}
+		}
 		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
 		eap_request_identity(ctx);
 		return;
@@ -663,6 +657,8 @@ static void internal_user_verifier_lookup(char * username,
 							bool *use_default_2048_bit_n_modulus,
 							char **n_modulus_ascii,
 							char **generator_ascii,
+							int *hashversion,
+							uint64_t *generation,
 							void *user_data)
 {
 	(void)n_modulus_ascii;
@@ -670,21 +666,39 @@ static void internal_user_verifier_lookup(char * username,
 	if (user_data == NULL)
 		return;
 
+	if (*generation == 1)
+		return;
+	//This is static data so it can be permanently cached
+	*generation = 1;
+
 	struct eapsrp_ctx *ctx = (struct eapsrp_ctx *)user_data;
 
-	char *decoded_verifier = malloc(1024);
-	char *decoded_salt = malloc(1024);
+	char *decoded_verifier = NULL;
+	char *decoded_salt = NULL;
 
 	if (strcmp(username, ctx->authenticator_username) != 0)
 		goto fail_decode;
 
-	memcpy(decoded_verifier, ctx->authenticator_bytes_verifier, ctx->authenticator_len_verifier);
-	memcpy(decoded_salt, ctx->authenticator_bytes_salt, ctx->authenticator_len_salt);
-
+	if (*hashversion == 0 && HAVE_MBEDTLS) {
+#if HAVE_MBEDTLS
+		decoded_verifier = malloc(ctx->authenticator_len_verifier_old);
+		decoded_salt = malloc(ctx->authenticator_len_salt_old);
+		memcpy(decoded_verifier, ctx->authenticator_bytes_verifier_old, ctx->authenticator_len_verifier_old);
+		memcpy(decoded_salt, ctx->authenticator_bytes_salt_old, ctx->authenticator_len_salt_old);
+		*verifier_len = ctx->authenticator_len_verifier_old;
+		*salt_len = ctx->authenticator_len_salt_old;
+#endif
+	} else {
+		decoded_verifier = malloc(ctx->authenticator_len_verifier);
+		decoded_salt = malloc(ctx->authenticator_len_salt);
+		memcpy(decoded_verifier, ctx->authenticator_bytes_verifier, ctx->authenticator_len_verifier);
+		memcpy(decoded_salt, ctx->authenticator_bytes_salt, ctx->authenticator_len_salt);
+		*verifier_len = ctx->authenticator_len_verifier;
+		*salt_len = ctx->authenticator_len_salt;
+	}
 	*verifier = decoded_verifier;
-	*verifier_len = ctx->authenticator_len_verifier;
 	*salt = decoded_salt;
-	*salt_len = ctx->authenticator_len_salt;
+
 	*use_default_2048_bit_n_modulus = true;
 	goto out;
 
@@ -697,9 +711,24 @@ out:
 	return;
 }
 
-//PUBLIC
-int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_t lookup_func, void *userdata)
+static void old_user_verifier_lookup_wrapper(char * username,
+							size_t *verifier_len, char **verifier,
+							size_t *salt_len, char **salt,
+							bool *use_default_2048_bit_n_modulus,
+							char **n_modulus_ascii,
+							char **generator_ascii,
+							int *hashversion,
+							uint64_t *generation,
+							void *user_data)
 {
+	*hashversion = 0;
+	*generation = 0;
+	struct eapsrp_ctx *ctx = (struct eapsrp_ctx *)user_data;
+	ctx->lookup_func_old(username, verifier_len, verifier, salt_len, salt, use_default_2048_bit_n_modulus, n_modulus_ascii, generator_ascii, user_data);
+}
+
+//PUBLIC
+int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_2_t lookup_func, void *userdata) {
 	if (!peer)
 		return RIST_ERR_NULL_PEER;
 	struct rist_common_ctx *cctx = get_cctx(peer);
@@ -721,13 +750,14 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 				return RIST_ERR_INVALID_STRING_LENGTH;
 			}
 			lookup_func = internal_user_verifier_lookup;
-			struct SRPSession * session = srp_session_new(SRP_SHA256, SRP_NG_2048, NULL, NULL);
+			const char *n = NULL;
+			const char *g = NULL;
+			assert(librist_get_ng_constants(LIBRIST_SRP_NG_2048, &n, &g) ==0);
+#if HAVE_MBEDTLS
+			assert(librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt_old, &ctx->authenticator_len_salt_old, &ctx->authenticator_bytes_verifier_old, &ctx->authenticator_len_verifier_old, false) ==0);
+#endif
+			assert(librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt, &ctx->authenticator_bytes_verifier, &ctx->authenticator_len_verifier, true) ==0);
 			strcpy(ctx->authenticator_username, username);
-			srp_create_salted_verification_key(session, username,
-									   (const unsigned char *)password, strlen(password),
-									   (const unsigned char **)&ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt,
-									   (const unsigned char **)&ctx->authenticator_bytes_verifier, &ctx->authenticator_len_verifier);
-			srp_session_delete(session);
 			userdata = (void *)ctx;
 			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticator, single user\n");
 		}
@@ -767,6 +797,22 @@ int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char
 	strcpy(ctx->password, password);
 	peer->eap_ctx = ctx;
 	rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticatee\n");
+	ctx->use_correct_hashing = true;
 	eap_start(ctx);
 	return 0;
+}
+
+int rist_enable_eap_srp(struct rist_peer *peer, const char *username, const char *password, user_verifier_lookup_t lookup_func, void *userdata)
+{
+	if (!peer)
+		return RIST_ERR_NULL_PEER;
+
+	user_verifier_lookup_2_t pass_lookup = lookup_func? old_user_verifier_lookup_wrapper : NULL;
+	int ret = rist_enable_eap_srp_2(peer, username, password, pass_lookup, NULL);
+	if (ret == 0) {
+		peer->eap_ctx->lookup_func_old = lookup_func;
+		peer->eap_ctx->lookup_func_userdata = peer->eap_ctx;
+		peer->eap_ctx->lookup_func_userdata_old = userdata;
+	}
+	return ret;
 }

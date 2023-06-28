@@ -37,7 +37,6 @@ librist_src_root = meson.current_source_dir()
 
 deps = []
 platform_files = []
-contrib_libs = []
 inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
 
@@ -200,13 +199,28 @@ if get_option('use_tun')
 	endif
 endif
 
+crypto_deps = []
+
 mbedcrypto_lib_found = false
 if use_mbedtls
 	message('Building mbedtls')
 	subdir('contrib/mbedtls')
+
+	crypto_deps += mbedcrypto_lib
 elif use_nettle
-	deps += dependency('nettle')
+	crypto_deps = [dependency('nettle'), dependency('hogweed')]
+	test_mini_gmp = '''
+#include <nettle/bignum.h>
+#if !NETTLE_USE_MINI_GMP
+	#error "Need to link gmp"
+#endif
+'''
+	if not cc.compiles(test_mini_gmp, name: 'Nettle with mini-gmp?', dependencies: crypto_deps)
+		crypto_deps += dependency('gmp')
+	endif
+	crypto_deps += dependency('gnutls')#Just for random numbers at the moment :/
 endif
+deps += crypto_deps
 
 subdir('include')
 
@@ -234,6 +248,19 @@ if not mbedcrypto_lib_found and not use_nettle
 	]
 endif
 
+have_srp = mbedcrypto_lib_found or use_nettle
+
+if have_srp
+    platform_files += 'src/eap.c'
+	platform_files += 'src/crypto/srp_constants.c'
+	platform_files += 'src/crypto/srp.c'
+endif
+
+cdata.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
+cdata.set10('HAVE_NETTLE', use_nettle and not mbedcrypto_lib_found)
+# Generate config.h
+config_file = configure_file(output: 'config.h', configuration: cdata)
+
 librist = library('librist',
 	'src/crypto/crypto.c',
 	'src/crypto/psk.c',
@@ -251,6 +278,7 @@ librist = library('librist',
 	'contrib/stdio-shim.c',
 	'contrib/time-shim.c',
 	'contrib/pthread-shim.c',
+	config_file,
 	platform_files,
 	rev_target,
 	include_directories: inc,
@@ -309,9 +337,6 @@ if get_option('static_analyze')
 endif
 
 librist_dep = declare_dependency(include_directories: inc, link_with : librist)
-
-# Generate config.h
-config_h_target = configure_file(output: 'config.h', configuration: cdata)
 
 if get_option('built_tools')
 	message('Building tools')
