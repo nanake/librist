@@ -44,7 +44,7 @@ uint64_t rist_siphash(uint64_t birthtime, uint32_t seq, const char *phrase)
 
 static bool seeded = false;
 //Generate pseudo-random 32 bit
-uint32_t prand_u32() {
+uint32_t prand_u32(void) {
 	if (!seeded) {
 		srand((unsigned int)timestampNTP_u64());
 		seeded = true;

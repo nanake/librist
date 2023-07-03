@@ -221,7 +221,7 @@ void rist_receiver_data_block_free2(struct rist_data_block **block)
 		free_data_block(block);
 }
 
-uint32_t rist_flow_id_create()
+uint32_t rist_flow_id_create(void)
 {
 	uint32_t u32 = prand_u32();
 	u32 &= ~(1UL << 0);

@@ -144,7 +144,7 @@ void rist_log_priv3(enum rist_log_level level, const char *format, ...)
     va_end(argp);
 }
 
-static int init_once_global()
+static int init_once_global(void)
 {
 	#if defined(_WIN32) && !HAVE_PTHREADS
 	return init_mutex_once(&global_logging_settings.global_logs_lock, &once_var);
