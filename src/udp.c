@@ -17,7 +17,7 @@
 #include "proto/rist_time.h"
 #include "proto/protocol_rtp.h"
 #if HAVE_SRP_SUPPORT
-#include "eap.h"
+#include "proto/eap.h"
 #endif
 #include "crypto/psk.h"
 #include "mpegts.h"

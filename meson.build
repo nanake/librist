@@ -251,7 +251,7 @@ endif
 have_srp = mbedcrypto_lib_found or use_nettle
 
 if have_srp
-    platform_files += 'src/eap.c'
+    platform_files += 'src/proto/eap.c'
 	platform_files += 'src/crypto/srp_constants.c'
 	platform_files += 'src/crypto/srp.c'
 endif

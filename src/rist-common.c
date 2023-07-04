@@ -18,7 +18,7 @@
 #include "proto/rist_time.h"
 #include <sys/types.h>
 #if HAVE_SRP_SUPPORT
-#include "eap.h"
+#include "proto/eap.h"
 #endif
 #include "mpegts.h"
 #include "rist_ref.h"
