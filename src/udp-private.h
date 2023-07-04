@@ -13,9 +13,6 @@
 #include "proto/gre.h"
 #include "proto/rtp.h"
 
-#define SET_BIT(value, pos) (value |= (1U<< pos))
-#define UNSET_BIT(value, pos) (value &= (1U << pos))
-
 #define RIST_PAYLOAD_TYPE_UNKNOWN           0x0
 #define RIST_PAYLOAD_TYPE_PING              0x1
 #define RIST_PAYLOAD_TYPE_PING_RESP         0x2

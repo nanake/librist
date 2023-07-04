@@ -507,6 +507,10 @@ void librist_crypto_srp_authenticator_write_M2_bytes(struct librist_crypto_srp_a
 	memcpy(m2_buf, ctx->m2, sizeof(ctx->m2));
 }
 
+const uint8_t *librist_crypto_srp_authenticator_get_key(struct librist_crypto_srp_authenticator_ctx *ctx) {
+	return ctx->key;
+}
+
 //We received A, verify that it's secure, set b and then calculate:
 //k=SHA256(N,g)
 //B=(kv + g^b) % N
@@ -822,6 +826,10 @@ int librist_crypto_srp_client_verify_m2(struct librist_crypto_srp_client_ctx *ct
 		return ret;
 
 	return memcmp(m2, calc_m2, sizeof(calc_m2));
+}
+
+const uint8_t *librist_crypto_srp_client_get_key(struct librist_crypto_srp_client_ctx *ctx) {
+	return ctx->key;
 }
 
 struct librist_crypto_srp_client_ctx *librist_crypto_srp_client_ctx_create(bool default_ng, uint8_t *N_bytes, size_t N_len, uint8_t *g_bytes, size_t g_len, uint8_t *s_bytes, size_t s_len, bool correct) {

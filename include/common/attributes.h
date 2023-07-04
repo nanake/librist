@@ -90,4 +90,7 @@ typedef signed int ssize_t;
 #define STR_HELPER(x) #x
 #define STR(x) STR_HELPER(x)
 
+#define SET_BIT(value, pos) (value |= (1U << pos))
+#define UNSET_BIT(value, pos) (value &= (1U << pos))
+
 #endif

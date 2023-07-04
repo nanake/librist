@@ -9,7 +9,6 @@
 #include "psk.h"
 #include "log-private.h"
 #include "crypto-private.h"
-#include "udp-private.h"//SET/UNSET BIT macros, they should be in a more logical place.
 #include <string.h>
 
 #if HAVE_MBEDTLS
@@ -240,7 +239,7 @@ void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t
     return;
 }
 
-int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, size_t passphrase_len) {
+int _librist_crypto_psk_set_passphrase(struct rist_key *key, const char *passsphrase, size_t passphrase_len) {
 	if (passphrase_len > sizeof(key->password) -1) {
 		return -1;
 	}

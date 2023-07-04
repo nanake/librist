@@ -615,7 +615,8 @@ struct rist_peer {
 	struct rist_keepalive_data data;
 };
 
-RIST_PRIV void librist_peer_update_rx_passphrase(struct rist_peer *peer, uint8_t *passphrase, size_t passphrase_len, bool immediate);
+RIST_PRIV void librist_peer_update_rx_passphrase(struct rist_peer *peer, const uint8_t *passphrase, size_t passphrase_len, bool immediate);
+RIST_PRIV void librist_peer_update_tx_passphrase(struct rist_peer *peer, const uint8_t *passphrase, size_t passphrase_len, bool immediate);
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {
 	if (RIST_UNLIKELY(!ctx))

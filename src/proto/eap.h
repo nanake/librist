@@ -80,6 +80,8 @@ struct eapsrp_ctx
 	uint8_t last_identifier;
 	int authentication_state;
 	uint8_t tries;
+	bool use_key_as_passphrase;
+	bool did_first_auth;
 
 	uint8_t *last_pkt;
 	size_t last_pkt_size;

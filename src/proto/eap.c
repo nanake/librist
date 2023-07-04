@@ -6,6 +6,7 @@
  */
 
 #include "eap.h"
+#include "common/attributes.h"
 #include "config.h"
 #include "endian-shim.h"
 #include "crypto/crypto-private.h"
@@ -185,6 +186,10 @@ static int process_eap_request_srp_server_key(struct eapsrp_ctx *ctx, uint8_t id
 	offset += 4;
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_KEY;
+	if (ctx->use_key_as_passphrase) {
+		SET_BIT(response[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 3)], 0);
+		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_client_get_key(ctx->client_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+	}
 	librist_crypto_srp_client_write_M1_bytes(ctx->client_ctx, &response[offset]);
 	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, out_len, response, ctx->eapversion3? 3 :2);
 	return ret;
@@ -198,6 +203,11 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 			rist_log_priv2(ctx->logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated\n");
+		bool set_passphrase = CHECK_BIT(pkt[3], 0);
+		if (set_passphrase) {
+			librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_client_get_key(ctx->client_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+		}
+		ctx->did_first_auth = true;
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
@@ -372,11 +382,19 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 		return ret;
 	}
 	ctx->authenticated = true;
-
+	bool set_passphrase = CHECK_BIT(pkt[3], 0);
+	if (set_passphrase) {
+		librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+	}
+	ctx->did_first_auth = true;
 	uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + 4 + DIGEST_LENGTH)];
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
+	if (ctx->use_key_as_passphrase) {
+		SET_BIT(outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 3)], 0);
+		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+	}
 	librist_crypto_srp_authenticator_write_M2_bytes(ctx->auth_ctx, &outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 4)]);
 	ctx->last_identifier++;
 	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, (sizeof(*hdr) + 4 + DIGEST_LENGTH), outpkt, ctx->eapversion3? 3 :2);
