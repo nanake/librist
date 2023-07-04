@@ -529,8 +529,13 @@ struct rist_peer {
 	uint32_t missing_counter_max;
 
 	/* Encryption */
+	bool supports_otf_passphrase_change;
 	struct rist_key key_tx; // used for transmitted packets
 	struct rist_key key_rx; // used for received packets
+	bool key_rx_odd_active;
+	bool key_tx_odd_active;
+	struct rist_key key_tx_odd; // used for transmitted packets
+	struct rist_key key_rx_odd; // used for received packets
 	struct eapsrp_ctx *eap_ctx;
 	int eap_authentication_state;
 	uint8_t rist_gre_version;
@@ -609,6 +614,8 @@ struct rist_peer {
 
 	struct rist_keepalive_data data;
 };
+
+RIST_PRIV void librist_peer_update_rx_passphrase(struct rist_peer *peer, uint8_t *passphrase, size_t passphrase_len, bool immediate);
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {
 	if (RIST_UNLIKELY(!ctx))

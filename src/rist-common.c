@@ -1302,8 +1302,10 @@ struct rist_peer *_librist_peer_create_common(struct rist_common_ctx *cctx, stru
 	}
 
 	if (key_size) {
-		_librist_crypto_psk_rist_key_init(&p->key_tx, key_size, config->key_rotation, config->secret);
+		_librist_crypto_psk_rist_key_init(&p->key_tx, key_size, config->key_rotation, config->secret, false);
+		_librist_crypto_psk_rist_key_init(&p->key_tx_odd, key_size, config->key_rotation, config->secret, true);
 		_librist_crypto_psk_rist_key_clone(&p->key_tx, &p->key_rx);
+		_librist_crypto_psk_rist_key_clone(&p->key_tx_odd, &p->key_rx_odd);
 	}
 
 	if (config->keepalive_interval > 0) {
@@ -2297,7 +2299,10 @@ void sender_peer_append(struct rist_sender *ctx, struct rist_peer *peer)
 static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *peer)
 {
 	_librist_crypto_psk_rist_key_clone(&peer_src->key_rx, &peer->key_rx);
+	_librist_crypto_psk_rist_key_clone(&peer_src->key_rx_odd, &peer->key_rx_odd);
 	_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx);
+	_librist_crypto_psk_rist_key_clone(&peer_src->key_tx, &peer->key_tx_odd);
+	peer->key_tx_odd_active = peer_src->key_tx_odd_active;
 	strncpy(&peer->cname[0], &peer_src->cname[0], RIST_MAX_STRING_SHORT);
 	strncpy(&peer->miface[0], &peer_src->miface[0], RIST_MAX_STRING_SHORT);
 	peer->config.weight = peer_src->config.weight;
@@ -2451,7 +2456,9 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		}
 
 		size_t nonce_offset = 0;
+		bool odd_nonce = false;
 		if (has_key) {
+			odd_nonce = CHECK_BIT(recv_buf[nonce_offset], 7);
 			nonce_offset = payload_offset;
 			payload_offset += 4;
 		}
@@ -2486,6 +2493,9 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 				p->rist_gre_version = rist_gre_version;
 #endif
 			k = &p->key_rx;
+			if (odd_nonce)
+				k = &p->key_rx_odd;
+			p->key_rx_odd_active = odd_nonce;
 			//Read H bit and set keysize accordingly
 			if (p->rist_gre_version)
 			{
@@ -4043,4 +4053,16 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 	}
 	free(ctx);
 	ctx = NULL;
+}
+
+void librist_peer_update_rx_passphrase(struct rist_peer *peer, uint8_t *passphrase, size_t passphrase_len, bool immediate) {
+	if (immediate || !peer->supports_otf_passphrase_change) {
+		_librist_crypto_psk_set_passphrase(&peer->key_rx, (char *)passphrase, passphrase_len);
+		_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, (char *)passphrase, passphrase_len);
+	} else if (peer->supports_otf_passphrase_change) {
+		if (!peer->key_rx_odd_active)
+			_librist_crypto_psk_set_passphrase(&peer->key_rx, (char *)passphrase, passphrase_len);
+		else
+			_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, (char *)passphrase, passphrase_len);
 	}
+}

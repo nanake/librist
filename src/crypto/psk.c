@@ -9,6 +9,7 @@
 #include "psk.h"
 #include "log-private.h"
 #include "crypto-private.h"
+#include "udp-private.h"//SET/UNSET BIT macros, they should be in a more logical place.
 #include <string.h>
 
 #if HAVE_MBEDTLS
@@ -33,7 +34,7 @@
 #include <stdint.h>
 
 //TODO: handle failures?
-int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, uint32_t rotation, const char *password)
+int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, uint32_t rotation, const char *password, bool odd)
 {
 	strcpy(key->password, password);
 	key->key_size = key_size;
@@ -45,6 +46,7 @@ int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, u
 #elif defined(LINUX_CRYPTO)
 	linux_crypto_init(&key->linux_crypto_ctx);
 #endif
+	key->odd = odd;
 	return 0;
 }
 
@@ -74,6 +76,7 @@ int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key 
 #elif defined(LINUX_CRYPTO)
 	linux_crypto_init(&key_out->linux_crypto_ctx);
 #endif
+	key_out->odd = key_in->odd;
 	return 0;
 }
 
@@ -192,6 +195,10 @@ static void _librist_crypto_psk_generate_nonce(struct rist_key *key) {
 	} while (!nonce_val);
 
 	memcpy(key->gre_nonce, &nonce_val, sizeof(key->gre_nonce));
+
+    UNSET_BIT(key->gre_nonce[0], 7);
+    if (key->odd)
+        SET_BIT(key->gre_nonce[0], 7);
 }
 
 void _librist_crypto_psk_decrypt(struct rist_key *key, uint8_t nonce[4], uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)

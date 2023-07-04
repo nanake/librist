@@ -91,27 +91,30 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 			modifying_payload = true;
 			assert(payload_wr);
 		}
+		struct rist_key *key = &p->key_tx;
+		if (p->key_tx_odd_active)
+			key = &p->key_tx_odd;
 		//Data that should be encrypted is part of the header
 		if (hdr_payload_offset != hdr_len) {
 #if HAVE_MBEDTLS
 			//MbedTLS allows us to continue encryption, so we can encrypt hdr & payload in 2 ops
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, &hdr_buf[hdr_payload_offset], &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
-			_librist_crypto_psk_encrypt_continue(&p->key_tx, payload, payload_wr, payload_len);
+			_librist_crypto_psk_encrypt(key, htobe32(seq), gre_version, &hdr_buf[hdr_payload_offset], &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
+			_librist_crypto_psk_encrypt_continue(key, payload, payload_wr, payload_len);
 #else
 			memcpy(payload_wr, &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
 			memcpy(&payload_wr[hdr_len - hdr_payload_offset], payload, payload_len);
 			payload_len += (hdr_len - hdr_payload_offset);
 			hdr_len -= (hdr_len - hdr_payload_offset);
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, payload_wr, payload_wr, payload_len);
+			_librist_crypto_psk_encrypt(key, htobe32(seq), gre_version, payload_wr, payload_wr, payload_len);
 #endif
 		} else {
 			//Single encryption pass suffices
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, payload, payload_wr, payload_len);
+			_librist_crypto_psk_encrypt(key, htobe32(seq), gre_version, payload, payload_wr, payload_len);
 		}
 
 		SET_BIT(hdr->flags1, 5); // set key bit
 		//Write key, our nonce is stored in network byte order (even though it's uint32_t), so just memcpy it
-		memcpy(&hdr_buf[nonce_offset], &p->key_tx.gre_nonce, sizeof(p->key_tx.gre_nonce));
+		memcpy(&hdr_buf[nonce_offset], key->gre_nonce, sizeof(p->key_tx.gre_nonce));
 	}
 
 	ssize_t ret;
