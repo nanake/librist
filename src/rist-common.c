@@ -2450,9 +2450,9 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			payload_offset += 4;
 		}
 
-		uint32_t nonce = 0;
+		size_t nonce_offset = 0;
 		if (has_key) {
-			memcpy(&nonce, &recv_buf[payload_offset], sizeof(nonce));//We consume this in network byte order!
+			nonce_offset = payload_offset;
 			payload_offset += 4;
 		}
 
@@ -2494,7 +2494,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			}
 			p = peer;
 
-			_librist_crypto_psk_decrypt(k, nonce, htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
+			_librist_crypto_psk_decrypt(k, &recv_buf[nonce_offset], htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
 			if (k->bad_decryption)
 				return;
 		} else if (k->key_size && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL && (!has_seq || !has_key)) {

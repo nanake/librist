@@ -100,7 +100,7 @@ static void _librist_crypto_aes_key(struct rist_key *key)
 
     ret = mbedtls_pkcs5_pbkdf2_hmac(
         &sha_ctx, (const unsigned char *)key->password, strlen(key->password),
-        (const uint8_t *)&key->gre_nonce, sizeof(key->gre_nonce),
+        key->gre_nonce, sizeof(key->gre_nonce),
         RIST_PBKDF2_HMAC_SHA256_ITERATIONS, key->key_size / 8, aes_key);
     if (ret != 0) {
             // rist_log_priv(cctx, RIST_LOG_ERROR, "Mbed TLS pbkdf2 function
@@ -110,12 +110,12 @@ static void _librist_crypto_aes_key(struct rist_key *key)
 #elif HAVE_NETTLE
     nettle_pbkdf2_hmac_sha256(strlen(key->password),(const uint8_t*)key->password,
 							  RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
-							  sizeof(key->gre_nonce), (const uint8_t*)&key->gre_nonce,
+							  sizeof(key->gre_nonce), key->gre_nonce,
 							  key->key_size/8, aes_key);
 #else
     fastpbkdf2_hmac_sha256(
             (const void *) key->password, strlen(key->password),
-            (const void *) &key->gre_nonce, sizeof(key->gre_nonce),
+            (const void *) key->gre_nonce, sizeof(key->gre_nonce),
             RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
             aes_key, key->key_size / 8);
 #endif
@@ -185,13 +185,23 @@ static void _librist_crypto_psk_prepare_iv(struct rist_key *key, uint8_t gre_ver
     memcpy(key->iv + copy_offset, &seq_nbe, sizeof(seq_nbe));
 }
 
-void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
+static void _librist_crypto_psk_generate_nonce(struct rist_key *key) {
+	uint32_t nonce_val;
+	do {
+		nonce_val = prand_u32();
+	} while (!nonce_val);
+
+	memcpy(key->gre_nonce, &nonce_val, sizeof(key->gre_nonce));
+}
+
+void _librist_crypto_psk_decrypt(struct rist_key *key, uint8_t nonce[4], uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
-    if (!nonce)
+	uint32_t nonce_val = *((uint32_t *)nonce);
+    if (!nonce_val)
         return;
 
-    if (nonce != key->gre_nonce) {
-        key->gre_nonce = nonce;
+    if (memcmp(nonce, key->gre_nonce, sizeof(key->gre_nonce)) != 0) {
+        memcpy(key->gre_nonce, nonce, sizeof(key->gre_nonce));
         _librist_crypto_aes_key(key);
         key->bad_decryption = false;
         key->bad_count = 0;
@@ -210,10 +220,9 @@ void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t 
 
 void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version,const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
 {
-    if (!key->gre_nonce || (key->used_times +1) > RIST_AES_KEY_REUSE_TIMES || (key->key_rotation > 0 && key->used_times >= key->key_rotation)) {
-        do {
-            key->gre_nonce = prand_u32();
-        } while (!key->gre_nonce);
+    uint32_t nonce_val = *((uint32_t *)key->gre_nonce);
+    if (!nonce_val || (key->used_times +1) > RIST_AES_KEY_REUSE_TIMES || (key->key_rotation > 0 && key->used_times >= key->key_rotation)) {
+        _librist_crypto_psk_generate_nonce(key);
         _librist_crypto_aes_key(key);
     }
     _librist_crypto_psk_prepare_iv(key, gre_version, seq_nbe);
@@ -229,9 +238,7 @@ int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, 
 		return -1;
 	}
 	memcpy(key->password, passsphrase, passphrase_len);
-	do {
-		key->gre_nonce = prand_u32();
-	} while (!key->gre_nonce);
+	_librist_crypto_psk_generate_nonce(key);
 	_librist_crypto_aes_key(key);
 	return 0;
 }

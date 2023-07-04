@@ -31,7 +31,7 @@
 
 struct rist_key {
 	uint32_t key_size;
-	uint32_t gre_nonce;
+	uint8_t gre_nonce[4];
 	uint8_t iv[AES_BLOCK_SIZE];
 #if HAVE_MBEDTLS
 	size_t aes_offset;
@@ -48,12 +48,13 @@ struct rist_key {
     char password[128];
     bool bad_decryption;
     int bad_count;
+	bool odd;
 };
 
 RIST_PRIV int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, uint32_t rotation, const char *password);
 RIST_PRIV int _librist_crypto_psk_rist_key_destroy(struct rist_key *key);
 RIST_PRIV int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key *key_out);
-RIST_PRIV void _librist_crypto_psk_decrypt(struct rist_key *key, uint32_t nonce, uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
+RIST_PRIV void _librist_crypto_psk_decrypt(struct rist_key *key, uint8_t nonce[4], uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV void _librist_crypto_psk_encrypt_continue(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV int _librist_crypto_psk_set_passphrase(struct rist_key *key, char *passsphrase, size_t passphrase_len);
