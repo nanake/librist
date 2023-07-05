@@ -35,7 +35,8 @@
 //TODO: handle failures?
 int _librist_crypto_psk_rist_key_init(struct rist_key *key, uint32_t key_size, uint32_t rotation, const char *password, bool odd)
 {
-	strcpy(key->password, password);
+	key->password_len = strlen(password);
+	memcpy(key->password, password, key->password_len);
 	key->key_size = key_size;
 	key->key_rotation = rotation;
 #if HAVE_MBEDTLS
@@ -65,7 +66,8 @@ int _librist_crypto_psk_rist_key_destroy(struct rist_key *key)
 
 int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct rist_key *key_out)
 {
-    strcpy(key_out->password, key_in->password);
+	key_out->password_len = key_in->password_len;
+    memcpy(key_out->password, key_in->password, key_in->password_len);
     key_out->key_size = key_in->key_size;
     key_out->key_rotation = key_in->key_rotation;
 #if HAVE_MBEDTLS
@@ -101,7 +103,7 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     }
 
     ret = mbedtls_pkcs5_pbkdf2_hmac(
-        &sha_ctx, (const unsigned char *)key->password, strlen(key->password),
+        &sha_ctx, (const unsigned char *)key->password, key->password_len,
         key->gre_nonce, sizeof(key->gre_nonce),
         RIST_PBKDF2_HMAC_SHA256_ITERATIONS, key->key_size / 8, aes_key);
     if (ret != 0) {
@@ -110,13 +112,13 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     }
     mbedtls_md_free(&sha_ctx);
 #elif HAVE_NETTLE
-    nettle_pbkdf2_hmac_sha256(strlen(key->password),(const uint8_t*)key->password,
+    nettle_pbkdf2_hmac_sha256(key->password_len,(const uint8_t*)key->password,
 							  RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
 							  sizeof(key->gre_nonce), key->gre_nonce,
 							  key->key_size/8, aes_key);
 #else
     fastpbkdf2_hmac_sha256(
-            (const void *) key->password, strlen(key->password),
+            (const void *) key->password, key->password_len,
             (const void *) key->gre_nonce, sizeof(key->gre_nonce),
             RIST_PBKDF2_HMAC_SHA256_ITERATIONS,
             aes_key, key->key_size / 8);
@@ -147,6 +149,33 @@ static void _librist_crypto_aes_key(struct rist_key *key)
     aes_key_setup(aes_key, key->aes_key_sched, key->key_size);
 #endif
     key->used_times = 0;
+}
+
+//This doesn't really belong here (not PSK related), but since all other crypto interop stuff is here it goes in here..
+void _librist_crypto_aes_ctr(const uint8_t key[], int key_size, uint8_t iv[], const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len) {
+#if HAVE_MBEDTLS
+	mbedtls_aes_context ctx;
+	mbedtls_aes_init(&ctx);
+	mbedtls_aes_setkey_enc(&ctx, key, key_size);
+	uint8_t stream_block[16] = {0};
+	mbedtls_aes_crypt_ctr(&ctx, payload_len, 0, iv, stream_block, inbuf, outbuf);
+	mbedtls_aes_free(&ctx);
+#elif HAVE_NETTLE
+    struct aes_ctx aes_ctx;
+    memset(&aes_ctx, 0, sizeof(aes_ctx));
+    nettle_cipher_func *f;
+    switch (key_size) {
+    case 256:
+		nettle_aes256_set_encrypt_key(&aes_ctx.u.ctx256, key);
+		f = (nettle_cipher_func *)nettle_aes256_encrypt;
+		break;
+	case 128:
+		nettle_aes128_set_encrypt_key(&aes_ctx.u.ctx128, key);
+		f = (nettle_cipher_func *)nettle_aes192_encrypt;
+		break;
+	}
+	nettle_ctr_crypt(&aes_ctx.u, f, AES_BLOCK_SIZE, iv, payload_len, outbuf, inbuf);
+#endif
 }
 
 static void _librist_crypto_psk_aes_ctr(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len)
@@ -239,15 +268,23 @@ void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t
     return;
 }
 
-int _librist_crypto_psk_set_passphrase(struct rist_key *key, const char *passsphrase, size_t passphrase_len) {
+int _librist_crypto_psk_set_passphrase(struct rist_key *key, const uint8_t *passsphrase, size_t passphrase_len) {
 	if (passphrase_len > sizeof(key->password) -1) {
 		return -1;
 	}
 	memcpy(key->password, passsphrase, passphrase_len);
+	key->password_len = passphrase_len;
+	key->used_times = 0;
 	_librist_crypto_psk_generate_nonce(key);
 	_librist_crypto_aes_key(key);
 	return 0;
 }
+
+void _librist_crypto_psk_get_passphrase(struct rist_key *key, const uint8_t **passphrase, size_t *passphrase_len) {
+	*passphrase = key->password;
+	*passphrase_len = key->password_len;
+}
+
 void _librist_crypto_psk_encrypt_continue(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len) {
 	_librist_crypto_psk_aes_ctr(key, inbuf, outbuf, payload_len);
 }

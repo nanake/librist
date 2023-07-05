@@ -45,7 +45,8 @@ struct rist_key {
 	uint32_t aes_key_sched[60];//Do we still need this fallback?
 	uint32_t key_rotation;
     uint64_t used_times;
-    char password[128];
+	uint8_t password[128];
+	size_t password_len;
     bool bad_decryption;
     int bad_count;
 	bool odd;
@@ -57,6 +58,7 @@ RIST_PRIV int _librist_crypto_psk_rist_key_clone(struct rist_key *key_in, struct
 RIST_PRIV void _librist_crypto_psk_decrypt(struct rist_key *key, uint8_t nonce[4], uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV void _librist_crypto_psk_encrypt(struct rist_key *key, uint32_t seq_nbe, uint8_t gre_version, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 RIST_PRIV void _librist_crypto_psk_encrypt_continue(struct rist_key *key, const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
-RIST_PRIV int _librist_crypto_psk_set_passphrase(struct rist_key *key, const char *passsphrase, size_t passphrase_len);
-RIST_PRIV void _librist_crypto_aes_ctr(uint8_t key[], int key_size, uint8_t iv[], const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
+RIST_PRIV int _librist_crypto_psk_set_passphrase(struct rist_key *key, const uint8_t *passsphrase, size_t passphrase_len);
+RIST_PRIV void _librist_crypto_psk_get_passphrase(struct rist_key *key, const uint8_t **passphrase, size_t *passphrase_len);
+RIST_PRIV void _librist_crypto_aes_ctr(const uint8_t key[], int key_size, uint8_t iv[], const uint8_t inbuf[], uint8_t outbuf[], size_t payload_len);
 #endif

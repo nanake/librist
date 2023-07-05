@@ -2678,7 +2678,7 @@ protocol_bypass:
 		p->rist_gre_version = rist_gre_version;
 		if (cctx->profile > RIST_PROFILE_SIMPLE
 #if HAVE_SRP_SUPPORT
-			&& ((p->eap_ctx && p->eap_ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
+			&& ((p->eap_ctx && eap_is_authenticated(p->eap_ctx) >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
 #endif
 			) {
 			//Answer their keep alive with one from us
@@ -2699,7 +2699,7 @@ protocol_bypass:
 	//Only allow upgrade of gre version
 	if (p->rist_gre_version < rist_gre_version
 #if HAVE_SRP_SUPPORT
-			&& ((p->eap_ctx && p->eap_ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
+			&& ((p->eap_ctx && eap_is_authenticated(p->eap_ctx)) || !p->eap_ctx)
 #endif
 	) {
 		//Our GRE version got upgraded, try kickstarting buffer negotiation
@@ -2837,7 +2837,7 @@ protocol_bypass:
 	}
 	//rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Port is %d !!!!!\n", addr4.sin_port);
 #if HAVE_SRP_SUPPORT
-	if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && p->eap_ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
+	if (payload.type != RIST_PAYLOAD_TYPE_EAPOL && p->eap_ctx && !eap_is_authenticated(p->eap_ctx))
 	{
 		if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Waiting for EAP authentication to happen for peer connecting on port %u\n", ((struct sockaddr_in *)addr)->sin_port);
@@ -2913,7 +2913,7 @@ protocol_bypass:
 					if (eapret == 255)//permanent failure, we allow a few retries
 						failed_eap = true;
 				}
-				else if (p->eap_authentication_state != 2 && p->eap_ctx->authentication_state == 1) {
+				else if (p->eap_authentication_state != 2 && eap_is_authenticated(p->eap_ctx)) {
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 						"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
 					p->eap_authentication_state = 2;
@@ -4057,24 +4057,32 @@ void rist_sender_destroy_local(struct rist_sender *ctx)
 
 void librist_peer_update_rx_passphrase(struct rist_peer *peer, const uint8_t *passphrase, size_t passphrase_len, bool immediate) {
 	if (immediate || !peer->supports_otf_passphrase_change) {
-		_librist_crypto_psk_set_passphrase(&peer->key_rx, (char *)passphrase, passphrase_len);
-		_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, (char *)passphrase, passphrase_len);
+		_librist_crypto_psk_set_passphrase(&peer->key_rx, passphrase, passphrase_len);
+		_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, passphrase, passphrase_len);
 	} else if (peer->supports_otf_passphrase_change) {
 		if (!peer->key_rx_odd_active)
-			_librist_crypto_psk_set_passphrase(&peer->key_rx, (char *)passphrase, passphrase_len);
+			_librist_crypto_psk_set_passphrase(&peer->key_rx, passphrase, passphrase_len);
 		else
-			_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, (char *)passphrase, passphrase_len);
+			_librist_crypto_psk_set_passphrase(&peer->key_rx_odd, passphrase, passphrase_len);
 	}
+}
+
+void librist_peer_get_current_tx_passphrase(struct rist_peer *peer, const uint8_t **passphrase, size_t *passphrase_len) {
+	if (peer->key_tx_odd_active) {
+		_librist_crypto_psk_get_passphrase(&peer->key_tx_odd, passphrase, passphrase_len);
+		return;
+	}
+	_librist_crypto_psk_get_passphrase(&peer->key_tx, passphrase, passphrase_len);
 }
 
 void librist_peer_update_tx_passphrase(struct rist_peer *peer, const uint8_t *passphrase, size_t passphrase_len, bool immediate) {
 	if (immediate || !peer->supports_otf_passphrase_change) {
-		_librist_crypto_psk_set_passphrase(&peer->key_tx, (char *)passphrase, passphrase_len);
-		_librist_crypto_psk_set_passphrase(&peer->key_tx_odd, (char *)passphrase, passphrase_len);
+		_librist_crypto_psk_set_passphrase(&peer->key_tx, passphrase, passphrase_len);
+		_librist_crypto_psk_set_passphrase(&peer->key_tx_odd, passphrase, passphrase_len);
 	} else if (peer->supports_otf_passphrase_change) {
 		if (!peer->key_rx_odd_active)
-			_librist_crypto_psk_set_passphrase(&peer->key_tx, (char *)passphrase, passphrase_len);
+			_librist_crypto_psk_set_passphrase(&peer->key_tx, passphrase, passphrase_len);
 		else
-			_librist_crypto_psk_set_passphrase(&peer->key_tx_odd, (char *)passphrase, passphrase_len);
+			_librist_crypto_psk_set_passphrase(&peer->key_tx_odd, passphrase, passphrase_len);
 	}
 }

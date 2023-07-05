@@ -60,6 +60,7 @@ RIST_PACKED_STRUCT(eap_hdr, {
 //either
 #define EAP_SRP_SUBTYPE_SERVER_VALIDATOR 3
 #define EAP_SRP_SUBTYPE_LWRECHALLENGE 4
+#define EAP_SRP_SUBTYPE_PASSWORD_REQUEST_RESPONSE 0x10
 
 RIST_PACKED_STRUCT(eap_srp_hdr, {
 	uint8_t type;
@@ -74,51 +75,9 @@ RIST_PACKED_STRUCT(eap_srp_hdr, {
 #define EAP_AUTH_STATE_SUCCESS 1
 #define EAP_AUTH_STATE_REAUTH 2
 
-struct eapsrp_ctx
-{
-	uint_fast8_t role;
-	uint8_t last_identifier;
-	int authentication_state;
-	uint8_t tries;
-	bool use_key_as_passphrase;
-	bool did_first_auth;
-
-	uint8_t *last_pkt;
-	size_t last_pkt_size;
-	uint8_t timeout_retries;
-	uint64_t last_timestamp;
-	uint64_t last_auth_timestamp;
-
-	char username[256];
-	char password[256];
-
-	uint64_t generation;
-	struct librist_crypto_srp_authenticator_ctx *auth_ctx;
-	struct librist_crypto_srp_client_ctx *client_ctx;
-	bool authenticated;
-	user_verifier_lookup_t lookup_func_old;
-	user_verifier_lookup_2_t lookup_func;
-	void *lookup_func_userdata_old;
-	void *lookup_func_userdata;
-	struct rist_peer *peer;
-	char ip_string[46];
-	struct rist_logging_settings *logging_settings;
-
-	// authenticator data (single user mode)
-	char authenticator_username[256];
-#if HAVE_MBEDTLS
-	size_t authenticator_len_verifier_old;
-	uint8_t *authenticator_bytes_verifier_old;
-	size_t authenticator_len_salt_old;
-	uint8_t *authenticator_bytes_salt_old;
-#endif
-	size_t authenticator_len_verifier;
-	uint8_t *authenticator_bytes_verifier;
-	size_t authenticator_len_salt;
-	uint8_t *authenticator_bytes_salt;
-
-	bool eapversion3;
-};
+#define EAP_PASSPHRASE_STATE_SENDING 0
+#define EAP_PASSPHRASE_STATE_SUCCESS 0
+#define EAP_PASSPHRASE_STATE_FAILED 0
 
 #define EAP_LENERR -1
 #define EAP_WRONGIDENTIFIER -2
@@ -126,6 +85,7 @@ struct eapsrp_ctx
 #define EAP_UNEXPECTEDREQUEST -4
 #define EAP_SRP_WRONGSUBTYPE -4
 
+struct eapsrp_ctx;
 RIST_PRIV int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len);
 RIST_PRIV int eap_request_identity(struct eapsrp_ctx *ctx);
 RIST_PRIV int eap_start(struct eapsrp_ctx *ctx);
