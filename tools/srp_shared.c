@@ -21,6 +21,10 @@
 #include <sys/stat.h>
 
 #ifdef _WIN32
+#include <windows.h>
+#endif
+
+#if defined(_WIN32) && !defined(stat)
 #define stat _stat
 #endif
 
@@ -146,14 +150,35 @@ void user_verifier_lookup(char * username,
 		return;
 
 	char *srpfile = user_data;
+	if (!generation)
+		return;
 
+#ifdef _WIN32
+	HANDLE hfile = CreateFile(
+		srpfile,
+		GENERIC_READ,
+		FILE_SHARE_READ,
+		NULL,
+		OPEN_EXISTING,
+		FILE_ATTRIBUTE_NORMAL,
+		NULL);
+	FILETIME mtime;
+
+	if (hfile == INVALID_HANDLE_VALUE)
+		return;
+
+	if (!GetFileTime(hfile, NULL, NULL, &mtime))
+		return;
+
+	CloseHandle(hfile);
+	*generation = ((uint64_t)mtime.dwHighDateTime << 32) | mtime.dwLowDateTime;
+#else
 	struct stat buf;
 	if (stat(srpfile, &buf) != 0)
 		return;
 
-	if (!generation)
-		return;
 	*generation = (buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
+#endif
 
 	if (!verifier || !verifier_len || !salt || !salt_len || !hashversion || !use_default_2048_bit_n_modulus)
 		return;
