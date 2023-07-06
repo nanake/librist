@@ -1301,12 +1301,10 @@ struct rist_peer *_librist_peer_create_common(struct rist_common_ctx *cctx, stru
 		return NULL;
 	}
 
-	if (key_size) {
-		_librist_crypto_psk_rist_key_init(&p->key_tx, key_size, config->key_rotation, config->secret, false);
-		_librist_crypto_psk_rist_key_init(&p->key_tx_odd, key_size, config->key_rotation, config->secret, true);
-		_librist_crypto_psk_rist_key_clone(&p->key_tx, &p->key_rx);
-		_librist_crypto_psk_rist_key_clone(&p->key_tx_odd, &p->key_rx_odd);
-	}
+	_librist_crypto_psk_rist_key_init(&p->key_tx, key_size, config->key_rotation, config->secret, false);
+	_librist_crypto_psk_rist_key_init(&p->key_tx_odd, key_size, config->key_rotation, config->secret, true);
+	_librist_crypto_psk_rist_key_clone(&p->key_tx, &p->key_rx);
+	_librist_crypto_psk_rist_key_clone(&p->key_tx_odd, &p->key_rx_odd);
 
 	if (config->keepalive_interval > 0) {
 		p->rtcp_keepalive_interval = config->keepalive_interval * RIST_CLOCK;
@@ -3613,7 +3611,9 @@ int rist_peer_remove(struct rist_common_ctx *ctx, struct rist_peer *peer, struct
 		peer->sd = -1;
 	}
 	_librist_crypto_psk_rist_key_destroy(&peer->key_rx);
+	_librist_crypto_psk_rist_key_destroy(&peer->key_rx_odd);
 	_librist_crypto_psk_rist_key_destroy(&peer->key_tx);
+	_librist_crypto_psk_rist_key_destroy(&peer->key_tx_odd);
 #if HAVE_SRP_SUPPORT
 	eap_delete_ctx(&peer->eap_ctx);
 #endif
