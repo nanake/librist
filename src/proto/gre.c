@@ -18,9 +18,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-
 ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, uint16_t proto, uint8_t *payload, size_t payload_len, uint16_t src_port, uint16_t dst_port, uint8_t gre_version) {
-	bool encrypt = (p->key_tx.key_size > 0);
+	bool encrypt = (p->key_tx.key_size > 0) && proto != RIST_GRE_PROTOCOL_TYPE_EAPOL;
 
 	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
 	   so we create a local pointer that points to the payload pointer, if we would either encrypt or compress we instead

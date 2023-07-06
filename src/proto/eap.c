@@ -19,6 +19,7 @@
 #include "log-private.h"
 #include "proto/rist_time.h"
 #include "peer.h"
+#include "protocol_gre.h"
 
 #include <stddef.h>
 #include <stdio.h>
@@ -121,14 +122,10 @@ void eap_reset_data(struct eapsrp_ctx *ctx)
 static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eapcode, uint8_t identifier, size_t payload_len, uint8_t buf[], uint8_t eap_version)
 {
 	size_t offset = 0;
-	struct rist_gre_hdr *gre = (struct rist_gre_hdr *)&buf[offset];
-	offset += sizeof(*gre);
 	struct eapol_hdr *eapol_hdr = (struct eapol_hdr *)&buf[offset];
 	offset += sizeof(*eapol_hdr);
 	struct eap_hdr *eap_hdr = (struct eap_hdr *)&buf[offset];
 	offset += sizeof(*eap_hdr);
-	memset(gre, 0, sizeof(*gre));
-	gre->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL);
 	eapol_hdr->eapversion = eap_version;
 	eapol_hdr->eaptype = eapoltype;
 	eap_hdr->code = eapcode;
@@ -145,13 +142,9 @@ static int send_eapol_pkt(struct eapsrp_ctx *ctx, uint8_t eapoltype, uint8_t eap
 		ctx->last_timestamp = timestampNTP_u64();
 		ctx->timeout_retries = 0;
 	}
-
-	ssize_t bytes = sendto(ctx->peer->sd, (const char *)buf, (EAPOL_EAP_HDRS_OFFSET + payload_len), 0, &ctx->peer->u.address, ctx->peer->address_len);
-	if (bytes != (ssize_t)(offset + payload_len))
-	{
-		//sockerr
+	if (_librist_proto_gre_send_data(ctx->peer, 0, RIST_GRE_PROTOCOL_TYPE_EAPOL, buf, (EAPOL_EAP_HDRS_OFFSET + payload_len), 0, 0, ctx->peer->rist_gre_version) < 0)
 		return -1;
-	}
+
 	return 0;
 }
 
@@ -497,6 +490,7 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
+	memset(&outpkt[EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr)], 0, 4);
 	if (ctx->use_key_as_passphrase) {
 		SET_BIT(outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 3)], 0);
 		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
@@ -671,14 +665,11 @@ int eap_start(struct eapsrp_ctx *ctx)
 {
 	if (ctx->authentication_state == EAP_AUTH_STATE_SUCCESS)
 		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
-	uint8_t outpkt[sizeof(struct rist_gre_hdr) + sizeof(struct eapol_hdr)] = { 0 };
-	struct rist_gre_hdr *gre = (struct rist_gre_hdr *)outpkt;
-	gre->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_EAPOL);
-	struct eapol_hdr *eapol = (struct eapol_hdr *)&outpkt[sizeof(*gre)];
-	eapol->eapversion = 2;
-	eapol->eaptype = EAPOL_TYPE_START;
-	sendto(ctx->peer->sd, (const char *)outpkt, (sizeof(*gre) + sizeof(*eapol)), 0, &ctx->peer->u.address, ctx->peer->address_len);
-	//CHECK
+	struct eapol_hdr eapol;
+	eapol.eapversion = 2;
+	eapol.eaptype = EAPOL_TYPE_START;
+	if (_librist_proto_gre_send_data(ctx->peer, 0, RIST_GRE_PROTOCOL_TYPE_EAPOL, (uint8_t*)&eapol, sizeof(eapol), 0, 0, ctx->peer->rist_gre_version) < 0)
+		return -1;
 	return 0;
 }
 

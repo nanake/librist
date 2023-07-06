@@ -39,7 +39,7 @@ RIST_PACKED_STRUCT(eap_hdr, {
 	uint16_t length;
 })
 
-#define EAPOL_EAP_HDRS_OFFSET sizeof(struct rist_gre_hdr) + sizeof(struct eapol_hdr) + sizeof(struct eap_hdr)
+#define EAPOL_EAP_HDRS_OFFSET sizeof(struct eapol_hdr) + sizeof(struct eap_hdr)
 
 #define EAP_TYPE_IDENTITY 1
 #define EAP_TYPE_NOTIFICATION 2
