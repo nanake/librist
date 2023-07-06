@@ -22,7 +22,6 @@
 #include "protocol_gre.h"
 
 #include <stddef.h>
-#include <stdio.h>
 #include <string.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -35,6 +34,8 @@
 #define EAP_AUTH_TIMEOUT_RETRY_MAX 5
 #define EAP_AUTH_TIMEOUT 500//ms
 #define EAP_REAUTH_PERIOD 60000 // ms
+
+static int eap_request_passphrase(struct eapsrp_ctx *ctx, bool start);
 
 struct eapsrp_ctx
 {
@@ -262,10 +263,12 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
-		uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr))];
+		uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr))] = {0};
 		struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 		if (ctx->eapversion3) {
-			return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_SUCCESS, identifier, sizeof(*hdr), outpkt, 3);
+			int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_SUCCESS, identifier, sizeof(*hdr), outpkt, 3);
+			eap_request_passphrase(ctx, true);
+			return ret;
 		}
 		hdr->type = EAP_TYPE_SRP_SHA1;
 		hdr->subtype = EAP_SRP_SUBTYPE_SERVER_VALIDATOR;
@@ -281,7 +284,7 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 static int eap_srp_send_password(struct eapsrp_ctx *ctx, uint8_t identifier, const uint8_t *password, size_t password_len) {
 	if (password_len > (1500 - (EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr))))
 		return -1;
-	uint8_t outpkt[1500];
+	uint8_t outpkt[1500] = {0};
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[EAPOL_EAP_HDRS_OFFSET];
 	hdr->type = EAP_TYPE_SRP_SHA1;
 	hdr->subtype = EAP_SRP_SUBTYPE_PASSWORD_REQUEST_RESPONSE;
@@ -295,8 +298,8 @@ static int eap_srp_send_password(struct eapsrp_ctx *ctx, uint8_t identifier, con
 		else
 			key = librist_crypto_srp_client_get_key(ctx->client_ctx);
 
-		uint8_t iv[16] = {0};
-		iv[15] = identifier;
+		uint8_t iv[AES_BLOCK_SIZE] = {0};
+		iv[AES_BLOCK_SIZE-1] = identifier;
 		_librist_crypto_aes_ctr(key, 256, iv, password, &outpkt[EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) +1], password_len);
 	}
 	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, sizeof(*hdr) +1 + password_len, outpkt, ctx->eapversion3? 3 :2);
@@ -521,9 +524,9 @@ static int process_eap_response_passphrase(struct eapsrp_ctx *ctx, uint8_t ident
 	bool use_derived_key = CHECK_BIT(pkt[0], 7);
 	const uint8_t *key = NULL;
 	if (ctx->role == EAP_ROLE_AUTHENTICATOR)
-		librist_crypto_srp_authenticator_get_key(ctx->auth_ctx);
+		key = librist_crypto_srp_authenticator_get_key(ctx->auth_ctx);
 	else
-		librist_crypto_srp_client_get_key(ctx->client_ctx);
+		key = librist_crypto_srp_client_get_key(ctx->client_ctx);
 	if (use_derived_key) {
 		librist_peer_update_rx_passphrase(ctx->peer, key, SHA256_DIGEST_LENGTH, ctx->passphrase_request_timer != 0 && identifier == ctx->passphrase_request_identifier);
 	} else {
@@ -553,7 +556,7 @@ static int eap_request_passphrase(struct eapsrp_ctx *ctx, bool start) {
 	hdr->subtype = EAP_SRP_SUBTYPE_PASSWORD_REQUEST_RESPONSE;
 	ctx->passphrase_request_times++;
 	ctx->passphrase_request_timer = timestampNTP_u64();
-	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_SUCCESS, ctx->passphrase_request_identifier, sizeof(*hdr), outpkt, ctx->eapversion3? 3 :2);
+	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->passphrase_request_identifier, sizeof(*hdr), outpkt, ctx->eapversion3? 3 :2);
 }
 
 static int process_eap_response(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, uint8_t identifier, uint8_t eap_version)
@@ -629,9 +632,6 @@ static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, ui
 	if (length != len)
 		return EAP_LENERR;
 
-	if ((ctx->role == EAP_ROLE_AUTHENTICATEE && code == EAP_CODE_RESPONSE) ||
-		(ctx->role == EAP_ROLE_AUTHENTICATOR && code == EAP_CODE_REQUEST))
-		return code == EAP_CODE_RESPONSE? EAP_UNEXPECTEDRESPONSE : EAP_UNEXPECTEDREQUEST;
 	switch (code)
 	{
 		case EAP_CODE_REQUEST:
@@ -668,6 +668,7 @@ int eap_start(struct eapsrp_ctx *ctx)
 	struct eapol_hdr eapol;
 	eapol.eapversion = 3;
 	eapol.eaptype = EAPOL_TYPE_START;
+	eapol.length = htobe16(sizeof(eapol));
 	if (_librist_proto_gre_send_data(ctx->peer, 0, RIST_GRE_PROTOCOL_TYPE_EAPOL, (uint8_t*)&eapol, sizeof(eapol), 0, 0, ctx->peer->rist_gre_version) < 0)
 		return -1;
 	return 0;

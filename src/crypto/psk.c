@@ -157,8 +157,9 @@ void _librist_crypto_aes_ctr(const uint8_t key[], int key_size, uint8_t iv[], co
 	mbedtls_aes_context ctx;
 	mbedtls_aes_init(&ctx);
 	mbedtls_aes_setkey_enc(&ctx, key, key_size);
-	uint8_t stream_block[16] = {0};
-	mbedtls_aes_crypt_ctr(&ctx, payload_len, 0, iv, stream_block, inbuf, outbuf);
+	uint8_t stream_block[AES_BLOCK_SIZE] = {0};
+	size_t nc_off = 0;
+	mbedtls_aes_crypt_ctr(&ctx, payload_len, &nc_off, iv, stream_block, inbuf, outbuf);
 	mbedtls_aes_free(&ctx);
 #elif HAVE_NETTLE
     struct aes_ctx aes_ctx;
