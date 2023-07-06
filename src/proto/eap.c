@@ -666,7 +666,7 @@ int eap_start(struct eapsrp_ctx *ctx)
 	if (ctx->authentication_state == EAP_AUTH_STATE_SUCCESS)
 		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
 	struct eapol_hdr eapol;
-	eapol.eapversion = 2;
+	eapol.eapversion = 3;
 	eapol.eaptype = EAPOL_TYPE_START;
 	if (_librist_proto_gre_send_data(ctx->peer, 0, RIST_GRE_PROTOCOL_TYPE_EAPOL, (uint8_t*)&eapol, sizeof(eapol), 0, 0, ctx->peer->rist_gre_version) < 0)
 		return -1;
