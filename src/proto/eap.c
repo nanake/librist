@@ -18,6 +18,7 @@
 #include "udp-private.h"
 #include "log-private.h"
 #include "proto/rist_time.h"
+#include "peer.h"
 
 #include <stddef.h>
 #include <stdio.h>
