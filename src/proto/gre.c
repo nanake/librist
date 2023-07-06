@@ -33,7 +33,12 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 	memset(hdr, 0, sizeof(*hdr));
 	size_t hdr_len = sizeof(*hdr);
 
-	uint32_t seq = p->seq++;
+
+	struct rist_peer *key_peer = p;
+	if (key_peer->parent != NULL && key_peer->parent->multicast)
+		key_peer = key_peer->parent;
+
+	uint32_t seq;
     assert(payload != NULL);
 
 	const size_t nonce_offset = sizeof(*hdr);
@@ -50,6 +55,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 	//For now default to always considering us capable to do that.
 	if (true || encrypt) {
 		SET_BIT(hdr->flags1, 4); // set seq bit
+		seq = key_peer->seq++;
 		//Write sequence number
 		hdr_buf[hdr_len] = seq >> 24;
 		hdr_buf[hdr_len+1] = seq >> 16;
@@ -90,9 +96,11 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 			modifying_payload = true;
 			assert(payload_wr);
 		}
-		struct rist_key *key = &p->key_tx;
-		if (p->key_tx_odd_active)
+
+		struct rist_key *key = &key_peer->key_tx;
+		if (key_peer->key_tx_odd_active)
 			key = &p->key_tx_odd;
+
 		//Data that should be encrypted is part of the header
 		if (hdr_payload_offset != hdr_len) {
 #if HAVE_MBEDTLS
