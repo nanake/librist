@@ -11,6 +11,10 @@
 #include <stdlib.h>
 #include <stdbool.h>
 
+#ifndef WINAPI
+#define WINAPI
+#endif
+
 #define DEBUG_EXTRACT_SRP_EXCHANGE 0
 #ifndef DEBUG_USE_EXAMPLE_CONSTANTS
 #define DEBUG_USE_EXAMPLE_CONSTANTS 0
@@ -203,7 +207,7 @@ static int librist_crypto_srp_hash(const uint8_t *indata, size_t inlen, uint8_t 
 #if HAVE_PTHREADS
 static void librist_crypto_srp_init_random_func(void)
 #else
-static BOOL librist_crypto_srp_init_random_func(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
+static BOOL WINAPI librist_crypto_srp_init_random_func(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
 #endif
 {
 #if HAVE_MBEDTLS
@@ -212,6 +216,9 @@ static BOOL librist_crypto_srp_init_random_func(PINIT_ONCE InitOnce, PVOID Param
 	//ctr_drbg_ctx is threadsafe, so can be used by multiple threads freely, seeding isn't though.
 	const char user_custom[] = "libRIST librist_crypto_srp_init_random "LIBRIST_VERSION;
 	mbedtls_ctr_drbg_seed(&ctr_drbg_ctx, mbedtls_entropy_func, &entropy_ctx, (const unsigned char  *)user_custom, sizeof(user_custom));
+#endif
+#if !HAVE_PTHREADS
+	return 1;
 #endif
 }
 
