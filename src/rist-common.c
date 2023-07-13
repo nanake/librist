@@ -2801,7 +2801,7 @@ protocol_bypass:
 				int eapret = 0;
 				if ((eapret = eap_process_eapol(p->eap_ctx,
 												(recv_buf + payload_offset),
-												(recv_bufsize - payload_offset), rist_gre_version)) < 0) {
+												(recv_bufsize - payload_offset))) < 0) {
 					rist_log_priv(get_cctx(p), RIST_LOG_ERROR, "Failed to process EAPOL pkt, return code: %i\n", eapret);
 					if (eapret == 255)//permanent failure, we allow a few retries
 						failed_eap = true;

@@ -115,7 +115,7 @@ struct eapsrp_ctx
 	size_t authenticator_len_salt;
 	uint8_t *authenticator_bytes_salt;
 
-	bool use_correct_hashing;
+	bool eapversion3;
 };
 
 #define EAP_LENERR -1
@@ -124,7 +124,7 @@ struct eapsrp_ctx
 #define EAP_UNEXPECTEDREQUEST -4
 #define EAP_SRP_WRONGSUBTYPE -4
 
-RIST_PRIV int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len, uint8_t gre_version);
+RIST_PRIV int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len);
 RIST_PRIV int eap_request_identity(struct eapsrp_ctx *ctx);
 RIST_PRIV int eap_start(struct eapsrp_ctx *ctx);
 RIST_PRIV void eap_periodic(struct eapsrp_ctx *ctx);
