@@ -526,12 +526,13 @@ int librist_crypto_srp_authenticator_handle_A(struct librist_crypto_srp_authenti
 		goto out;
 
 
-	librist_crypto_srp_init_random();
+
 	//Set b
 #if DEBUG_USE_EXAMPLE_CONSTANTS
 	const char b_hex[] = "ED0D58FF861A1FC75A0829BEA5F1392D2B13AB2B05CBCD6ED1E71AAAD761E856";
 	BIGNUM_FROM_STRING(&ctx->b, b_hex);
 #else
+	librist_crypto_srp_init_random();
 	BIGNUM_RANDOM(&ctx->b, &ctx->N);
 	if (ret != 0)
 		goto out;
@@ -870,6 +871,7 @@ struct librist_crypto_srp_client_ctx *librist_crypto_srp_client_ctx_create(bool 
 	const char a_hex[] = "138AB4045633AD14961CB1AD0720B1989104151C0708794491113302CCCC27D5";
 	BIGNUM_FROM_STRING(&ctx->a, a_hex);
 #else
+	librist_crypto_srp_init_random();
 	BIGNUM_RANDOM(&ctx->a, &ctx->N);
 	if (ret != 0)
 		goto fail;
