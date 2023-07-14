@@ -503,7 +503,7 @@ struct rist_peer {
 	uint32_t w_count; /* Counter for weight in distributed send */
 
 	/* RTT statistics */
-	uint64_t last_mrtt;
+	uint64_t last_rtt;
 
 	/* Missing queue max size */
 	uint32_t missing_counter_max;

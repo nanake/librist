@@ -955,7 +955,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms, age %" PRIu64 "ms and rtt_min %" PRIu32 "\n",
 						seq, delta /RIST_CLOCK, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min / RIST_CLOCK);
-				uint64_t rtt = peer->last_mrtt;
+				uint64_t rtt = peer->last_rtt;
 				if (peer->config.recovery_rtt_min > rtt)
 					rtt = peer->config.recovery_rtt_min;
 				if (peer->config.recovery_rtt_max < rtt)
@@ -986,7 +986,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			//We work backwards from the write index till we either find a retry with same peer & seq
 			//or it's too old to matter,looking up to 8 RTT's ago (4 in normal mode, 8 in aggressive)
 			size_t index = (ctx->sender_retry_queue_write_index -1) & (ctx->sender_retry_queue_size -1);
-			uint64_t rtt = peer->last_mrtt;
+			uint64_t rtt = peer->last_rtt;
 			if (peer->config.recovery_length_min > rtt)
 				rtt = peer->config.recovery_length_min;
 			// Aggressive congestion control only allows every two RTTs

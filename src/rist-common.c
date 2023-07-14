@@ -1039,10 +1039,10 @@ static void send_nack_group(struct rist_receiver *ctx, struct rist_flow *f)
 	for (size_t i = 0; i < f->peer_lst_len; i++)
 	{
 		struct rist_peer *check = f->peer_lst[i];
-		if (check->is_rtcp && !check->dead && check->last_mrtt < last_rtt)
+		if (check->is_rtcp && !check->dead && check->last_rtt < last_rtt)
 		{
 			peer = check;
-			last_rtt = peer->last_mrtt;
+			last_rtt = peer->last_rtt;
 		}
 	}
 	if (peer != NULL)
@@ -1921,12 +1921,12 @@ static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_r
 		return;
 	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
 	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
-	peer->last_mrtt = rtt;
+	peer->last_rtt = rtt;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
-	peer->eight_times_rtt += peer->last_mrtt;
+	peer->eight_times_rtt += peer->last_rtt;
 	if (peer->peer_data && peer->peer_data != peer)
 	{
-		peer->peer_data->last_mrtt = peer->last_mrtt;
+		peer->peer_data->last_rtt = peer->last_rtt;
 		peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
 	}
 }
@@ -1968,12 +1968,12 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 			return;
 		rtt  = now - lsr_ntp  - ((uint64_t)be32toh(rr->dlsr) << 16);
 	}
-	peer->last_mrtt = rtt;
+	peer->last_rtt = rtt;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
-	peer->eight_times_rtt += peer->last_mrtt;
+	peer->eight_times_rtt += peer->last_rtt;
 	if (peer->peer_data && peer->peer_data != peer)
 	{
-		peer->peer_data->last_mrtt = peer->last_mrtt;
+		peer->peer_data->last_rtt = peer->last_rtt;
 		peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
 	}
 }
@@ -2012,12 +2012,12 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 					return;
 				rtt  = now - lrr  - ((uint64_t)be32toh(dlrr->delay) << 16);
 			}
-			peer->last_mrtt = rtt;
+			peer->last_rtt = rtt;
 			peer->eight_times_rtt -= peer->eight_times_rtt /8;
-			peer->eight_times_rtt += peer->last_mrtt;
+			peer->eight_times_rtt += peer->last_rtt;
 			if (peer->peer_data && peer->peer_data != peer)
 			{
-				peer->peer_data->last_mrtt = peer->last_mrtt;
+				peer->peer_data->last_rtt = peer->last_rtt;
 				peer->peer_data->eight_times_rtt = peer->eight_times_rtt;
 			}
 		}
