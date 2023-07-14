@@ -21,6 +21,9 @@
 #define RIST_VSF_PROTOCOL_SUBTYPE_FUTURE_NONCE 0x8001
 #define RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION 0x8002
 
+#define RIST_GRE_VERSION_CUR 2
+#define RIST_GRE_VERSION_MIN 1
+
 /*
 +-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+-+
 |0| |0|0|Reserved0|H|RVer | Ver |         Protocol Type         |
@@ -79,14 +82,14 @@ Implementations capable of buffer negotiation shall respond with
 their (scoped) values.
 Sender max allowed buffer MS (16bit): the maximum buffer value a sender allows
   this value /not/ allowed to be decreased during a session.
-  This value may be set to 0 if the device isn't capable or configured
+  This value shall be set to 0 if the device isn't capable or configured
   for sending data.
 Receiver current buffer MS (16bit): the current buffer duration the client
   is configured for. The client is free to change this value during
   the session up to the senders maximum value. When changing it's
   configured buffer duration setting it will notify the sender
   via this message.
-  This value be set to 0 if the device isn't capable or configured
+  This value shall be set to 0 if the device isn't capable or configured
   for receiving data.
 
 Protocol type (16bit): setting this value to anything but 0 allows scoping

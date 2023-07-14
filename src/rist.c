@@ -865,7 +865,7 @@ static int rist_receiver_peer_create(struct rist_receiver *ctx,
 	}
 	else
 	{
-		p->rist_gre_version = 1;
+		p->rist_gre_version = RIST_GRE_VERSION_CUR;
 		p->is_rtcp = true;
 	}
 
@@ -917,7 +917,7 @@ static int rist_sender_peer_create(struct rist_sender *ctx,
 	}
 	else
 	{
-		newpeer->rist_gre_version = 1;
+		newpeer->rist_gre_version = RIST_GRE_VERSION_CUR;
 		newpeer->peer_data = newpeer;
 		newpeer->is_rtcp = true;
 		newpeer->compression = config->compression;

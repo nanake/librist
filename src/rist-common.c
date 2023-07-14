@@ -2294,7 +2294,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 	peer->peer_ssrc = peer_src->peer_ssrc;
 	peer->session_timeout = peer_src->session_timeout;
-	peer->rist_gre_version = 1;
+	peer->rist_gre_version = RIST_GRE_VERSION_CUR;
 
 	init_peer_settings(peer);
 }
@@ -2400,7 +2400,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 	uint32_t flow_id = 0;
 	uint16_t gre_proto = 0;
-	uint8_t rist_gre_version = 1;
+	uint8_t rist_gre_version = RIST_GRE_VERSION_CUR;
 	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
 		struct rist_gre_hdr *gre = NULL;
@@ -2652,6 +2652,9 @@ protocol_bypass:
 		}
 		peer_append(p);
 	}
+
+	if (cctx->profile > RIST_PROFILE_SIMPLE && rist_gre_version < RIST_GRE_VERSION_CUR && rist_gre_version >= RIST_GRE_VERSION_MIN)
+		p->rist_gre_version = rist_gre_version;
 
 	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
 		struct rist_keepalive_info info;
