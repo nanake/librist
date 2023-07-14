@@ -2653,8 +2653,13 @@ protocol_bypass:
 		peer_append(p);
 	}
 
-	if (cctx->profile > RIST_PROFILE_SIMPLE && rist_gre_version < RIST_GRE_VERSION_CUR && rist_gre_version >= RIST_GRE_VERSION_MIN)
+	if (cctx->profile > RIST_PROFILE_SIMPLE && rist_gre_version < p->rist_gre_version && rist_gre_version < RIST_GRE_VERSION_CUR && rist_gre_version >= RIST_GRE_VERSION_MIN) {
 		p->rist_gre_version = rist_gre_version;
+		//We got downgraded, perhaps other side couldn't parse our keepalive message, so send 3 more
+		_librist_proto_gre_send_keepalive(p);
+		_librist_proto_gre_send_keepalive(p);
+		_librist_proto_gre_send_keepalive(p);
+	}
 
 	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
 		struct rist_keepalive_info info;
