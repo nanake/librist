@@ -451,8 +451,25 @@ struct rist_ctx {
 	struct rist_receiver *receiver_ctx;
 };
 
+struct rist_keepalive_data {
+	uint8_t mac[6];
+	bool x : 1;
+	bool r : 1;
+	bool b : 1;
+	bool a : 1;
+	bool p : 1;
+	bool e : 1;
+	bool l : 1;
+	bool n : 1;
+	bool d : 1;
+	bool t : 1;
+	bool v : 1;
+	bool j : 1;
+	bool f : 1;
+};
+
 struct rist_peer {
-	/* linked list */
+        /* linked list */
 	struct rist_peer *next;
 	struct rist_peer *prev;
 
@@ -584,6 +601,8 @@ struct rist_peer {
 	bool send_first_connection_event;
 
 	uint64_t log_repeat_timer;
+
+	struct rist_keepalive_data data;
 };
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {

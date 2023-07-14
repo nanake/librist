@@ -17,6 +17,7 @@
 #include "time-shim.h"
 #include "proto/rist_time.h"
 #include <sys/types.h>
+#include "proto/protocol_gre.h"
 #if HAVE_SRP_SUPPORT
 #include "proto/eap.h"
 #endif
@@ -1379,7 +1380,11 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %"PRIu32"\n", peer->adv_peer_id);
 			peer->send_keepalive = true;
 		}
-
+		if (get_cctx(peer)->profile > RIST_PROFILE_SIMPLE) {
+			_librist_proto_gre_send_keepalive(peer);
+			_librist_proto_gre_send_keepalive(peer);
+			_librist_proto_gre_send_keepalive(peer);
+		}
 		/* call it the first time manually to speed up the handshake */
 		rist_peer_rtcp(NULL, peer);
 		/* send 3 echo requests to jumpstart accurate RTT calculation */
@@ -2635,10 +2640,39 @@ protocol_bypass:
 				sender_peer_append(peer->sender_ctx, p);
 		}
 		p->send_keepalive = true;
+		if (cctx->profile > RIST_PROFILE_SIMPLE
+#if HAVE_SRP_SUPPORT
+			&& ((p->eap_ctx && p->eap_ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
+#endif
+			) {
+			//Answer their keep alive with one from us
+			_librist_proto_gre_send_keepalive(p);
+			_librist_proto_gre_send_keepalive(p);
+			_librist_proto_gre_send_keepalive(p);
+		}
 		peer_append(p);
 	}
 
 	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
+		struct rist_keepalive_info info;
+		_librist_proto_gre_parse_keepalive(&recv_buf[payload_offset], recv_bufsize - payload_offset, &info);
+		if (memcmp(&info.ka, &p->data, sizeof(peer->data)) != 0) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
+				"New keepalive received. MAC: %x:%x:%x:%x:%x:%x"
+				" X: %d R: %d B: %d A: %d P: %d E: %d L: %d: N: %d"
+				" D: %d T: %d V: %d: J: %d F: %d\n",
+				info.ka.mac[0], info.ka.mac[1], info.ka.mac[2],
+				info.ka.mac[3], info.ka.mac[4], info.ka.mac[5],
+				info.ka.x, info.ka.r, info.ka.b, info.ka.a,
+				info.ka.p, info.ka.e, info.ka.l, info.ka.e,
+				info.ka.n, info.ka.d, info.ka.t, info.ka.v,
+				info.ka.j, info.ka.f);
+			if (info.json_len)
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Keepalive JSON:\n%.*s\n", info.json_len, info.json);
+			//TODO: add callback?
+			//TODO: handle capabilities in some way
+			memcpy(&p->data, &info.ka, sizeof(peer->data));
+		}
 		p->last_rtcp_received = now;
 		return;
 	}
@@ -2813,7 +2847,10 @@ protocol_bypass:
 					rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 						"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
 					p->eap_authentication_state = 2;
-
+					//First authentication, so send keepalive
+					_librist_proto_gre_send_keepalive(p);
+					_librist_proto_gre_send_keepalive(p);
+					_librist_proto_gre_send_keepalive(p);
 				}
 			}
 #else

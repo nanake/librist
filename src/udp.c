@@ -147,7 +147,7 @@ size_t rist_send_seq_rtcp(struct rist_peer *p, uint16_t seq_rtp, uint8_t payload
 	if (ctx->profile == RIST_PROFILE_SIMPLE)
 		ret = sendto(p->sd,(const char*)data, len, 0, &(p->u.address), p->address_len);
 	else
-		ret = rist_send_data_main_profile(p, payload_type, proto_type, data, len, src_port, dst_port);
+		ret = _librist_proto_gre_send_data(p, payload_type, proto_type, data, len, src_port, dst_port);
 
 out:
 	if (RIST_UNLIKELY(ret <= 0)) {

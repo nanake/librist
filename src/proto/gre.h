@@ -76,9 +76,6 @@ Data Channel:
 */
 
 RIST_PACKED_STRUCT(rist_gre_keepalive,{
-	uint8_t flags1;
-	uint8_t flags2;
-	uint16_t prot_type;
 	uint8_t mac_array[6];
 	uint8_t capabilities1;
 	uint8_t capabilities2;

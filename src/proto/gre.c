@@ -1,5 +1,6 @@
 
 #include "gre.h"
+#include "protocol_gre.h"
 #include "common/attributes.h"
 #include "config.h"
 #include "crypto/psk.h"
@@ -18,7 +19,7 @@
 #include <string.h>
 
 
-ssize_t rist_send_data_main_profile(struct rist_peer *p, uint8_t payload_type, uint16_t proto, uint8_t *payload, size_t payload_len, uint16_t src_port, uint16_t dst_port) {
+ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, uint16_t proto, uint8_t *payload, size_t payload_len, uint16_t src_port, uint16_t dst_port) {
 	bool encrypt = (p->key_tx.key_size > 0);
 
 	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
@@ -164,4 +165,41 @@ ssize_t rist_send_data_main_profile(struct rist_peer *p, uint8_t payload_type, u
 	}
 
 	return ret;
+}
+
+void _librist_proto_gre_send_keepalive(struct rist_peer *p) {
+	struct rist_gre_keepalive ka = {0};
+	//TODO: set mac
+	SET_BIT(ka.capabilities1, 0); // Null packet deletion
+	SET_BIT(ka.capabilities1, 2); // SMPTE-2022-7
+	SET_BIT(ka.capabilities1, 5); // Bonding
+	//SET_BIT(ka.capabilities2, 3);//OTF Passphrase change
+	SET_BIT(ka.capabilities2, 5);//Reduced overhead
+	_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, (uint8_t *)&ka, sizeof(ka), 0, 0);
+}
+
+int _librist_proto_gre_parse_keepalive(const uint8_t buf[], size_t buflen, struct rist_keepalive_info  *info) {
+	if (buflen < sizeof(struct rist_gre_keepalive)) {
+		return -1;
+	}
+	struct rist_gre_keepalive *ka = (struct rist_gre_keepalive *)buf;
+	memcpy(info->ka.mac, ka->mac_array, sizeof(ka->mac_array));
+	info->ka.x = CHECK_BIT(ka->capabilities1, 7);
+	info->ka.r = CHECK_BIT(ka->capabilities1, 6);
+	info->ka.b = CHECK_BIT(ka->capabilities1, 5);
+	info->ka.a = CHECK_BIT(ka->capabilities1, 4);
+	info->ka.p = CHECK_BIT(ka->capabilities1, 3);
+	info->ka.e = CHECK_BIT(ka->capabilities1, 2);
+	info->ka.l = CHECK_BIT(ka->capabilities1, 1);
+	info->ka.n = CHECK_BIT(ka->capabilities1, 0);
+	info->ka.d = CHECK_BIT(ka->capabilities2, 7);
+	info->ka.t = CHECK_BIT(ka->capabilities2, 6);
+	info->ka.v = CHECK_BIT(ka->capabilities2, 5);
+	info->ka.j = CHECK_BIT(ka->capabilities2, 4);
+	info->ka.f = CHECK_BIT(ka->capabilities2, 3);
+	info->json_len = buflen - sizeof(*ka);
+	if (info->json_len > 0) {
+		info->json = (const char *)&buf[sizeof(*ka)];
+	}
+	return 0;
 }
