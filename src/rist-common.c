@@ -1951,6 +1951,8 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 	uint64_t lsr_tmp = (peer->last_sender_report_time >> 16) & 0xFFFFFFFF;
 	uint64_t lsr_ntp = be32toh(rr->lsr);
 	uint64_t rtt;
+	if (!peer->last_sender_report_ts)
+		return;
 	if (lsr_ntp == lsr_tmp) {
 		uint64_t now = timestampNTP_u64();
 		rtt = now - peer->last_sender_report_ts - ((uint64_t)be32toh(rr->dlsr) << 16);
