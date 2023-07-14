@@ -2804,7 +2804,7 @@ protocol_bypass:
 		case RIST_PAYLOAD_TYPE_RTCP_NACK:
 		/* Need this for interop, we should move this to a per flow level eventually once we support multiple flows on a single peer*/
 			if (RIST_UNLIKELY(p->receiver_ctx && p->local_port != payload.dst_port)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u", payload.src_port);
+				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating peer virt dst port to match remote source port: %u\n", payload.src_port);
 				p->local_port = payload.dst_port;
 				p->remote_port = payload.src_port;
 			}
