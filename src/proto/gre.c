@@ -62,12 +62,14 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 	size_t hdr_payload_offset = hdr_len;
 
 	//If we can use the new VSF ethertype (rist GRE version >= 2), we should, as the other way is considered deprecated
-	if (p->rist_gre_version >= 2 && (proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE)) {
+	if ((p->rist_gre_version >= 2 && (proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || proto == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION))) {
 		struct rist_vsf_proto *vsf = (struct rist_vsf_proto *)&hdr_buf[hdr_len];
 		hdr_len += sizeof(*vsf);
 		vsf->type = RIST_VSF_PROTOCOL_TYPE_RIST;//Network byte order! these are 0 values, so safe to do without htobe16
 		if (proto == RIST_GRE_PROTOCOL_TYPE_REDUCED)
 			vsf->subtype = RIST_VSF_PROTOCOL_SUBTYPE_REDUCED;
+		else if (proto == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION)
+			vsf->subtype = htobe16(RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION);
 		else
 			vsf->subtype = htobe16(RIST_VSF_PROTOCOL_SUBTYPE_KEEPALIVE);
 		proto = RIST_GRE_PROTOCOL_TYPE_VSF;
@@ -201,5 +203,29 @@ int _librist_proto_gre_parse_keepalive(const uint8_t buf[], size_t buflen, struc
 	if (info->json_len > 0) {
 		info->json = (const char *)&buf[sizeof(*ka)];
 	}
+	return 0;
+}
+
+void _librist_proto_gre_send_buffer_negotiation(struct rist_peer *p, uint16_t sender_max_buffer, uint16_t receiver_current_buffer) {
+	struct rist_buffer_negotiation bn;
+	bn.sender_max_buffer_size_ms = htobe16(sender_max_buffer);
+	bn.receiver_current_buffer_size_ms = htobe16(receiver_current_buffer);
+	bn.protocol_type = 0;
+	_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, (uint8_t *)&bn, sizeof(bn), 0, 0);
+}
+
+int _librist_proto_gre_parse_buffer_negotiation(struct rist_peer *p, uint8_t buf[], size_t buflen, uint16_t *sender_max_buffer, uint16_t *receiver_current_buffer) {
+	if (buflen < sizeof(struct rist_buffer_negotiation)) {
+		return -1;
+	}
+	struct rist_buffer_negotiation *bn = (struct rist_buffer_negotiation *)buf;
+	if (bn->protocol_type != 0) {
+		bn->sender_max_buffer_size_ms = 0;
+		bn->receiver_current_buffer_size_ms = 0;
+		_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, buf, buflen, 0, 0);
+		return -2;
+	}
+	*sender_max_buffer = be16toh(bn->sender_max_buffer_size_ms);
+	*receiver_current_buffer = be16toh(bn->receiver_current_buffer_size_ms);
 	return 0;
 }
