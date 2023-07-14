@@ -940,7 +940,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			if (ctx->common.debug)
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Nack request for seq %" PRIu32 " with age %" PRIu64 "ms and rtt_min %" PRIu32 " for peer #%d\n",
-					seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id);
+					seq, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min / RIST_CLOCK, peer->adv_peer_id);
 		} else if (ctx->peer_lst_len == 1) {
 			/* there is a retry outstanding for this buffer, no need to add another */
 			if (buffer->retry_queued)
@@ -950,11 +950,11 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			{
 				// This is a safety check to protect against buggy or non compliant receivers that request the
 				// same seq number without waiting one RTT.
-				uint64_t delta = (now - buffer->last_retry_request) / RIST_CLOCK;
+				uint64_t delta = (now - buffer->last_retry_request);
 				if (ctx->common.debug)
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms, age %" PRIu64 "ms and rtt_min %" PRIu32 "\n",
-						seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min);
+						seq, delta /RIST_CLOCK, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min / RIST_CLOCK);
 				uint64_t rtt = peer->last_mrtt;
 				if (peer->config.recovery_rtt_min > rtt)
 					rtt = peer->config.recovery_rtt_min;
@@ -968,7 +968,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 ", age %"PRIu64"ms, is already queued (too soon to add another one), skipped, %" PRIu64 " < %" PRIu64 " ms\n",
-						seq, age_ticks / RIST_CLOCK, delta, rtt);
+						seq, age_ticks / RIST_CLOCK, delta / RIST_CLOCK, rtt);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
@@ -1004,7 +1004,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			}
 			retry = &ctx->sender_retry_queue[index];
 			if (retry->seq == seq && retry->peer == peer) {
-				delta = (now - retry->insert_time) / RIST_CLOCK;
+				delta = (now - retry->insert_time);
 				/* this retry hasn't been handled yet, it makes no sense to insert a duplicate */
 				if (retry->active)
 					return;
@@ -1012,7 +1012,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 				{
 					rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 						"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) is already queued (too soon to add another one), skipped, peer #%d '%s'\n",
-						seq, delta, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
+						seq, delta / RIST_CLOCK, age_ticks / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 					peer->stats_sender_instant.bloat_skip++;
 					return;
 				}
@@ -1020,7 +1020,7 @@ void rist_retry_enqueue(struct rist_sender *ctx, uint32_t seq, struct rist_peer 
 			if (ctx->common.debug) {
 				rist_log_priv(&ctx->common, RIST_LOG_DEBUG,
 					"Nack request for seq %" PRIu32 " with delta %" PRIu64 "ms (age %"PRIu64"ms) and rtt_min %" PRIu32 " for peer #%d '%s'\n",
-					seq, delta, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min, peer->adv_peer_id, peer->receiver_name);
+					seq, delta / RIST_CLOCK, age_ticks / RIST_CLOCK, peer->config.recovery_rtt_min / RIST_CLOCK, peer->adv_peer_id, peer->receiver_name);
 			}
 		}
 	}

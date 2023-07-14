@@ -12,7 +12,7 @@
 #include "proto/rist_time.h"
 #include <assert.h>
 
-void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt)
+void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint64_t rtt)
 {
 	struct rist_missing_buffer *m = calloc(1, sizeof(*m));
 	uint64_t now = timestampNTP_u64();
@@ -23,7 +23,7 @@ void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t 
 	m->seq = seq;
 	m->insertion_time = nack_time;
 
-	m->next_nack = now + (uint64_t)rtt * (uint64_t)RIST_CLOCK;
+	m->next_nack = now + rtt;
 	m->peer = peer;
 
 	if (get_cctx(peer)->debug)
@@ -339,7 +339,7 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 size_t rist_best_rtt_index(struct rist_flow *f)
 {
 	size_t index = 0;
-	uint32_t rtt = UINT32_MAX;
+	uint64_t rtt = UINT64_MAX;
 	for (size_t i = 0; i < f->peer_lst_len; i++) {
 		if (!f->peer_lst[i]->is_rtcp)
 			continue;

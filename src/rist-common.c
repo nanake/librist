@@ -268,6 +268,7 @@ int rist_max_jitter_set(struct rist_common_ctx *ctx, int t)
 
 static void init_peer_settings(struct rist_peer *peer)
 {
+	peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
 	if (peer->receiver_mode) {
 		assert(peer->receiver_ctx != NULL);
 		uint32_t recovery_maxbitrate_mbps = peer->config.recovery_maxbitrate < 1000 ? 1 : peer->config.recovery_maxbitrate / 1000;
@@ -278,12 +279,12 @@ static void init_peer_settings(struct rist_peer *peer)
 		peer->missing_counter_max =
 			(uint32_t)(peer->recovery_buffer_ticks / RIST_CLOCK) * recovery_maxbitrate_mbps /
 			(sizeof(struct rist_gre_seq) + sizeof(struct rist_rtp_hdr) + sizeof(uint32_t));
-		peer->eight_times_rtt = peer->config.recovery_rtt_min * 8;
+
 
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,
 				"New peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 				peer->adv_peer_id, peer->config.recovery_maxbitrate, peer->config.recovery_maxbitrate_return, peer->config.recovery_length_min, peer->config.recovery_length_max, peer->config.recovery_reorder_buffer,
-				peer->config.recovery_rtt_min, peer->config.recovery_rtt_max, peer->config.congestion_control_mode, peer->config.min_retries, peer->config.max_retries);
+				peer->config.recovery_rtt_min /RIST_CLOCK, peer->config.recovery_rtt_max /RIST_CLOCK, peer->config.congestion_control_mode, peer->config.min_retries, peer->config.max_retries);
 	}
 	else {
 		assert(peer->sender_ctx != NULL);
@@ -315,7 +316,7 @@ static void init_peer_settings(struct rist_peer *peer)
 
 		/* Set target recover size (buffer) */
 		if ((peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max)) > ctx->sender_recover_min_time) {
-			ctx->sender_recover_min_time = peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max);
+			ctx->sender_recover_min_time = peer->config.recovery_length_max + (2 * peer->config.recovery_rtt_max / RIST_CLOCK);
 			rist_log_priv(&ctx->common, RIST_LOG_INFO, "Setting buffer size to %zums (Max buffer size + 2 * Max RTT)\n", ctx->sender_recover_min_time);
 			// TODO: adjust this size based on the dynamic RTT measurement
 		}
@@ -429,7 +430,7 @@ static int receiver_insert_queue_packet(struct rist_flow *f, struct rist_peer *p
 	return 0;
 }
 
-static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t current_seq, uint32_t rtt) {
+static inline void receiver_mark_missing(struct rist_flow *f, struct rist_peer *peer, uint32_t current_seq, uint64_t rtt) {
 	uint32_t counter = 1;
 	uint64_t packet_time_last = 0;
 	if (RIST_UNLIKELY(!f->receiver_queue[f->last_seq_found]))
@@ -506,7 +507,7 @@ static void recalculate_clock_offset(struct rist_flow *flow)
 }
 
 
-static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, uint64_t packet_recv_time, const void *buf, size_t len, uint32_t seq, uint32_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
+static int receiver_enqueue(struct rist_peer *peer, uint64_t source_time, uint64_t packet_recv_time, const void *buf, size_t len, uint32_t seq, uint64_t rtt, bool retry, uint16_t src_port, uint16_t dst_port, uint8_t payload_type)
 {
 	struct rist_flow *f = peer->flow;
 
@@ -753,7 +754,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 			/* start with 1.1 * 1000 and go down from there */
 			//uint32_t ratio = 1100 - (b->nack_count * 1100)/(2*b->peer->config.max_retries);
 			//b->next_nack = now + (uint64_t)rtt * (uint64_t)ratio * (uint64_t)RIST_CLOCK;
-			b->next_nack = now + ((uint64_t)rtt * (uint64_t)1100 * (uint64_t)RIST_CLOCK) / 1000;
+			b->next_nack = now + (uint64_t)(rtt * 1.1);
 			b->nack_count++;
 
 			if (get_cctx(peer)->debug)
@@ -1851,7 +1852,7 @@ static void rist_receiver_recv_data(struct rist_peer *peer, uint32_t seq, uint32
 	/**************** WIP *****************/
 	peer->stats_receiver_instant.received++;
 
-	uint32_t rtt;
+	uint64_t rtt;
 	rtt = peer->eight_times_rtt / 8;
 	if (rtt < peer->config.recovery_rtt_min) {
 		rtt = peer->config.recovery_rtt_min;
@@ -1920,7 +1921,7 @@ static void rist_rtcp_handle_echo_response(struct rist_peer *peer, struct rist_r
 		return;
 	uint64_t request_time = ((uint64_t)be32toh(echoreq->ntp_msw) << 32) | be32toh(echoreq->ntp_lsw);
 	uint64_t rtt = calculate_rtt_delay(request_time, timestampNTP_u64(), be32toh(echoreq->delay));
-	peer->last_mrtt = (uint32_t)rtt / RIST_CLOCK;
+	peer->last_mrtt = rtt;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
 	peer->eight_times_rtt += peer->last_mrtt;
 	if (peer->peer_data && peer->peer_data != peer)
@@ -1965,7 +1966,7 @@ static void rist_handle_rr_pkt(struct rist_peer *peer, struct rist_rtcp_rr_pkt *
 			return;
 		rtt  = now - lsr_ntp  - ((uint64_t)be32toh(rr->dlsr) << 16);
 	}
-	peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
+	peer->last_mrtt = rtt;
 	peer->eight_times_rtt -= peer->eight_times_rtt / 8;
 	peer->eight_times_rtt += peer->last_mrtt;
 	if (peer->peer_data && peer->peer_data != peer)
@@ -2009,7 +2010,7 @@ static void rist_handle_xr_pkt(struct rist_peer *peer, uint8_t xr_pkt[])
 					return;
 				rtt  = now - lrr  - ((uint64_t)be32toh(dlrr->delay) << 16);
 			}
-			peer->last_mrtt = (uint32_t)(rtt / RIST_CLOCK);
+			peer->last_mrtt = rtt;
 			peer->eight_times_rtt -= peer->eight_times_rtt /8;
 			peer->eight_times_rtt += peer->last_mrtt;
 			if (peer->peer_data && peer->peer_data != peer)
@@ -3479,8 +3480,8 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 	} else {
 		recovery_rtt_min = settings->recovery_rtt_min;
 	}
-	peer->config.recovery_rtt_min = recovery_rtt_min;
-	peer->config.recovery_rtt_max = settings->recovery_rtt_max;
+	peer->config.recovery_rtt_min = recovery_rtt_min * RIST_CLOCK;
+	peer->config.recovery_rtt_max = settings->recovery_rtt_max * RIST_CLOCK;
 	/* Set buffer-bloating */
 	if (settings->min_retries < 2 || settings->min_retries > 100) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_INFO,

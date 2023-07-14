@@ -499,11 +499,11 @@ struct rist_peer {
 
 	/* Data sending */
 	uint32_t seq;
-	uint32_t eight_times_rtt;
+	uint64_t eight_times_rtt;
 	uint32_t w_count; /* Counter for weight in distributed send */
 
 	/* RTT statistics */
-	uint32_t last_mrtt;
+	uint64_t last_mrtt;
 
 	/* Missing queue max size */
 	uint32_t missing_counter_max;
@@ -601,7 +601,7 @@ static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ct
 RIST_PRIV void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *flow);
 RIST_PRIV void rist_sender_peer_statistics(struct rist_peer *peer);
 RIST_PRIV void rist_delete_flow(struct rist_receiver *ctx, struct rist_flow *f);
-RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint32_t rtt);
+RIST_PRIV void rist_receiver_missing(struct rist_flow *f, struct rist_peer *peer,uint64_t nack_time, uint32_t seq, uint64_t rtt);
 RIST_PRIV int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id);
 RIST_PRIV size_t rist_best_rtt_index(struct rist_flow *f);
 RIST_PRIV struct rist_buffer *rist_new_buffer(struct rist_common_ctx *ctx, const void *buf, size_t len, uint8_t type, uint32_t seq, uint64_t source_time, uint16_t src_port, uint16_t dst_port);
