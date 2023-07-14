@@ -187,9 +187,9 @@ struct rist_flow {
 
 	bool receiver_queue_has_items;
 	bool flow_auto_buffer_scaling;
+	bool currently_scaling_buffer;
 	atomic_ulong receiver_queue_size;  /* size in bytes */
 	uint64_t recovery_buffer_ticks;    /* size in ticks */
-	uint64_t target_buffer_ticks;
 	uint64_t stats_report_time; 	   /* in ticks */
 	atomic_ulong receiver_queue_output_idx;  /* next packet to output */
 	size_t receiver_queue_max;
@@ -201,7 +201,7 @@ struct rist_flow {
 	uint32_t missing_counter;
 
 	struct rist_peer_flow_stats stats_instant;
-	struct rist_peer_flow_stats stats_total;
+	struct rist_peer_flow_stats stats_total;//TODO: use the total stats!
 	struct rist_bandwidth_estimation bw;
 	uint64_t stats_next_time;
 	uint64_t checks_next_time;
@@ -505,6 +505,7 @@ struct rist_peer {
 
 	/* Config */
 	struct rist_peer_config config;
+	uint64_t sender_max_buffer_ticks;
 	uint64_t recovery_buffer_ticks;
 
 	bool buffer_bloat_active;

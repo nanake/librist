@@ -894,8 +894,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 
 				now = timestampNTP_u64();
 				uint64_t delay_rtc = (now - b->time);
-
-				if (RIST_UNLIKELY(delay_rtc > (1.1 * recovery_buffer_ticks))) {
+				if (RIST_UNLIKELY(delay_rtc > (1.1 * recovery_buffer_ticks) )) {
 					// Double check the age of the packet within our receiver queue
 					// Safety net for discontinuities in source timestamp, clock drift or improperly scaled timestamp
 					uint64_t delay = now > b->packet_time ? (now - b->packet_time) : 0;
@@ -919,7 +918,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							drop? "dropping" : "releasing");
 
 				}
-				else if (b->target_output_time > now) {
+				else if (b->target_output_time > now && (!f->currently_scaling_buffer || (f->currently_scaling_buffer && (b->time + f->recovery_buffer_ticks) > now))) {
 					// This is how we keep the buffer at the correct level
 					//rist_log_priv(&ctx->common, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
@@ -1390,6 +1389,11 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 			_librist_proto_gre_send_keepalive(peer);
 			_librist_proto_gre_send_keepalive(peer);
 			_librist_proto_gre_send_keepalive(peer);
+			if (peer->sender_ctx != NULL) {
+				_librist_proto_gre_send_buffer_negotiation(peer, peer->sender_ctx->sender_recover_min_time, 0);
+				_librist_proto_gre_send_buffer_negotiation(peer, peer->sender_ctx->sender_recover_min_time, 0);
+				_librist_proto_gre_send_buffer_negotiation(peer, peer->sender_ctx->sender_recover_min_time, 0);
+			}
 		}
 		/* call it the first time manually to speed up the handshake */
 		rist_peer_rtcp(NULL, peer);
@@ -2513,7 +2517,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			payload_offset += 4;
 
 			if (vsf_proto != 0) {//0 = RIST, rest: reserved
-				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown VSF Proto");
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown VSF Proto\n");
 				return;
 			}
 
@@ -2525,12 +2529,14 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 				} else if (vsf_subtype == 0x8001) {
 					//nonce announcements, we don't care
 					return;
+				} else if (vsf_subtype == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION) {
+					gre_proto = RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION;
 				} else {
-					rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST control packet");
+					rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST control packet\n");
 					return;
 				}
 			} else {
-				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST packet");
+				rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Receiving unknown RIST packet\n");
 				return;
 			}
 		}
@@ -2655,6 +2661,11 @@ protocol_bypass:
 			_librist_proto_gre_send_keepalive(p);
 			_librist_proto_gre_send_keepalive(p);
 			_librist_proto_gre_send_keepalive(p);
+			if (p->rist_gre_version >= 2 && p->sender_ctx != NULL) {
+				_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+				_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+				_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+			}
 		}
 		peer_append(p);
 	}
@@ -2688,6 +2699,18 @@ protocol_bypass:
 			memcpy(&p->data, &info.ka, sizeof(peer->data));
 		}
 		p->last_rtcp_received = now;
+		return;
+	}
+
+	if (gre_proto == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION) {
+		uint16_t sender_max_buffer;
+		uint16_t client_current_buffer;
+		if (_librist_proto_gre_parse_buffer_negotiation(p, &recv_buf[payload_offset], recv_bufsize - payload_offset, &sender_max_buffer, &client_current_buffer) != 0)
+			return;
+
+		if (p->receiver_ctx != NULL && sender_max_buffer != 0) {
+			p->sender_max_buffer_ticks = sender_max_buffer * RIST_CLOCK;
+		}
 		return;
 	}
 
@@ -2865,6 +2888,11 @@ protocol_bypass:
 					_librist_proto_gre_send_keepalive(p);
 					_librist_proto_gre_send_keepalive(p);
 					_librist_proto_gre_send_keepalive(p);
+					if (p->rist_gre_version >= 2 && p->sender_ctx != NULL) {
+						_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+						_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+						_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+					}
 				}
 			}
 #else
@@ -3118,8 +3146,10 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 		if (flow->flow_auto_buffer_scaling) {
 			uint64_t now = timestampNTP_u64();
 			if (target_recovery_buffer_size == flow->recovery_buffer_ticks) {
-				if (now <= next_buffer_adjust_step) {
-					next_buffer_adjust_step = now + ONE_SECOND;
+				if (now >= next_buffer_adjust_step) {
+					next_buffer_adjust_step += ONE_SECOND;
+					//Unlock here because otherwise we get lock order issues! _librist_receiver_buffer_calc takes common.peerlist_lock first and then the flow->mutex
+					pthread_mutex_unlock(&(flow->mutex));
 					pthread_mutex_lock(&receiver_ctx->common.peerlist_lock);
 					uint64_t tmp_target_buffer_size = 0;
 					for (size_t i=0; i < flow->peer_lst_len; i++) {
@@ -3129,31 +3159,34 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 						}
 					}
 					pthread_mutex_unlock(&receiver_ctx->common.peerlist_lock);
+					pthread_mutex_lock(&(flow->mutex));
 
 					uint64_t diff = target_recovery_buffer_size - tmp_target_buffer_size;
 					if (tmp_target_buffer_size > target_recovery_buffer_size)
 						diff = tmp_target_buffer_size - target_recovery_buffer_size;
 
 					if (diff > RIST_CLOCK * 15) {
-						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Adjusting flow buffer time to %"PRIu64"ms\n", tmp_target_buffer_size);
+						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Adjusting flow buffer time to %"PRIu64"ms\n", tmp_target_buffer_size/ RIST_CLOCK);
 						target_recovery_buffer_size = tmp_target_buffer_size;
 						buffer_adjust_step_size = diff / 100;
 						buffer_adjust_steps_left = 100;
-						buffer_adjust_step_time = buffer_adjust_step_size * 4;//Magic factor of 4 to ensure our changes aren't too dramatic
+						buffer_adjust_step_time = buffer_adjust_step_size * 8;//Magic factor of 8 to ensure our changes aren't too dramatic
 						if (flow->recovery_buffer_ticks > target_recovery_buffer_size)
 							buffer_adjust_step_size *= -1;
 						next_buffer_adjust_step = now + buffer_adjust_step_time;
 						if ((target_recovery_buffer_size *2ULL) > flow->session_timeout)
 							flow->session_timeout = 2ULL * target_recovery_buffer_size;
+						flow->currently_scaling_buffer = true;
 					}
 				}
-			} else if (now <= next_buffer_adjust_step) {
+			} else if (now >= next_buffer_adjust_step) {
 				flow->recovery_buffer_ticks += buffer_adjust_step_size;
 				buffer_adjust_steps_left--;
 				next_buffer_adjust_step += buffer_adjust_step_time;
 				if (buffer_adjust_steps_left == 0) {
+					flow->currently_scaling_buffer = false;
 					flow->recovery_buffer_ticks = target_recovery_buffer_size;
-					next_buffer_adjust_step = now + ONE_SECOND * 10;// We don't want to adjust to often, so keep 10 seconds between adjustments
+					next_buffer_adjust_step = now +  2 *ONE_SECOND;// We don't want to adjust to often, so keep 2 seconds between adjustments
 				}
 			}
 		}
@@ -3806,6 +3839,58 @@ void rist_receiver_destroy_local(struct rist_receiver *ctx)
 	ctx = NULL;
 }
 
+void _librist_receiver_buffer_calc(struct rist_receiver *ctx) {
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
+	struct rist_peer *p = ctx->common.PEERS;
+	while (p != NULL) {
+		if (p->config.recovery_length_max != p->config.recovery_length_min && !p->listening && p->sender_max_buffer_ticks > 0 && p->flow && p->rist_gre_version >= 2) {
+			//Optimal default according to rist spec:
+			uint64_t desired_buffer_level = (p->eight_times_rtt / 8) * 7 + p->config.recovery_reorder_buffer;
+
+			bool has_high_loss = false;
+			double modifier = 1.0;
+
+			//Modify our buffersize based on some magic numbers, these likely still need tuning
+			pthread_mutex_lock(&p->flow->mutex);
+			modifier += p->flow->stats_instant.lost * 0.05;//5% extra per packet lost
+			if (p->flow->stats_instant.lost > 25)
+				has_high_loss = true;
+
+			modifier += p->flow->stats_instant.recovered_morenack * 0.02;
+			modifier += p->flow->stats_instant.recovered_3nack * 0.01;
+			pthread_mutex_unlock(&p->flow->mutex);
+
+			desired_buffer_level *= modifier;
+
+			if (has_high_loss)
+				desired_buffer_level = p->sender_max_buffer_ticks;
+
+
+			if (desired_buffer_level < p->recovery_buffer_ticks && (p->recovery_buffer_ticks - desired_buffer_level) > 50 * RIST_CLOCK) {
+				desired_buffer_level = p->recovery_buffer_ticks - 50 * RIST_CLOCK;
+			}
+
+			uint64_t recovery_base_min = p->config.recovery_length_min * RIST_CLOCK;
+			uint64_t recovery_base_max = p->config.recovery_length_max * RIST_CLOCK;
+
+			if (desired_buffer_level < recovery_base_min)
+				desired_buffer_level = recovery_base_min;
+			else if (desired_buffer_level > recovery_base_max)
+				desired_buffer_level = recovery_base_max;
+
+			if (desired_buffer_level > p->sender_max_buffer_ticks)
+				desired_buffer_level = p->sender_max_buffer_ticks;
+
+			if (p->recovery_buffer_ticks != desired_buffer_level)
+				_librist_proto_gre_send_buffer_negotiation(p, 0, desired_buffer_level/ RIST_CLOCK);
+
+			p->recovery_buffer_ticks = desired_buffer_level;
+        }
+		p = p->next;
+	}
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
+}
+
 PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 {
 	struct rist_receiver *ctx = (struct rist_receiver *) arg;
@@ -3816,6 +3901,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 	int max_jitter_ms = ctx->common.rist_max_jitter / RIST_CLOCK;
 	ctx->common.nacks_next_time = timestampNTP_u64();
 	uint64_t checks_next_time = now;
+	uint64_t buffer_check_next_time = now + ONE_SECOND;
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Starting receiver protocol loop with %d ms timer\n", max_jitter_ms);
 
 	while (!atomic_load_explicit(&ctx->common.shutdown, memory_order_acquire)) {
@@ -3833,7 +3919,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 			// stats and session timeout timer
 			struct rist_flow *f = ctx->common.FLOWS;
 			while (f) {
+				pthread_mutex_lock(&f->mutex);
 				if (!f->receiver_queue_has_items) {
+					pthread_mutex_unlock(&f->mutex);
 					f = f->next;
 					continue;
 				}
@@ -3869,6 +3957,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 							struct rist_peer *peer = f->peer_lst[i];
 							peer->flow = NULL;
 						}
+						pthread_mutex_unlock(&f->mutex);
 						rist_delete_flow(ctx, f);
 						pthread_mutex_unlock(&ctx->common.peerlist_lock);
 						f = next;
@@ -3879,6 +3968,7 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 					f->stats_next_time += f->stats_report_time;
 					rist_receiver_flow_statistics(ctx, f);
 				}
+				pthread_mutex_unlock(&f->mutex);
 				f = f->next;
 			}
 		}
@@ -3919,6 +4009,11 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 		// Send oob data
 		if (ctx->common.oob_queue_bytesize > 0)
 			rist_oob_dequeue(&ctx->common, max_oobperloop);
+
+		if (now >= buffer_check_next_time) {
+			_librist_receiver_buffer_calc(ctx);
+			buffer_check_next_time += 2 * ONE_SECOND;
+		}
 
 	}
 #ifdef _WIN32
