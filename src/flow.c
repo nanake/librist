@@ -281,6 +281,7 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		else
 			f->receiver_queue_max = RIST_SERVER_QUEUE_BUFFERS;
 
+		f->recovery_buffer_ticks = p->recovery_buffer_ticks;
 		rist_log_priv(&ctx->common, RIST_LOG_INFO, "FLOW #%"PRIu32" created (short=%d)\n", flow_id, f->short_seq);
 	} else {
 		/* double check that this peer is not a member of this flow already */
@@ -295,15 +296,10 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		}
 	}
 
-	// Transfer variables from peer to flow
-	// Set/update max flow buffer size
-	if (f->recovery_buffer_ticks < p->recovery_buffer_ticks) {
-		if (f->stats_report_time == f->recovery_buffer_ticks)
-			f->stats_report_time = p->recovery_buffer_ticks;
-		f->recovery_buffer_ticks = p->recovery_buffer_ticks;
-		if ((f->recovery_buffer_ticks *2ULL) > f->session_timeout)
-			f->session_timeout = 2ULL * f->recovery_buffer_ticks;
+	if (p->config.recovery_length_min != p->config.recovery_length_max) {
+		f->flow_auto_buffer_scaling = true;
 	}
+
 	// Set the flow timeout as the buffer size for the flow
 	// However, we start with 250 ms as the minimum/default
 	// to make sure it is larger than the RTCP interval

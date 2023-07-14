@@ -286,6 +286,8 @@ static void init_peer_settings(struct rist_peer *peer)
 				"New peer with id #%"PRIu32" was configured with maxrate=%d/%d bufmin=%d bufmax=%d reorder=%d rttmin=%d rttmax=%d congestion_control=%d min_retries=%d max_retries=%d\n",
 				peer->adv_peer_id, peer->config.recovery_maxbitrate, peer->config.recovery_maxbitrate_return, peer->config.recovery_length_min, peer->config.recovery_length_max, peer->config.recovery_reorder_buffer,
 				peer->config.recovery_rtt_min /RIST_CLOCK, peer->config.recovery_rtt_max /RIST_CLOCK, peer->config.congestion_control_mode, peer->config.min_retries, peer->config.max_retries);
+		if (peer->config.recovery_length_min != peer->config.recovery_length_max)
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling automatic buffer scaling\n");
 	}
 	else {
 		assert(peer->sender_ctx != NULL);
@@ -717,6 +719,10 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 		now = timestampNTP_RTC_u64();
 	struct rist_peer *peer = b->peer;
 
+	pthread_mutex_lock(&f->mutex);
+	uint64_t recovery_buffer_ticks = f->recovery_buffer_ticks;
+	pthread_mutex_unlock(&f->mutex);
+
 	if (b->nack_count >= peer->config.max_retries) {
 		rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG, "Datagram %"PRIu32
 				" is missing, but nack count is too large (%u), age is %"PRIu64"ms, retry #%lu, max_retries %d, congestion_control_mode %d, stats_receiver_total.recovered_average %d\n",
@@ -729,12 +735,12 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 				f->stats_total.recovered_average);
 		return 8;
 	} else {
-		if ((uint64_t)(now - b->insertion_time) > (peer->recovery_buffer_ticks *1.1)) {
+		if ((uint64_t)(now - b->insertion_time) > (recovery_buffer_ticks *1.1)) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_DEBUG,
 					"Datagram %" PRIu32 " is missing but it is too late (%" PRIu64
 					"ms) to send NACK!, retry #%lu, retry queue %d, max time %"PRIu64"\n",
 					b->seq, (now - b->insertion_time)/RIST_CLOCK, b->nack_count,
-					f->missing_counter, peer->recovery_buffer_ticks / RIST_CLOCK);
+					f->missing_counter, recovery_buffer_ticks / RIST_CLOCK);
 			return 9;
 		} else if (now >= b->next_nack) {
 			uint64_t rtt = (peer->eight_times_rtt / 8);
@@ -763,7 +769,7 @@ static int rist_process_nack(struct rist_flow *f, struct rist_missing_buffer *b)
 					b->seq, (b->next_nack - now) / RIST_CLOCK,
 					(now - b->insertion_time) / RIST_CLOCK,
 					b->nack_count,
-					peer->recovery_buffer_ticks / RIST_CLOCK);
+					recovery_buffer_ticks / RIST_CLOCK);
 
 			// update peer information
 			f->nacks.array[f->nacks.counter] = b->seq;
@@ -3089,6 +3095,15 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 
 	rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Starting data output thread with %d ms max output jitter\n", max_output_jitter_ms);
 
+	pthread_mutex_lock(&(flow->mutex));
+	uint64_t target_recovery_buffer_size = flow->recovery_buffer_ticks;
+	pthread_mutex_unlock(&(flow->mutex));
+
+	uint64_t next_buffer_adjust_step = timestampNTP_u64() + ONE_SECOND;
+	uint64_t buffer_adjust_step_time = 0;
+	int64_t buffer_adjust_step_size = 0;
+	int buffer_adjust_steps_left = 0;
+
 	while (true) {
 		pthread_mutex_lock(&(flow->mutex));
 		int ret = pthread_cond_timedwait_ms(&flow->condition, &flow->mutex, max_output_jitter_ms);
@@ -3099,6 +3114,50 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 		if (atomic_load_explicit(&flow->receiver_queue_size, memory_order_acquire) > 0) {
 			receiver_output(receiver_ctx, flow);
 		}
+
+		if (flow->flow_auto_buffer_scaling) {
+			uint64_t now = timestampNTP_u64();
+			if (target_recovery_buffer_size == flow->recovery_buffer_ticks) {
+				if (now <= next_buffer_adjust_step) {
+					next_buffer_adjust_step = now + ONE_SECOND;
+					pthread_mutex_lock(&receiver_ctx->common.peerlist_lock);
+					uint64_t tmp_target_buffer_size = 0;
+					for (size_t i=0; i < flow->peer_lst_len; i++) {
+						struct rist_peer *p = flow->peer_lst[i];
+						if (p->recovery_buffer_ticks > tmp_target_buffer_size) {
+							tmp_target_buffer_size = p->recovery_buffer_ticks;
+						}
+					}
+					pthread_mutex_unlock(&receiver_ctx->common.peerlist_lock);
+
+					uint64_t diff = target_recovery_buffer_size - tmp_target_buffer_size;
+					if (tmp_target_buffer_size > target_recovery_buffer_size)
+						diff = tmp_target_buffer_size - target_recovery_buffer_size;
+
+					if (diff > RIST_CLOCK * 15) {
+						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Adjusting flow buffer time to %"PRIu64"ms\n", tmp_target_buffer_size);
+						target_recovery_buffer_size = tmp_target_buffer_size;
+						buffer_adjust_step_size = diff / 100;
+						buffer_adjust_steps_left = 100;
+						buffer_adjust_step_time = buffer_adjust_step_size * 4;//Magic factor of 4 to ensure our changes aren't too dramatic
+						if (flow->recovery_buffer_ticks > target_recovery_buffer_size)
+							buffer_adjust_step_size *= -1;
+						next_buffer_adjust_step = now + buffer_adjust_step_time;
+						if ((target_recovery_buffer_size *2ULL) > flow->session_timeout)
+							flow->session_timeout = 2ULL * target_recovery_buffer_size;
+					}
+				}
+			} else if (now <= next_buffer_adjust_step) {
+				flow->recovery_buffer_ticks += buffer_adjust_step_size;
+				buffer_adjust_steps_left--;
+				next_buffer_adjust_step += buffer_adjust_step_time;
+				if (buffer_adjust_steps_left == 0) {
+					flow->recovery_buffer_ticks = target_recovery_buffer_size;
+					next_buffer_adjust_step = now + ONE_SECOND * 10;// We don't want to adjust to often, so keep 10 seconds between adjustments
+				}
+			}
+		}
+
 		pthread_mutex_unlock(&(flow->mutex));
 	}
 	rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Data output thread shutting down\n");
