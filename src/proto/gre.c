@@ -72,7 +72,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 			vsf->subtype = htobe16(RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION);
 		else
 			vsf->subtype = htobe16(RIST_VSF_PROTOCOL_SUBTYPE_KEEPALIVE);
-		proto = RIST_GRE_PROTOCOL_TYPE_VSF;
+
 		hdr->prot_type = htobe16(RIST_GRE_PROTOCOL_TYPE_VSF);
 	} else {
 		hdr->prot_type = htobe16(proto);
