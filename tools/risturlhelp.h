@@ -10,6 +10,8 @@
 const char help_urlstr[] = "\nUsage: append to end of individual rist:// url(s) as ?param1=value1&param2=value2...\n"
 "  Simple, Main and Advanced Profiles\n"
 "    param buffer=###  buffer size in milliseconds\n"
+"    param buffer-min=### min buffer size in milliseconds\n"
+"    param buffer-max=### max buffer size in milliseconds\n"
 "    param bandwidth=###  max bandwidth in Kbps\n"
 "    param return-bandwidth=###  max bandwidth for messaging return in Kbps\n"
 "    param reorder-buffer=###  reordering buffer size in ms\n"
