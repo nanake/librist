@@ -601,6 +601,7 @@ struct rist_peer {
 
 	char *url;
 	char cname[RIST_MAX_HOSTNAME];
+	uint8_t mac_addr[6];
 	bool send_first_connection_event;
 
 	uint64_t log_repeat_timer;

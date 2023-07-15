@@ -171,7 +171,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 
 void _librist_proto_gre_send_keepalive(struct rist_peer *p) {
 	struct rist_gre_keepalive ka = {0};
-	//TODO: set mac
+	memcpy(ka.mac_array, p->mac_addr, sizeof(ka.mac_array));
 	SET_BIT(ka.capabilities1, 0); // Null packet deletion
 	SET_BIT(ka.capabilities1, 2); // SMPTE-2022-7
 	SET_BIT(ka.capabilities1, 5); // Bonding

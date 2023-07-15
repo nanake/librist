@@ -16,6 +16,7 @@
 #include "endian-shim.h"
 #include "time-shim.h"
 #include "proto/rist_time.h"
+#include "network.h"
 #include <sys/types.h>
 #include "proto/protocol_gre.h"
 #if HAVE_SRP_SUPPORT
@@ -1262,6 +1263,8 @@ err:
 	return -1;
 }
 
+
+
 struct rist_peer *_librist_peer_create_common(struct rist_common_ctx *cctx, struct rist_receiver *rctx, struct rist_sender *sctx, const struct rist_peer_config *config)
 {
 	int key_size = config->key_size;
@@ -1320,6 +1323,10 @@ struct rist_peer *_librist_peer_create_common(struct rist_common_ctx *cctx, stru
 		p->session_timeout = 250 * RIST_CLOCK;
 	}
 
+	if (cctx->profile > RIST_PROFILE_SIMPLE) {
+		if (_librist_network_get_macaddr(p->mac_addr) < 0)
+			rist_log_priv(cctx, RIST_LOG_WARN, "Couldn't get a mac address for peer, keepalive will not contain a mac address\n");
+	}
 	/* Initialize socket */
 	rist_create_socket(p);
 	if (p->sd < 0) {
@@ -2311,7 +2318,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->peer_ssrc = peer_src->peer_ssrc;
 	peer->session_timeout = peer_src->session_timeout;
 	peer->rist_gre_version = RIST_GRE_VERSION_CUR;
-
+	memcpy(peer->mac_addr, peer_src->mac_addr, sizeof(peer->mac_addr));
 	init_peer_settings(peer);
 }
 

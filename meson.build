@@ -63,7 +63,10 @@ have_clock_gettime = false
 threads = []
 test_args = []
 if host_machine.system() == 'windows'
-	deps += [ cc.find_library('ws2_32') ]
+	deps += [
+		cc.find_library('ws2_32'),
+		cc.find_library('iphlpapi')
+	]
 
 windows_version_test = '''
 #include <windef.h>
@@ -269,6 +272,7 @@ librist = library('librist',
 	'src/proto/rist_time.c',
 	'src/flow.c',
 	'src/logging.c',
+	'src/network.c',
 	'src/rist.c',
 	'src/rist-common.c',
 	'src/rist_ref.c',
