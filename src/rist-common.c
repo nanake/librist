@@ -1262,32 +1262,31 @@ err:
 	return -1;
 }
 
-struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
-		const struct rist_peer_config *config)
+struct rist_peer *_librist_peer_create_common(struct rist_common_ctx *cctx, struct rist_receiver *rctx, struct rist_sender *sctx, const struct rist_peer_config *config)
 {
 	int key_size = config->key_size;
 	if (strlen(config->secret) && !key_size) {
-		rist_log_priv(&ctx->common, RIST_LOG_NOTICE, "PSK Set but key size not explicitly configured, defaulting to AES256");
+		rist_log_priv(cctx, RIST_LOG_NOTICE, "PSK Set but key size not explicitly configured, defaulting to AES256");
 		key_size = 256;
 	}
 	if (key_size) {
 		if (key_size != 128 && key_size != 192 && key_size != 256) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", key_size);
+			rist_log_priv(cctx, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", key_size);
 			return NULL;
 		}
 		if (!strlen(config->secret)) {
 
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid secret passphrase\n");
+			rist_log_priv(cctx, RIST_LOG_ERROR, "Invalid secret passphrase\n");
 			return NULL;
 		}
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", key_size);
+		rist_log_priv(cctx, RIST_LOG_INFO, "Using %d bits secret key\n", key_size);
 	}
 	else {
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Encryption is disabled for this peer\n");
+		rist_log_priv(cctx, RIST_LOG_INFO, "Encryption is disabled for this peer\n");
 	}
 
 	/* Initialize peer */
-	struct rist_peer *p = peer_initialize(config->address, NULL, ctx);
+	struct rist_peer *p = peer_initialize(config->address, sctx, rctx);
 	if (!p) {
 		return NULL;
 	}
@@ -1310,7 +1309,7 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 
 	if (config->session_timeout > 0) {
 		if (config->session_timeout < 250) {
-			rist_log_priv(&ctx->common, RIST_LOG_WARN, "The configured (%d ms) peer session timeout is too small, using %d ms instead\n",
+			rist_log_priv(cctx, RIST_LOG_WARN, "The configured (%d ms) peer session timeout is too small, using %d ms instead\n",
 				config->session_timeout, 250);
 			p->session_timeout = 250 * RIST_CLOCK;
 		}
@@ -1324,18 +1323,25 @@ struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
 	/* Initialize socket */
 	rist_create_socket(p);
 	if (p->sd < 0) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create socket\n");
+		rist_log_priv(cctx, RIST_LOG_ERROR, "Could not create socket\n");
 		free(p);
 		return NULL;
 	}
+	store_peer_settings(config, p);
+	return p;
+}
 
+struct rist_peer *rist_receiver_peer_insert_local(struct rist_receiver *ctx,
+		const struct rist_peer_config *config)
+{
+	struct rist_peer *p = _librist_peer_create_common(&ctx->common, ctx, NULL, config);
+	if (!p)
+		return NULL;
 	if (config->virt_dst_port != 0) {
 		p->remote_port = config->virt_dst_port + 1;
 	}
 
 	p->adv_peer_id = ++ctx->common.peer_counter;
-	store_peer_settings(config, p);
-
 	return p;
 }
 
@@ -3651,63 +3657,9 @@ static void store_peer_settings(const struct rist_peer_config *settings, struct 
 struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 		const struct rist_peer_config *config, bool b_rtcp)
 {
-	int key_size = config->key_size;
-	if (strlen(config->secret) && !key_size) {
-		rist_log_priv(&ctx->common, RIST_LOG_NOTICE, "PSK Set but key size not explicitly configured, defaulting to AES256");
-		key_size = 256;
-	}
-	if (key_size) {
-		if (key_size != 128 && key_size != 192 && key_size != 256) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid encryption key length: %d\n", key_size);
-			return NULL;
-		}
-		if (!strlen(config->secret)) {
-			rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Invalid secret passphrase\n");
-			return NULL;
-		}
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Using %d bits secret key\n", key_size);
-	}
-	else {
-		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Encryption is disabled for this peer\n");
-	}
-
-	/* Initialize peer */
-	struct rist_peer *newpeer = peer_initialize(config->address, ctx, NULL);
-	if (!newpeer) {
+	struct rist_peer *newpeer = _librist_peer_create_common(&ctx->common, NULL, ctx, config);
+	if (!newpeer)
 		return NULL;
-	}
-
-	strncpy(&newpeer->miface[0], config->miface, RIST_MAX_STRING_SHORT);
-	strncpy(&newpeer->cname[0], config->cname, RIST_MAX_STRING_SHORT);
-	if (config->address_family && rist_set_manual_sockdata(newpeer, config)) {
-		free(newpeer);
-		return NULL;
-	}
-
-	if (key_size) {
-		_librist_crypto_psk_rist_key_init(&newpeer->key_tx, key_size, config->key_rotation, config->secret);
-		_librist_crypto_psk_rist_key_clone(&newpeer->key_tx, &newpeer->key_rx);
-	}
-
-	if (config->keepalive_interval > 0) {
-		newpeer->rtcp_keepalive_interval = config->keepalive_interval * RIST_CLOCK;
-	}
-
-	if (config->session_timeout > 0) {
-		newpeer->session_timeout = config->session_timeout * RIST_CLOCK;
-	}
-	else {
-		newpeer->session_timeout = 250 * RIST_CLOCK;//default to 250ms, which is 2,5 RTCP periods
-	}
-
-	/* Initialize socket */
-	rist_create_socket(newpeer);
-	if (newpeer->sd < 0) {
-		rist_log_priv(&ctx->common, RIST_LOG_ERROR, "Could not create socket\n");
-		free(newpeer);
-		return NULL;
-	}
-
 	if (b_rtcp)
 	{
 		if (newpeer->u.address.sa_family == AF_INET) {
@@ -3732,8 +3684,6 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 	newpeer->is_rtcp = b_rtcp;
 	newpeer->adv_peer_id = ++ctx->common.peer_counter;
 	newpeer->peer_ssrc = newpeer->adv_flow_id = ctx->adv_flow_id;
-
-	store_peer_settings(config, newpeer);
 
 	rist_log_priv(&ctx->common, RIST_LOG_INFO, "Advertising flow_id  %" PRIu64 " and peer_id %u, %u/%u\n",
 			newpeer->adv_flow_id, newpeer->adv_peer_id, newpeer->local_port, newpeer->remote_port);
