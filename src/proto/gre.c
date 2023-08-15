@@ -19,7 +19,7 @@
 #include <string.h>
 
 
-ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, uint16_t proto, uint8_t *payload, size_t payload_len, uint16_t src_port, uint16_t dst_port) {
+ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, uint16_t proto, uint8_t *payload, size_t payload_len, uint16_t src_port, uint16_t dst_port, uint8_t gre_version) {
 	bool encrypt = (p->key_tx.key_size > 0);
 
 	/* Our encryption and compression operations directly modify the payload buffer we receive as a pointer
@@ -38,11 +38,11 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
     assert(payload != NULL);
 
 	const size_t nonce_offset = sizeof(*hdr);
-	hdr->flags2 = (p->rist_gre_version &0x7) << 3;
+	hdr->flags2 = (gre_version &0x7) << 3;
 
 	if (encrypt) {
 		hdr_len += 4;
-		if (p->rist_gre_version && p->key_tx.key_size == 256)
+		if (gre_version && p->key_tx.key_size == 256)
 		{
 			hdr->flags2 |= (1 & 1UL) << 6;
 		}
@@ -62,7 +62,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 	size_t hdr_payload_offset = hdr_len;
 
 	//If we can use the new VSF ethertype (rist GRE version >= 2), we should, as the other way is considered deprecated
-	if ((p->rist_gre_version >= 2 && (proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || proto == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION))) {
+	if ((gre_version >= 2 && (proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || proto == RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION))) {
 		struct rist_vsf_proto *vsf = (struct rist_vsf_proto *)&hdr_buf[hdr_len];
 		hdr_len += sizeof(*vsf);
 		vsf->type = RIST_VSF_PROTOCOL_TYPE_RIST;//Network byte order! these are 0 values, so safe to do without htobe16
@@ -95,18 +95,18 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 		if (hdr_payload_offset != hdr_len) {
 #if HAVE_MBEDTLS
 			//MbedTLS allows us to continue encryption, so we can encrypt hdr & payload in 2 ops
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), p->rist_gre_version, &hdr_buf[hdr_payload_offset], &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
+			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, &hdr_buf[hdr_payload_offset], &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
 			_librist_crypto_psk_encrypt_continue(&p->key_tx, payload, payload_wr, payload_len);
 #else
 			memcpy(payload_wr, &hdr_buf[hdr_payload_offset], hdr_len - hdr_payload_offset);
 			memcpy(&payload_wr[hdr_len - hdr_payload_offset], payload, payload_len);
 			payload_len += (hdr_len - hdr_payload_offset);
 			hdr_len -= (hdr_len - hdr_payload_offset);
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), p->rist_gre_version, payload_wr, payload_wr, payload_len);
+			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, payload_wr, payload_wr, payload_len);
 #endif
 		} else {
 			//Single encryption pass suffices
-			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), p->rist_gre_version, payload, payload_wr, payload_len);
+			_librist_crypto_psk_encrypt(&p->key_tx, htobe32(seq), gre_version, payload, payload_wr, payload_len);
 		}
 
 		SET_BIT(hdr->flags1, 5); // set key bit
@@ -169,7 +169,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 	return ret;
 }
 
-void _librist_proto_gre_send_keepalive(struct rist_peer *p) {
+void _librist_proto_gre_send_keepalive(struct rist_peer *p, uint8_t gre_version) {
 	struct rist_gre_keepalive ka = {0};
 	memcpy(ka.mac_array, p->mac_addr, sizeof(ka.mac_array));
 	SET_BIT(ka.capabilities1, 0); // Null packet deletion
@@ -177,7 +177,7 @@ void _librist_proto_gre_send_keepalive(struct rist_peer *p) {
 	SET_BIT(ka.capabilities1, 5); // Bonding
 	//SET_BIT(ka.capabilities2, 3);//OTF Passphrase change
 	SET_BIT(ka.capabilities2, 5);//Reduced overhead
-	_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, (uint8_t *)&ka, sizeof(ka), 0, 0);
+	_librist_proto_gre_send_data(p, 0, RIST_GRE_PROTOCOL_TYPE_KEEPALIVE, (uint8_t *)&ka, sizeof(ka), 0, 0, gre_version);
 }
 
 int _librist_proto_gre_parse_keepalive(const uint8_t buf[], size_t buflen, struct rist_keepalive_info  *info) {
@@ -211,7 +211,7 @@ void _librist_proto_gre_send_buffer_negotiation(struct rist_peer *p, uint16_t se
 	bn.sender_max_buffer_size_ms = htobe16(sender_max_buffer);
 	bn.receiver_current_buffer_size_ms = htobe16(receiver_current_buffer);
 	bn.protocol_type = 0;
-	_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, (uint8_t *)&bn, sizeof(bn), 0, 0);
+	_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, (uint8_t *)&bn, sizeof(bn), 0, 0, 2);
 }
 
 int _librist_proto_gre_parse_buffer_negotiation(struct rist_peer *p, uint8_t buf[], size_t buflen, uint16_t *sender_max_buffer, uint16_t *receiver_current_buffer) {
@@ -222,7 +222,7 @@ int _librist_proto_gre_parse_buffer_negotiation(struct rist_peer *p, uint8_t buf
 	if (bn->protocol_type != 0) {
 		bn->sender_max_buffer_size_ms = 0;
 		bn->receiver_current_buffer_size_ms = 0;
-		_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, buf, buflen, 0, 0);
+		_librist_proto_gre_send_data(p, 0, RIST_VSF_PROTOCOL_SUBTYPE_BUFFER_NEGOTIATION, buf, buflen, 0, 0, 2);
 		return -2;
 	}
 	*sender_max_buffer = be16toh(bn->sender_max_buffer_size_ms);

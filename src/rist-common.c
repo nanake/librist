@@ -1399,9 +1399,13 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 			peer->send_keepalive = true;
 		}
 		if (get_cctx(peer)->profile > RIST_PROFILE_SIMPLE) {
-			_librist_proto_gre_send_keepalive(peer);
-			_librist_proto_gre_send_keepalive(peer);
-			_librist_proto_gre_send_keepalive(peer);
+			//Try version 2 first
+			_librist_proto_gre_send_keepalive(peer, 2);
+			_librist_proto_gre_send_keepalive(peer, 2);
+			_librist_proto_gre_send_keepalive(peer, 2);
+			_librist_proto_gre_send_keepalive(peer, 1);
+			_librist_proto_gre_send_keepalive(peer, 1);
+			_librist_proto_gre_send_keepalive(peer, 1);
 			if (peer->sender_ctx != NULL) {
 				_librist_proto_gre_send_buffer_negotiation(peer, peer->sender_ctx->sender_recover_min_time, 0);
 				_librist_proto_gre_send_buffer_negotiation(peer, peer->sender_ctx->sender_recover_min_time, 0);
@@ -2317,7 +2321,7 @@ static void peer_copy_settings(struct rist_peer *peer_src, struct rist_peer *pee
 	peer->rtcp_keepalive_interval = peer_src->rtcp_keepalive_interval;
 	peer->peer_ssrc = peer_src->peer_ssrc;
 	peer->session_timeout = peer_src->session_timeout;
-	peer->rist_gre_version = RIST_GRE_VERSION_CUR;
+	peer->rist_gre_version = RIST_GRE_VERSION_MIN;
 	memcpy(peer->mac_addr, peer_src->mac_addr, sizeof(peer->mac_addr));
 	init_peer_settings(peer);
 }
@@ -2423,7 +2427,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
 	uint32_t flow_id = 0;
 	uint16_t gre_proto = 0;
-	uint8_t rist_gre_version = RIST_GRE_VERSION_CUR;
+	uint8_t rist_gre_version = RIST_GRE_VERSION_MIN;
 	if (cctx->profile > RIST_PROFILE_SIMPLE)
 	{
 		struct rist_gre_hdr *gre = NULL;
@@ -2665,15 +2669,16 @@ protocol_bypass:
 				sender_peer_append(peer->sender_ctx, p);
 		}
 		p->send_keepalive = true;
+		p->rist_gre_version = rist_gre_version;
 		if (cctx->profile > RIST_PROFILE_SIMPLE
 #if HAVE_SRP_SUPPORT
 			&& ((p->eap_ctx && p->eap_ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
 #endif
 			) {
 			//Answer their keep alive with one from us
-			_librist_proto_gre_send_keepalive(p);
-			_librist_proto_gre_send_keepalive(p);
-			_librist_proto_gre_send_keepalive(p);
+			_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+			_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+			_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
 			if (p->rist_gre_version >= 2 && p->sender_ctx != NULL) {
 				_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
 				_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
@@ -2683,12 +2688,19 @@ protocol_bypass:
 		peer_append(p);
 	}
 
-	if (cctx->profile > RIST_PROFILE_SIMPLE && rist_gre_version < p->rist_gre_version && rist_gre_version < RIST_GRE_VERSION_CUR && rist_gre_version >= RIST_GRE_VERSION_MIN) {
+	//Only allow upgrade of gre version
+	if (p->rist_gre_version < rist_gre_version
+#if HAVE_SRP_SUPPORT
+			&& ((p->eap_ctx && p->eap_ctx->authentication_state >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
+#endif
+	) {
+		//Our GRE version got upgraded, try kickstarting buffer negotiation
+		if (p->rist_gre_version == RIST_GRE_VERSION_MIN && p->sender_ctx != NULL) {
+			_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+			_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+			_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
+		}
 		p->rist_gre_version = rist_gre_version;
-		//We got downgraded, perhaps other side couldn't parse our keepalive message, so send 3 more
-		_librist_proto_gre_send_keepalive(p);
-		_librist_proto_gre_send_keepalive(p);
-		_librist_proto_gre_send_keepalive(p);
 	}
 
 	if (gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE) {
@@ -2898,9 +2910,9 @@ protocol_bypass:
 						"Peer %d EAP Authentication succeeded\n", peer->adv_peer_id);
 					p->eap_authentication_state = 2;
 					//First authentication, so send keepalive
-					_librist_proto_gre_send_keepalive(p);
-					_librist_proto_gre_send_keepalive(p);
-					_librist_proto_gre_send_keepalive(p);
+					_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+					_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+					_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
 					if (p->rist_gre_version >= 2 && p->sender_ctx != NULL) {
 						_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
 						_librist_proto_gre_send_buffer_negotiation(p, peer->sender_ctx->sender_recover_min_time, 0);
