@@ -2683,6 +2683,8 @@ protocol_bypass:
 		}
 		peer_append(p);
 	}
+	if (!p)
+		return;
 
 	//Only allow upgrade of gre version
 	if (p->rist_gre_version < rist_gre_version
