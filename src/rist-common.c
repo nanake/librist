@@ -3226,10 +3226,14 @@ static void rist_peer_periodic(struct rist_peer *p, uint64_t now) {
 			p->next_periodic_rtcp = now + p->rtcp_keepalive_interval;
 			rist_peer_rtcp(NULL, p);
 		}
+		if (get_cctx(p)->profile == RIST_PROFILE_MAIN && p->next_keepalive_packet <= now) {
+			p->next_keepalive_packet = now + ONE_SECOND;
+			_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+		}
 	}
 #if HAVE_SRP_SUPPORT
-		if (!p->listening || p->parent)
-			eap_periodic(p->eap_ctx);
+	if (!p->listening || p->parent)
+		eap_periodic(p->eap_ctx);
 #endif
 }
 
@@ -3252,7 +3256,6 @@ static void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
 	}
 	pthread_mutex_unlock(&ctx->common.peerlist_lock);
 }
-
 
 void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
 {
