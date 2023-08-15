@@ -584,6 +584,10 @@ int eap_process_eapol(struct eapsrp_ctx* ctx, uint8_t pkt[], size_t len)
 		case EAPOL_TYPE_START:
 			if (ctx->role == EAP_ROLE_AUTHENTICATOR && !ctx->last_pkt)
 				return eap_request_identity(ctx);
+			if (ctx->role == EAP_ROLE_AUTHENTICATOR && ctx->authentication_state == EAP_AUTH_STATE_SUCCESS) {
+				ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
+                return eap_request_identity(ctx);
+            }
 			return 0;
 			break;
 		case EAPOL_TYPE_LOGOFF:
@@ -637,12 +641,6 @@ void eap_periodic(struct eapsrp_ctx *ctx)
 		}
 		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
 		eap_request_identity(ctx);
-		return;
-	}
-	else if (ctx->role == EAP_ROLE_AUTHENTICATEE && ctx->authentication_state ==  EAP_AUTH_STATE_SUCCESS &&
-			 now > ctx->last_auth_timestamp + reauth_period) {
-		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
-		eap_start(ctx);
 		return;
 	}
 	uint64_t reauth_time_out = ctx->last_auth_timestamp + reauth_period + EAP_AUTH_RETRY_MAX * retry_period;
