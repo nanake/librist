@@ -593,7 +593,7 @@ struct rist_peer {
 
 	/* Timers */
 	uint32_t rtcp_keepalive_interval;
-	uint64_t keepalive_next_time;
+	uint64_t next_periodic_rtcp;
 	uint64_t session_timeout;
 	uint64_t last_rtcp_received;
 	uint64_t last_sender_report_time;

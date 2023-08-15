@@ -2225,14 +2225,10 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	if (peer->dead && peer->parent != NULL)
 		return;//Don't send to peers that connect to us and have dropped silent
 
-	else { //if (ctx->profile <= RIST_PROFILE_MAIN) {
-		if (peer->receiver_mode) {
-			rist_receiver_periodic_rtcp(peer);
-		} else {
-			rist_sender_periodic_rtcp(peer);
-			//if (peer->echo_enabled)
-			//	rist_request_echo(peer);
-		}
+	if (peer->receiver_mode) {
+		rist_receiver_periodic_rtcp(peer);
+	} else {
+		rist_sender_periodic_rtcp(peer);
 	}
 }
 
@@ -3224,23 +3220,36 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 	return 0;
 }
 
+static void rist_peer_periodic(struct rist_peer *p, uint64_t now) {
+	if (p->send_keepalive) {
+		if (now > p->next_periodic_rtcp) {
+			p->next_periodic_rtcp = now + p->rtcp_keepalive_interval;
+			rist_peer_rtcp(NULL, p);
+		}
+	}
+#if HAVE_SRP_SUPPORT
+		if (!p->listening || p->parent)
+			eap_periodic(p->eap_ctx);
+#endif
+}
+
 static void sender_peer_events(struct rist_sender *ctx, uint64_t now)
 {
 	pthread_mutex_lock(&ctx->common.peerlist_lock);
 	for (size_t j = 0; j < ctx->peer_lst_len; j++) {
-		struct rist_peer *peer = ctx->peer_lst[j];
-		if (peer->send_keepalive) {
-			if (now > peer->keepalive_next_time) {
-				peer->keepalive_next_time = now + peer->rtcp_keepalive_interval;
-				rist_peer_rtcp(NULL, peer);
-			}
-		}
-#if HAVE_SRP_SUPPORT
-		if (!peer->listening || peer->parent)
-			eap_periodic(peer->eap_ctx);
-#endif
+		rist_peer_periodic(ctx->peer_lst[j], now);
 	}
+	pthread_mutex_unlock(&ctx->common.peerlist_lock);
+}
 
+
+static void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
+{
+	pthread_mutex_lock(&ctx->common.peerlist_lock);
+
+	for (struct rist_peer *p = ctx->common.PEERS; p != NULL; p = p->next) {
+		rist_peer_periodic(p, now);
+	}
 	pthread_mutex_unlock(&ctx->common.peerlist_lock);
 }
 
@@ -3711,25 +3720,6 @@ struct rist_peer *rist_sender_peer_insert_local(struct rist_sender *ctx,
 
 }
 
-void receiver_peer_events(struct rist_receiver *ctx, uint64_t now)
-{
-	pthread_mutex_lock(&ctx->common.peerlist_lock);
-
-	for (struct rist_peer *p = ctx->common.PEERS; p != NULL; p = p->next) {
-		if (p->send_keepalive) {
-			if (now > p->keepalive_next_time) {
-				p->keepalive_next_time = now + p->rtcp_keepalive_interval;
-				rist_peer_rtcp(NULL, p);
-			}
-		}
-#if HAVE_SRP_SUPPORT
-		if (!p->listening && p->parent)
-			eap_periodic(p->eap_ctx);
-#endif
-	}
-
-	pthread_mutex_unlock(&ctx->common.peerlist_lock);
-}
 
 void rist_empty_oob_queue(struct rist_common_ctx *ctx)
 {
