@@ -471,7 +471,8 @@ struct rist_keepalive_data {
 };
 
 struct rist_peer {
-        /* linked list */
+	/* linked list */
+	pthread_mutex_t peer_lock;//Currently only used for setting password & in sending/receiving
 	struct rist_peer *next;
 	struct rist_peer *prev;
 

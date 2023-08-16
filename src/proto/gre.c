@@ -96,7 +96,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 			modifying_payload = true;
 			assert(payload_wr);
 		}
-
+		pthread_mutex_lock(&key_peer->peer_lock);
 		struct rist_key *key = &key_peer->key_tx;
 		if (key_peer->key_tx_odd_active)
 			key = &p->key_tx_odd;
@@ -118,7 +118,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 			//Single encryption pass suffices
 			_librist_crypto_psk_encrypt(key, htobe32(seq), gre_version, payload, payload_wr, payload_len);
 		}
-
+		pthread_mutex_unlock(&key_peer->peer_lock);
 		SET_BIT(hdr->flags1, 5); // set key bit
 		//Write key, our nonce is stored in network byte order (even though it's uint32_t), so just memcpy it
 		memcpy(&hdr_buf[nonce_offset], key->gre_nonce, sizeof(p->key_tx.gre_nonce));

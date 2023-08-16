@@ -2490,6 +2490,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			if (rist_gre_version < 1)
 				p->rist_gre_version = rist_gre_version;
 #endif
+			pthread_mutex_lock(&p->peer_lock);
 			k = &p->key_rx;
 			if (odd_nonce)
 				k = &p->key_rx_odd;
@@ -2500,9 +2501,10 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 				int bits = (CHECK_BIT(gre->flags2, 6))? 256 : 128;
 				k->key_size = bits;
 			}
+			_librist_crypto_psk_decrypt(k, &recv_buf[nonce_offset], htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
+			pthread_mutex_unlock(&p->peer_lock);
 			p = peer;
 
-			_librist_crypto_psk_decrypt(k, &recv_buf[nonce_offset], htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
 			if (k->bad_decryption)
 				return;
 		} else if (k->key_size && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL && (!has_seq || !has_key)) {
@@ -3115,6 +3117,12 @@ static struct rist_peer *peer_initialize(const char *url, struct rist_sender *se
 	struct rist_peer *p = calloc(1, sizeof(*p));
 	if (!p) {
 		rist_log_priv(cctx, RIST_LOG_ERROR, "\tNot enough memory creating peer!\n");
+		return NULL;
+	}
+
+	if (pthread_mutex_init(&p->peer_lock, NULL) != 0) {
+		rist_log_priv(cctx, RIST_LOG_ERROR, "\tError initializing peer lock!\n");
+		free(p);
 		return NULL;
 	}
 
