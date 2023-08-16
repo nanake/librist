@@ -55,6 +55,7 @@ struct eapsrp_ctx
     int authentication_state;
     uint8_t last_identifier;
     uint8_t tries;
+    bool may_rollover_passphrase;
     bool did_first_auth;
 
     uint64_t passphrase_request_timer;
@@ -247,6 +248,7 @@ static int process_eap_request_srp_server_key(struct eapsrp_ctx *ctx, uint8_t id
 	if (ctx->config.use_key_as_passphrase && ctx->eapversion3) {
 		SET_BIT(response[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 3)], 0);
 		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_client_get_key(ctx->client_ctx), SHA256_DIGEST_LENGTH, !ctx->did_first_auth);
+		ctx->did_first_auth = true;
 	}
 	librist_crypto_srp_client_write_M1_bytes(ctx->client_ctx, &response[offset]);
 	int ret = send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_RESPONSE, identifier, out_len, response, ctx->eapversion3? 3 :2);
@@ -262,9 +264,13 @@ static int process_eap_request_srp_server_validator(struct eapsrp_ctx *ctx, uint
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 			rist_log_priv2(ctx->config.logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated\n");
 		bool set_passphrase = CHECK_BIT(pkt[3], 0);
-		if (set_passphrase) {
-			librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_client_get_key(ctx->client_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+		if (set_passphrase && ctx->eapversion3) {
+			librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_client_get_key(ctx->client_ctx), SHA256_DIGEST_LENGTH, !ctx->did_first_auth);
 		}
+
+		if (ctx->config.use_key_as_passphrase && ctx->eapversion3)
+			ctx->may_rollover_passphrase = true;
+
 		ctx->did_first_auth = true;
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
@@ -486,7 +492,7 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 	ctx->authenticated = true;
 	bool set_passphrase = CHECK_BIT(pkt[3], 0);
 	if (set_passphrase) {
-		librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+		librist_peer_update_rx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, !ctx->did_first_auth);
 	}
 	ctx->did_first_auth = true;
 	uint8_t outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr) + 4 + DIGEST_LENGTH)];
@@ -496,7 +502,8 @@ static int process_eap_response_client_validator(struct eapsrp_ctx *ctx, size_t 
 	memset(&outpkt[EAPOL_EAP_HDRS_OFFSET + sizeof(struct eap_srp_hdr)], 0, 4);
 	if (ctx->config.use_key_as_passphrase) {
 		SET_BIT(outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 3)], 0);
-		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, ctx->did_first_auth);
+		librist_peer_update_tx_passphrase(ctx->peer, librist_crypto_srp_authenticator_get_key(ctx->auth_ctx), SHA256_DIGEST_LENGTH, !ctx->did_first_auth);
+		ctx->did_first_auth = true;
 	}
 	librist_crypto_srp_authenticator_write_M2_bytes(ctx->auth_ctx, &outpkt[(EAPOL_EAP_HDRS_OFFSET + sizeof(*hdr) + 4)]);
 	ctx->last_identifier++;
@@ -509,6 +516,10 @@ static int process_eap_response_srp_server_validator(struct eapsrp_ctx *ctx)
 	{
 		if (ctx->authentication_state < EAP_AUTH_STATE_SUCCESS)
 			rist_log_priv2(ctx->config.logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"Successfully authenticated %s@%s\n", ctx->config.username, ctx->ip_string);
+
+		if (ctx->config.use_key_as_passphrase && ctx->eapversion3)
+			ctx->may_rollover_passphrase = true;
+
 		ctx->authentication_state = EAP_AUTH_STATE_SUCCESS;
 		ctx->last_auth_timestamp = timestampNTP_u64();
 		ctx->tries = 0;
@@ -646,7 +657,7 @@ static int process_eap_pkt(struct eapsrp_ctx *ctx, uint8_t pkt[], size_t len, ui
 		case EAP_CODE_FAILURE:
 			eap_reset_data(ctx);
 			rist_log_priv2(ctx->config.logging_settings, RIST_LOG_ERROR, EAP_LOG_PREFIX"Authentication failed\n");
-			return eap_start(ctx);//try to restart the process
+			return _librist_proto_eap_start(ctx);//try to restart the process
 		default:
 			return -1;
 	}
@@ -661,7 +672,7 @@ int eap_request_identity(struct eapsrp_ctx *ctx)
 	return send_eapol_pkt(ctx, EAPOL_TYPE_EAP, EAP_CODE_REQUEST, ctx->last_identifier, 1, outpkt, ctx->eapversion3? 3 :2);
 }
 
-int eap_start(struct eapsrp_ctx *ctx)
+int _librist_proto_eap_start(struct eapsrp_ctx *ctx)
 {
 	if (ctx->authentication_state == EAP_AUTH_STATE_SUCCESS)
 		ctx->authentication_state = EAP_AUTH_STATE_REAUTH;
@@ -789,7 +800,7 @@ static void eap_periodic_impl(struct eapsrp_ctx *ctx)
 		((ctx->unsollicited_passphrase_response_identifier & 0x3f) == 0x3f ||
 		(ctx->unsollicited_passphrase_response_identifier & 0x3f) == 0x3f)) {
 			if (ctx->config.role == EAP_ROLE_AUTHENTICATEE)
-				eap_start(ctx);
+				_librist_proto_eap_start(ctx);
 			else
 				eap_request_identity(ctx);
 		}
@@ -910,7 +921,7 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 	struct rist_common_ctx *cctx = get_cctx(peer);
 	if (cctx->profile == RIST_PROFILE_SIMPLE)
 		return RIST_ERR_INVALID_PROFILE;
-	if (peer->listening)
+	if ((peer->listening && !peer->multicast_receiver) || peer->multicast_sender)
 	{
 		struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
 		ctx->config.logging_settings = get_cctx(peer)->logging_settings;
@@ -982,7 +993,8 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 	peer->eap_ctx = ctx;
 	rist_log_priv2(ctx->config.logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticatee\n");
 	ctx->eapversion3 = true;
-	eap_start(ctx);
+	if (!peer->multicast_receiver)
+		_librist_proto_eap_start(ctx);
 	return 0;
 }
 
@@ -1009,6 +1021,14 @@ bool rist_eap_password_sending_done(struct eapsrp_ctx *ctx) {
 	return success;
 }
 
+bool rist_eap_may_rollover_tx(struct eapsrp_ctx *ctx) {
+	pthread_mutex_lock(&ctx->eap_lock);
+	bool rollover = ctx->may_rollover_passphrase;
+	ctx->may_rollover_passphrase = false;
+	pthread_mutex_unlock(&ctx->eap_lock);
+	return rollover;
+}
+
 void rist_eap_send_passphrase(struct eapsrp_ctx *ctx, const char *passphrase) {
 	pthread_mutex_lock(&ctx->eap_lock);
 	ctx->unsollicited_passphrase_len = strlen(passphrase);
@@ -1016,6 +1036,7 @@ void rist_eap_send_passphrase(struct eapsrp_ctx *ctx, const char *passphrase) {
 	ctx->unsollicited_passphrase_response_timer = timestampNTP_u64();
 	ctx->unsollicited_passphrase_response_times = 1;
 	ctx->unsollicited_passphrase_response_identifier++;
+	ctx->unsollicited_passphrase_state = 0;
 	if (ctx->config.role == EAP_ROLE_AUTHENTICATOR)
 		SET_BIT(ctx->unsollicited_passphrase_response_identifier, 7);
 	UNSET_BIT(ctx->unsollicited_passphrase_response_identifier, 6);

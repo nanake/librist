@@ -9,6 +9,8 @@
 #include "rist-private.h"
 #include "endian-shim.h"
 #include "udp-private.h"
+#include "eap.h"
+#include "peer.h"
 
 #include <errno.h>
 #include <stddef.h>
@@ -35,7 +37,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 
 
 	struct rist_peer *key_peer = p;
-	if (key_peer->parent != NULL && key_peer->parent->multicast)
+	if (key_peer->parent != NULL && key_peer->parent->multicast_sender)
 		key_peer = key_peer->parent;
 
 	uint32_t seq;
@@ -98,6 +100,14 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 		}
 		pthread_mutex_lock(&key_peer->peer_lock);
 		struct rist_key *key = &key_peer->key_tx;
+
+#if HAVE_SRP_SUPPORT
+        if (librist_peer_should_rollover_passphrase(key_peer)) {
+			key_peer->key_tx_odd_active = !key_peer->key_tx_odd_active;
+			rist_log_priv(get_cctx(p), RIST_LOG_INFO, "Rolling over to %s passphrase\n", key_peer->key_tx_odd_active? "odd" : "even");
+		}
+#endif
+
 		if (key_peer->key_tx_odd_active)
 			key = &p->key_tx_odd;
 
@@ -120,7 +130,7 @@ ssize_t _librist_proto_gre_send_data(struct rist_peer *p, uint8_t payload_type, 
 		}
 		pthread_mutex_unlock(&key_peer->peer_lock);
 		SET_BIT(hdr->flags1, 5); // set key bit
-		//Write key, our nonce is stored in network byte order (even though it's uint32_t), so just memcpy it
+		//Write key, our nonce is stored in network byte order so just memcpy it
 		memcpy(&hdr_buf[nonce_offset], key->gre_nonce, sizeof(p->key_tx.gre_nonce));
 	}
 

@@ -66,3 +66,15 @@ int _librist_crypto_ramdom_get_bytes(uint8_t buf[], size_t buflen) {
 #endif
 	return ret;
 }
+
+int _librist_crypto_random_get_string(char buf[], size_t len) {
+	char charset[] = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!?";//Cut to 64 characters to deal with modulo bias
+	uint8_t rand_buf[128];
+	int ret = _librist_crypto_ramdom_get_bytes(rand_buf, len);
+	if (ret != 0)
+		return ret;
+	for (size_t i=0; i< len; i++) {
+		buf[i] = charset[rand_buf[i] % sizeof(charset) -1];
+	}
+	return 0;
+}

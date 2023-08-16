@@ -15,6 +15,10 @@
 #include "proto/rist_time.h"
 #include <librist/version.h>
 #include "crypto/crypto-private.h"
+#include "crypto/psk.h"
+#if HAVE_SRP_SUPPORT
+#include "proto/eap.h"
+#endif
 #include <assert.h>
 #ifdef _WIN32
 #include <processthreadsapi.h>
@@ -671,6 +675,30 @@ int rist_peer_config_free2(struct rist_peer_config **peer_config)
 	}
 	return 0;
 }
+
+#if HAVE_SRP_SUPPORT
+int rist_peer_update_secret(struct rist_peer *peer, const char* password) {
+	pthread_mutex_lock(&peer->peer_lock);
+	size_t password_len = strlen(password);
+	struct rist_key *inactive_key = (peer->key_rx_odd_active) ? &peer->key_tx : &peer->key_tx_odd;
+	rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Updating passphrase to %s\n", password);
+	_librist_crypto_psk_set_passphrase(inactive_key, (const uint8_t *)password, password_len);
+	struct rist_peer *child = peer->child;
+	while (child != NULL) {
+		pthread_mutex_lock(&child->peer_lock);
+		inactive_key = (child->key_rx_odd_active) ? &child->key_tx : &child->key_tx_odd;
+		_librist_crypto_psk_set_passphrase(inactive_key, (const uint8_t *)password, password_len);
+		child->rolling_over_passphrase = true;
+		pthread_mutex_unlock(&child->peer_lock);
+		rist_eap_send_passphrase(child->eap_ctx, password);
+		child = child->sibling_next;
+	}
+	peer->rolling_over_passphrase = true;
+	pthread_mutex_unlock(&peer->peer_lock);
+	rist_eap_send_passphrase(peer->eap_ctx, password);
+	return 0;
+}
+#endif
 
 int rist_logging_settings_free(const struct rist_logging_settings **logging_settings)
 {

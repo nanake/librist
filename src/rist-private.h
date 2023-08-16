@@ -537,6 +537,7 @@ struct rist_peer {
 	bool key_tx_odd_active;
 	struct rist_key key_tx_odd; // used for transmitted packets
 	struct rist_key key_rx_odd; // used for received packets
+	bool rolling_over_passphrase;
 	struct eapsrp_ctx *eap_ctx;
 	int eap_authentication_state;
 	uint8_t rist_gre_version;
@@ -566,7 +567,8 @@ struct rist_peer {
 	/* listening mode with @ */
 	bool listening;
 	/* multicast */
-	bool multicast;
+	bool multicast_sender;
+	bool multicast_receiver;
 
 	/* rist ctx */
 	struct rist_sender *sender_ctx;

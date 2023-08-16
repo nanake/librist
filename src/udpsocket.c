@@ -312,7 +312,7 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 		/* Non-critical error */
 		rist_log_priv3( RIST_LOG_ERROR, "Cannot set SO_REUSEADDR: %s\n", strerror(errno));
 	}
-#if defined(_WIN32) || defined(__APPLE__)
+
 	if (is_multicast) {
 		struct sockaddr_in6 sa = { .sin6_family = raw.sin6_family, .sin6_port = raw.sin6_port };
 		if (bind(sd, (struct sockaddr *)&sa, addrlen) < 0)	{
@@ -320,20 +320,15 @@ int udpsocket_open_bind(const char *host, uint16_t port, const char *mciface)
 			udpsocket_close(sd);
 			return -1;
 		}
-	} else
-#endif
-	if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)	{
-		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
-		udpsocket_close(sd);
-		return -1;
-	}
-	if (is_multicast) {
 		if (udpsocket_join_mcast_group(sd, mciface, (struct sockaddr *)&raw, raw.sin6_family) != 0) {
 			rist_log_priv3( RIST_LOG_ERROR, "Could not join multicast group: %s on %s\n", host, mciface);
 			return -1;
 		}
+	} else if (bind(sd, (struct sockaddr *)&raw, addrlen) < 0)	{
+		rist_log_priv3( RIST_LOG_ERROR, "Could not bind to interface: %s\n", strerror(errno));
+		udpsocket_close(sd);
+		return -1;
 	}
-
 	return sd;
 }
 

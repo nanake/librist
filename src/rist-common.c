@@ -11,6 +11,7 @@
 #include "rist-private.h"
 #include "log-private.h"
 #include "crypto/psk.h"
+#include "crypto/random.h"
 #include "udp-private.h"
 #include "udpsocket.h"
 #include "endian-shim.h"
@@ -1398,7 +1399,7 @@ void rist_fsm_init_comm(struct rist_peer *peer)
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Enabling keepalive for peer %"PRIu32"\n", peer->adv_peer_id);
 			peer->send_keepalive = true;
 		}
-		if (get_cctx(peer)->profile > RIST_PROFILE_SIMPLE) {
+		if (get_cctx(peer)->profile > RIST_PROFILE_SIMPLE && !peer->eap_ctx) {
 			//Try version 2 first
 			_librist_proto_gre_send_keepalive(peer, 2);
 			_librist_proto_gre_send_keepalive(peer, 2);
@@ -2596,7 +2597,7 @@ protocol_bypass:
 		}
 	}
 
-	if (!p && (peer->listening || peer->multicast) && (gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL || cctx->profile == RIST_PROFILE_SIMPLE)) {
+	if (!p && (peer->listening || peer->multicast_sender) && (gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL || cctx->profile == RIST_PROFILE_SIMPLE)) {
 		/* No match, new peer creation when on listening mode */
 		p = peer_initialize(NULL, peer->sender_ctx, peer->receiver_ctx);
 		p->handled_first = false;
@@ -2628,7 +2629,7 @@ protocol_bypass:
 		p->is_rtcp = peer->is_rtcp;
 		p->is_data = peer->is_data;
 		p->peer_data = p;
-		if (peer->multicast)
+		if (peer->multicast_sender)
 			p->peer_data = peer->peer_data;
 		memcpy(&p->u.address, addr, addrlen);
 		p->sd = peer->sd;
@@ -2637,10 +2638,13 @@ protocol_bypass:
 		p->event_recv = peer->event_recv;
 		char incoming_ip_string_buffer[INET6_ADDRSTRLEN];
 		char *incoming_ip_string = get_ip_str(&p->u.address, &incoming_ip_string_buffer[0], INET6_ADDRSTRLEN);
-		#if HAVE_SRP_SUPPORT
+#if HAVE_SRP_SUPPORT
 		eap_clone_ctx(peer->eap_ctx, p);
 		eap_set_ip_string(p->eap_ctx, incoming_ip_string_buffer);
-		#endif
+		if (p->multicast_receiver && p->eap_ctx) {
+			_librist_proto_eap_start(p->eap_ctx);
+		}
+#endif
 		// Optional validation of connecting sender
 		if (cctx->auth.conn_cb) {
 
@@ -2678,7 +2682,7 @@ protocol_bypass:
 		p->rist_gre_version = rist_gre_version;
 		if (cctx->profile > RIST_PROFILE_SIMPLE
 #if HAVE_SRP_SUPPORT
-			&& ((p->eap_ctx && eap_is_authenticated(p->eap_ctx) >= EAP_AUTH_STATE_SUCCESS) || !p->eap_ctx)
+			&& ((p->eap_ctx && eap_is_authenticated(p->eap_ctx)) || !p->eap_ctx)
 #endif
 			) {
 			//Answer their keep alive with one from us
@@ -2935,6 +2939,16 @@ protocol_bypass:
 			}
 #endif
 			if (failed_eap) {
+				//A previously authenticated client fails authentication, and we're running multicast, so we need to rollover the passphrase
+#if HAVE_SRP_SUPPORT
+				if (p->eap_authentication_state == 2 && p->parent && p->parent->multicast_sender)  {
+					char newpass[65];
+					newpass[64] = '\0';
+					if (_librist_crypto_random_get_string(newpass, sizeof(newpass)-1) == 0) {
+						rist_peer_update_secret(p->parent, newpass);
+					}
+				}
+#endif
 				p->eap_authentication_state = 1;
 				kill_peer(p);
 			}
@@ -3247,10 +3261,20 @@ static void rist_peer_periodic(struct rist_peer *p, uint64_t now) {
 		if (get_cctx(p)->profile == RIST_PROFILE_MAIN && p->next_keepalive_packet <= now) {
 			p->next_keepalive_packet = now + ONE_SECOND;
 			_librist_proto_gre_send_keepalive(p, p->rist_gre_version);
+#if HAVE_SRP_SUPPORT
+			if (!p->child && !eap_is_authenticated(p->eap_ctx) && p->eap_authentication_state == 2 && p->parent && p->parent->multicast_sender)  {
+				p->eap_authentication_state = 1;
+				char newpass[65];
+				newpass[64] = '\0';
+				if (_librist_crypto_random_get_string(newpass, sizeof(newpass)-1) == 0) {
+					rist_peer_update_secret(p->parent, newpass);
+				}
+			}
+#endif
 		}
 	}
 #if HAVE_SRP_SUPPORT
-	if (!p->listening || p->parent)
+	if ((!p->listening || p->parent) && !p->multicast_sender)
 		eap_periodic(p->eap_ctx);
 #endif
 }

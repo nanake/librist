@@ -239,6 +239,13 @@ RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
 
 
 RIST_API uint32_t rist_peer_get_id(const struct rist_peer *peer);
+
+#if HAVE_SRP_SUPPORT
+/*
+	@brief Update the shared passphrase for the peer
+*/
+RIST_API int rist_peer_update_secret(struct rist_peer *peer, const char* password);
+#endif
 #ifdef __cplusplus
 }
 #endif

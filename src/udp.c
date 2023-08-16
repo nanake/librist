@@ -348,6 +348,17 @@ void rist_create_socket(struct rist_peer *peer)
 			return;
 		}
 
+		if (peer->u.address.sa_family == AF_INET)
+		{
+			struct sockaddr_in *addrv4 = (struct sockaddr_in *)&(peer->u);
+			peer->multicast_receiver = IN_MULTICAST(ntohl(addrv4->sin_addr.s_addr));
+		}
+		else
+		{
+			struct sockaddr_in6 *addrv6 = (struct sockaddr_in6 *)&(peer->u);
+			peer->multicast_receiver = IN6_IS_ADDR_MULTICAST(&addrv6->sin6_addr);
+		}
+
 		peer->sd = udpsocket_open_bind(host, port, peer->miface);
 		if (peer->sd >= 0) {
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL listening mode (socket# %d)\n", peer->sd);
@@ -362,15 +373,15 @@ void rist_create_socket(struct rist_peer *peer)
 		if (peer->u.address.sa_family == AF_INET)
 		{
 			struct sockaddr_in *addrv4 = (struct sockaddr_in *)&(peer->u);
-			peer->multicast = IN_MULTICAST(ntohl(addrv4->sin_addr.s_addr));
+			peer->multicast_sender = IN_MULTICAST(ntohl(addrv4->sin_addr.s_addr));
 		}
 		else
 		{
 			struct sockaddr_in6 *addrv6 = (struct sockaddr_in6 *)&(peer->u);
-			peer->multicast = IN6_IS_ADDR_MULTICAST(&addrv6->sin6_addr);
+			peer->multicast_sender = IN6_IS_ADDR_MULTICAST(&addrv6->sin6_addr);
 		}
-		if (peer->multicast) {
-			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Peer configured for multicast");
+		if (peer->multicast_sender) {
+			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Peer configured for multicast\n");
 		}
 		// We use sendto ... so, no need to connect directly here
 		peer->sd = udpsocket_open(peer->address_family);
@@ -677,7 +688,7 @@ peer_select:
 		if (!peer->is_data || peer->parent)
 			continue;
 #if HAVE_SRP_SUPPORT
-		if (!peer->listening && !eap_is_authenticated(peer->eap_ctx))
+		if (!peer->listening && !peer->multicast_sender && !eap_is_authenticated(peer->eap_ctx))
 			continue;
 #endif
 		if ((!peer->listening && !peer->authenticated) || peer->dead

@@ -176,6 +176,10 @@ void _librist_crypto_aes_ctr(const uint8_t key[], int key_size, uint8_t iv[], co
 		break;
 	}
 	nettle_ctr_crypt(&aes_ctx.u, f, AES_BLOCK_SIZE, iv, payload_len, outbuf, inbuf);
+#else
+    uint32_t aes_key_sched[60];
+    aes_key_setup(key, aes_key_sched, key_size);
+    aes_decrypt_ctr(inbuf, payload_len, outbuf, aes_key_sched, key_size, iv);
 #endif
 }
 
