@@ -273,6 +273,8 @@ int _librist_crypto_psk_set_passphrase(struct rist_key *key, const uint8_t *pass
 	if (passphrase_len > sizeof(key->password) -1) {
 		return -1;
 	}
+	if (key->key_size == 0)
+		key->key_size = 256;
 	memcpy(key->password, passsphrase, passphrase_len);
 	key->password_len = passphrase_len;
 	key->used_times = 0;
