@@ -8,10 +8,11 @@
 #include <stddef.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <librist/librist_srp.h>
 
-void user_verifier_lookup(char *username, size_t *verifier_len, char **verifier,
-                          size_t *salt_len, char **salt,
-                          bool *use_default_2048_bit_n_modulus,
-                          char **n_modulus_ascii, char **generator_ascii,
-                          int *hashversion, uint64_t *generation,
-                          void *user_data);
+
+void user_verifier_lookup(char * username,
+							librist_verifier_lookup_data_t *lookup_data,
+							int *hashversion,
+							uint64_t *generation,
+							void *user_data);

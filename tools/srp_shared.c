@@ -6,6 +6,7 @@
  */
 
 #include "config.h"
+#include "srp_shared.h"
 #include <librist/librist_config.h>
 #if HAVE_MBEDTLS
 #include <mbedtls/base64.h>
@@ -131,11 +132,7 @@ out:
 
 
 void user_verifier_lookup(char * username,
-							size_t *verifier_len, char **verifier,
-							size_t *salt_len, char **salt,
-							bool *use_default_2048_bit_n_modulus,
-							char **n_modulus_ascii,
-							char **generator_ascii,
+							librist_verifier_lookup_data_t *lookup_data,
 							int *hashversion,
 							uint64_t *generation,
 							void *user_data)
@@ -144,8 +141,7 @@ void user_verifier_lookup(char * username,
 	struct base64_decode_ctx ctx;
 	nettle_base64_decode_init(&ctx);
 #endif
-	(void)n_modulus_ascii;
-	(void)generator_ascii;
+
 	if (user_data == NULL)
 		return;
 
@@ -180,7 +176,7 @@ void user_verifier_lookup(char * username,
 	*generation = (buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
 #endif
 
-	if (!verifier || !verifier_len || !salt || !salt_len || !hashversion || !use_default_2048_bit_n_modulus)
+	if (!lookup_data || !hashversion)
 		return;
 
 	FILE *fh = fopen(srpfile, "r");
@@ -282,8 +278,8 @@ void user_verifier_lookup(char * username,
 		line_len = line_odd_len;
 	}
 
-	parse_line(line, line_len, (uint8_t**)verifier, verifier_len, (uint8_t **)salt, salt_len);
-	*use_default_2048_bit_n_modulus = true;
+	parse_line(line, line_len, &lookup_data->verifier, &lookup_data->verifier_len, &lookup_data->salt, &lookup_data->salt_len);
+	lookup_data->default_ng = true;
 
 out:
 	free(line_even);

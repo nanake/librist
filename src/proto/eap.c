@@ -369,13 +369,6 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 		return -1;
 	memcpy(ctx->config.username, pkt, len);
 	ctx->config.username[len] = '\0';
-	char *bytes_v = NULL;
-	size_t len_v = 0;
-	char *bytes_s = NULL;
-	size_t len_s = 0;
-	bool std_2048_ng = false;
-	char *ascii_n = NULL;
-	char *ascii_g = NULL;
 #if HAVE_MBEDTLS
 	int hashversion = eap_version >= 3 ? 1 : 0;
 #elif HAVE_NETTLE
@@ -383,7 +376,8 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 	int hashversion = 1;
 #endif
 	uint64_t generation = 0;
-	ctx->config.lookup_func(ctx->config.username, &len_v, &bytes_v, &len_s, &bytes_s, &std_2048_ng, &ascii_n, &ascii_g, &hashversion, &generation, ctx->config.lookup_func_userdata);
+	librist_verifier_lookup_data_t verifier_data = {0};
+	ctx->config.lookup_func(ctx->config.username, &verifier_data, &hashversion, &generation, ctx->config.lookup_func_userdata);
 #if HAVE_NETTLE
 	if (hashversion == 0) {
 		rist_log_priv2(ctx->config.logging_settings, RIST_LOG_ERROR, EAP_LOG_PREFIX"Lookup from SRP File got hashversion 0 response, Nettle backend does not support this, authentication likely to fail\n");
@@ -392,9 +386,9 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 #endif
 	ctx->generation = generation;
 	ctx->eapversion3 = (hashversion >= 1);
-	const char *n_hex = ascii_n;
-	const char *g_hex = ascii_g;
-	bool found = (len_v != 0 && bytes_v && len_s != 0 && bytes_s);
+	const char *n_hex = verifier_data.n_modulus_ascii;
+	const char *g_hex = verifier_data.generator_ascii;
+	bool found = (verifier_data.verifier_len != 0 && verifier_data.verifier && verifier_data.salt_len != 0 && verifier_data.salt);
 	uint8_t outpkt[1500] = { 0 };//TUNE THIS
 	size_t offset = EAPOL_EAP_HDRS_OFFSET;
 	struct eap_srp_hdr *hdr = (struct eap_srp_hdr *)&outpkt[offset];
@@ -404,10 +398,10 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 	if (found)
 	{
 		struct librist_crypto_srp_authenticator_ctx *auth_ctx = NULL;
-		if (std_2048_ng)
+		if (verifier_data.default_ng)
 			librist_get_ng_constants(LIBRIST_SRP_NG_DEFAULT, &n_hex, &g_hex);
 
-		auth_ctx = librist_crypto_srp_authenticator_ctx_create(n_hex, g_hex, (uint8_t*)bytes_v, len_v, (uint8_t*)bytes_s, len_s, ctx->eapversion3);
+		auth_ctx = librist_crypto_srp_authenticator_ctx_create(n_hex, g_hex, verifier_data.verifier, verifier_data.verifier_len, verifier_data.salt, verifier_data.salt_len, ctx->eapversion3);
 		if (!auth_ctx) {
 			return -1;//Log some error?
 		}
@@ -416,11 +410,11 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 		memset(&pkt[offset], 0, 2);
 		offset += 2;//we dont send the server name
 		uint16_t *tmp_swap = (uint16_t *)&outpkt[offset];
-		*tmp_swap = htobe16(len_s);
+		*tmp_swap = htobe16(verifier_data.salt_len);
 		offset += 2;
-		memcpy(&outpkt[offset], bytes_s, len_s);
-		offset += len_s;
-		if (std_2048_ng)
+		memcpy(&outpkt[offset], verifier_data.salt, verifier_data.salt_len);
+		offset += verifier_data.salt_len;
+		if (verifier_data.default_ng)
 		{
 			memset(&outpkt[offset], 0, 2);
 			offset += 2;
@@ -439,10 +433,10 @@ static int process_eap_response_identity(struct eapsrp_ctx *ctx, size_t len, uin
 			offset += n_len;
 		}
 	}
-	free(bytes_v);
-	free(bytes_s);
-	free(ascii_g);
-	free(ascii_n);
+	free(verifier_data.verifier);
+	free(verifier_data.salt);
+	free(verifier_data.generator_ascii);
+	free(verifier_data.n_modulus_ascii);
 	if (!found)
 		return -1;
 	ctx->last_identifier++;
@@ -817,8 +811,9 @@ static void eap_periodic_impl(struct eapsrp_ctx *ctx)
 	           now > ctx->last_auth_timestamp + reauth_period) {
 		if (ctx->generation > 0) {
 			uint64_t generation = ctx->generation;
+			int hashversion = ctx->eapversion3? 1 : 0;
 			//If our cached data matches whatever lookup function would return re-auth is pointless.
-			ctx->config.lookup_func(ctx->config.username, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, &generation, ctx->config.lookup_func_userdata);
+			ctx->config.lookup_func(ctx->config.username, NULL, &hashversion, &generation, ctx->config.lookup_func_userdata);
 			if (generation == ctx->generation) {
 				ctx->last_auth_timestamp = now;
 				return;
@@ -843,17 +838,11 @@ void eap_periodic(struct eapsrp_ctx *ctx) {
 }
 
 static void internal_user_verifier_lookup(char * username,
-							size_t *verifier_len, char **verifier,
-							size_t *salt_len, char **salt,
-							bool *use_default_2048_bit_n_modulus,
-							char **n_modulus_ascii,
-							char **generator_ascii,
+							librist_verifier_lookup_data_t *lookup_data,
 							int *hashversion,
 							uint64_t *generation,
 							void *user_data)
 {
-	(void)n_modulus_ascii;
-	(void)generator_ascii;
 	if (user_data == NULL)
 		return;
 
@@ -864,8 +853,8 @@ static void internal_user_verifier_lookup(char * username,
 
 	struct eapsrp_ctx *ctx = (struct eapsrp_ctx *)user_data;
 
-	char *decoded_verifier = NULL;
-	char *decoded_salt = NULL;
+	uint8_t *decoded_verifier = NULL;
+	uint8_t *decoded_salt = NULL;
 
 	if (strcmp(username, ctx->authenticator_username) != 0)
 		goto fail_decode;
@@ -876,26 +865,26 @@ static void internal_user_verifier_lookup(char * username,
 		decoded_salt = malloc(ctx->authenticator_len_salt_old);
 		memcpy(decoded_verifier, ctx->authenticator_bytes_verifier_old, ctx->authenticator_len_verifier_old);
 		memcpy(decoded_salt, ctx->authenticator_bytes_salt_old, ctx->authenticator_len_salt_old);
-		*verifier_len = ctx->authenticator_len_verifier_old;
-		*salt_len = ctx->authenticator_len_salt_old;
+		lookup_data->verifier_len = ctx->authenticator_len_verifier_old;
+		lookup_data->salt_len = ctx->authenticator_len_salt_old;
 #endif
 	} else {
 		decoded_verifier = malloc(ctx->authenticator_len_verifier);
 		decoded_salt = malloc(ctx->authenticator_len_salt);
 		memcpy(decoded_verifier, ctx->authenticator_bytes_verifier, ctx->authenticator_len_verifier);
 		memcpy(decoded_salt, ctx->authenticator_bytes_salt, ctx->authenticator_len_salt);
-		*verifier_len = ctx->authenticator_len_verifier;
-		*salt_len = ctx->authenticator_len_salt;
+		lookup_data->verifier_len = ctx->authenticator_len_verifier;
+		lookup_data->salt_len = ctx->authenticator_len_salt;
 	}
-	*verifier = decoded_verifier;
-	*salt = decoded_salt;
+	lookup_data->verifier = decoded_verifier;
+	lookup_data->salt = decoded_salt;
 
-	*use_default_2048_bit_n_modulus = true;
+	lookup_data->default_ng = true;
 	goto out;
 
 fail_decode:
-	*verifier_len = 0;
-	*salt_len = 0;
+	lookup_data->verifier_len = 0;
+	lookup_data->salt_len = 0;
 	free(decoded_verifier);
 	free(decoded_salt);
 out:
@@ -903,11 +892,7 @@ out:
 }
 
 static void old_user_verifier_lookup_wrapper(char * username,
-							size_t *verifier_len, char **verifier,
-							size_t *salt_len, char **salt,
-							bool *use_default_2048_bit_n_modulus,
-							char **n_modulus_ascii,
-							char **generator_ascii,
+							librist_verifier_lookup_data_t *lookup_data,
 							int *hashversion,
 							uint64_t *generation,
 							void *user_data)
@@ -915,7 +900,7 @@ static void old_user_verifier_lookup_wrapper(char * username,
 	*hashversion = 0;
 	*generation = 0;
 	struct eapsrp_ctx *ctx = (struct eapsrp_ctx *)user_data;
-	ctx->config.lookup_func_old(username, verifier_len, verifier, salt_len, salt, use_default_2048_bit_n_modulus, n_modulus_ascii, generator_ascii, user_data);
+	ctx->config.lookup_func_old(username, &lookup_data->verifier_len,(char **)&lookup_data->verifier, &lookup_data->salt_len, (char **)&lookup_data->salt, &lookup_data->default_ng, &lookup_data->n_modulus_ascii, &lookup_data->generator_ascii, user_data);
 }
 
 //PUBLIC
