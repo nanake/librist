@@ -5,6 +5,7 @@ if cmocka.found()
 		srp_unit = executable('srp_unit', rev_target,
 								'srp_examples.c',
 								'../../../contrib/pthread-shim.c',
+								'../../../src/crypto/random.c',
 								include_directories : inc,
 								dependencies : [threads, cmocka,crypto_deps],
 		)

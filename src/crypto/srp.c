@@ -1,9 +1,9 @@
 #include "srp.h"
 
 #include "config.h"
+#include "random.h"
 #include "crypto/srp_constants.h"
 #include "vcs_version.h"
-#include "pthread-shim.h"
 
 #include <stdint.h>
 #include <stdio.h>
@@ -38,13 +38,6 @@ static void print_hash(const uint8_t *buf, char *specifier) {
 }
 #endif
 
-#if !defined(_WIN32) || HAVE_PTHREADS
-static pthread_once_t entropy_init_once = PTHREAD_ONCE_INIT;
-#endif
-#if defined(_WIN32) && !HAVE_PTHREADS
-static INIT_ONCE entropy_init_once = INIT_ONCE_STATIC_INIT;
-#endif
-
 #if HAVE_MBEDTLS
 #include <mbedtls/bignum.h>
 #include <mbedtls/entropy.h>
@@ -62,6 +55,11 @@ static INIT_ONCE entropy_init_once = INIT_ONCE_STATIC_INIT;
 #include <mbedtls/compat-2.x.h>
 #endif
 
+int _librist_srp_mbedtls_wrap_random(void *unused, unsigned char * buf, size_t size) {
+	RIST_MARK_UNUSED(unused);
+	return _librist_crypto_ramdom_get_bytes(buf, size);
+}
+
 #define BIGNUM mbedtls_mpi
 #define BIGNUM_INIT(num) mbedtls_mpi_init(num)
 #define BIGNUM_FREE(num) mbedtls_mpi_free(num)
@@ -69,9 +67,9 @@ static INIT_ONCE entropy_init_once = INIT_ONCE_STATIC_INIT;
 #define BIGNUM_FROM_ARRAY(num, array, size) ret = mbedtls_mpi_read_binary(num, array, size)
 #define BIGNUM_FROM_STRING(num, str) ret = mbedtls_mpi_read_string(num, 16, str)
 #if MBEDTLS_HAS_MPI_RANDOM
-#define BIGNUM_RANDOM(num, max) ret = mbedtls_mpi_random(num, 0, max, mbedtls_ctr_drbg_random, &ctr_drbg_ctx);
+#define BIGNUM_RANDOM(num, max) ret = mbedtls_mpi_random(num, 0, max, _librist_srp_mbedtls_wrap_random, NULL);
 #else
-#define BIGNUM_RANDOM(num, max) ret = mbedtls_mpi_fill_random(num, 32, mbedtls_ctr_drbg_random, &ctr_drbg_ctx);
+#define BIGNUM_RANDOM(num, max) ret = mbedtls_mpi_fill_random(num, 32, _librist_srp_mbedtls_wrap_random, NULL);
 #endif
 #define BIGNUM_MOD_RED(out, a, b) ret = mbedtls_mpi_mod_mpi(out, a, b)
 #define BIGNUM_EXP_MOD(out, base, exp, mod) ret = mbedtls_mpi_exp_mod(out, base, exp, mod, NULL)
@@ -102,21 +100,17 @@ void librist_crypto_srp_mbedtls_hash_init(HASH_CONTEXT *ctx, bool correct_init) 
 
 #define HASH_CONTEXT_INIT(ctx, correct) librist_crypto_srp_mbedtls_hash_init(ctx, correct)
 #define HASH_CONTEXT_FREE(ctx) mbedtls_sha256_free(ctx)
-static mbedtls_entropy_context entropy_ctx;
-static mbedtls_ctr_drbg_context ctr_drbg_ctx;
-
 
 #elif HAVE_NETTLE
 #include <nettle/sha2.h>
 #include <nettle/bignum.h>
-#include <gnutls/crypto.h>
 #define BIGNUM MP_INT
 #define BIGNUM_INIT(num) mpz_init(num)
 #define BIGNUM_FREE(num) mpz_clear(num)
 #define BIGNUM_GET_BINARY_SIZE(num) ((mpz_sizeinbase(num, 2) +7) /8)
 #define BIGNUM_FROM_ARRAY(num, array, size) mpz_import(num, size, 1, 1, 0, 0, array)
 #define BIGNUM_FROM_STRING(num, str) ret = mpz_set_str(num, str, 16)
-#define BIGNUM_RANDOM(num, max) nettle_mpz_random(num, NULL, gnutls_random_wrapper, max);
+#define BIGNUM_RANDOM(num, max) nettle_mpz_random(num, NULL, _librist_srp_nettle_wrap_random, max);
 #define BIGNUM_MOD_RED(out, a, b) mpz_mod(out, a, b)
 #define BIGNUM_EXP_MOD(out, base, exp, mod) mpz_powm(out, base, exp, mod)
 #define BIGNUM_MULT_BIG(prod, a, b) mpz_mul(prod, a, b)
@@ -137,15 +131,11 @@ static mbedtls_ctr_drbg_context ctr_drbg_ctx;
 #define HASH_CONTEXT_INIT(ctx, correct) (void)(correct); nettle_sha256_init(ctx)
 #define HASH_CONTEXT_FREE(ctx)
 
-void gnutls_random_wrapper(void *ctx, size_t length, uint8_t *dst) {
-	(void)ctx;
-	int ret;
-	int i=0;
-	do {
-		ret = gnutls_rnd(GNUTLS_RND_NONCE, dst, length);//This call is thread-safe
-		i++;
-	} while (ret != 0 && i < 10);
+void _librist_srp_nettle_wrap_random(void *unused, size_t size, uint8_t* buf) {
+	RIST_MARK_UNUSED(unused);
+	_librist_crypto_ramdom_get_bytes(buf, size);
 }
+
 #endif
 
 static int librist_crypto_srp_hash_update(HASH_CONTEXT *hash_ctx, const void *data, size_t len)
@@ -202,32 +192,6 @@ static int librist_crypto_srp_hash(const uint8_t *indata, size_t inlen, uint8_t 
 	librist_crypto_srp_hash_final(&hash_ctx, outdata);
 #endif
 	return 0;
-}
-
-#if HAVE_PTHREADS
-static void librist_crypto_srp_init_random_func(void)
-#else
-static BOOL WINAPI librist_crypto_srp_init_random_func(PINIT_ONCE InitOnce, PVOID Parameter, PVOID *Context)
-#endif
-{
-#if HAVE_MBEDTLS
-	mbedtls_entropy_init(&entropy_ctx);
-	mbedtls_ctr_drbg_init(&ctr_drbg_ctx);
-	//ctr_drbg_ctx is threadsafe, so can be used by multiple threads freely, seeding isn't though.
-	const char user_custom[] = "libRIST librist_crypto_srp_init_random "LIBRIST_VERSION;
-	mbedtls_ctr_drbg_seed(&ctr_drbg_ctx, mbedtls_entropy_func, &entropy_ctx, (const unsigned char  *)user_custom, sizeof(user_custom));
-#endif
-#if !HAVE_PTHREADS
-	return 1;
-#endif
-}
-
-static inline void librist_crypto_srp_init_random(void) {
-#if HAVE_PTHREADS
-	pthread_once(&entropy_init_once, librist_crypto_srp_init_random_func);
-#else
-	InitOnceExecuteOnce(&entropy_init_once, librist_crypto_srp_init_random_func, NULL, NULL);
-#endif
 }
 
 //Calculates the value of x as follows: x = SHA256(s, SHA256(I | “:” | P))
@@ -536,7 +500,6 @@ int librist_crypto_srp_authenticator_handle_A(struct librist_crypto_srp_authenti
 	const char b_hex[] = "ED0D58FF861A1FC75A0829BEA5F1392D2B13AB2B05CBCD6ED1E71AAAD761E856";
 	BIGNUM_FROM_STRING(&ctx->b, b_hex);
 #else
-	librist_crypto_srp_init_random();
 	BIGNUM_RANDOM(&ctx->b, &ctx->N);
 	if (ret != 0)
 		goto out;
@@ -879,7 +842,6 @@ struct librist_crypto_srp_client_ctx *librist_crypto_srp_client_ctx_create(bool 
 	const char a_hex[] = "138AB4045633AD14961CB1AD0720B1989104151C0708794491113302CCCC27D5";
 	BIGNUM_FROM_STRING(&ctx->a, a_hex);
 #else
-	librist_crypto_srp_init_random();
 	BIGNUM_RANDOM(&ctx->a, &ctx->N);
 	if (ret != 0)
 		goto fail;
@@ -953,16 +915,15 @@ int librist_crypto_srp_create_verifier(
 	if (ret != 0)
 		goto failed;
 
-	librist_crypto_srp_init_random();
 	//Fill the salt
 #if DEBUG_USE_EXAMPLE_CONSTANTS
 	const char salt_hex[] = "72F9D5383B7EB7599FB63028F47475B60A55F313D40E0BE023E026C97C0A2C32";
 	BIGNUM_FROM_STRING(&s, salt_hex);
 #else
 #if HAVE_MBEDTLS
-	mbedtls_mpi_fill_random(&s, 32, mbedtls_ctr_drbg_random, &ctr_drbg_ctx);
+	mbedtls_mpi_fill_random(&s, 32, _librist_srp_mbedtls_wrap_random, NULL);
 #elif HAVE_NETTLE
-	nettle_mpz_random_size(&s, NULL, gnutls_random_wrapper, 8 * 32);
+	nettle_mpz_random_size(&s, NULL, _librist_srp_nettle_wrap_random, 8 * 32);
 #endif
 	if (ret != 0)
 		goto failed;

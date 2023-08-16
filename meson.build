@@ -257,6 +257,7 @@ if have_srp
     platform_files += 'src/proto/eap.c'
 	platform_files += 'src/crypto/srp_constants.c'
 	platform_files += 'src/crypto/srp.c'
+	platform_files += 'src/crypto/random.c'
 endif
 
 cdata.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
