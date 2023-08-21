@@ -27,6 +27,7 @@
 #include "rist_ref.h"
 #include "config.h"
 #include "rist-thread.h"
+#include "peer.h"
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
@@ -2233,42 +2234,6 @@ void rist_peer_rtcp(struct evsocket_ctx *evctx, void *arg)
 	}
 }
 
-static inline bool equal_address(uint16_t family, struct sockaddr *A_, struct rist_peer *p)
-{
-	bool result = false;
-
-	if (!p) {
-		return result;
-	}
-
-	if (p->address_family != family) {
-		return result;
-	}
-
-	struct sockaddr *B_ = &p->u.address;
-
-	if (family == AF_INET) {
-		struct sockaddr_in *a = (struct sockaddr_in *)A_;
-		struct sockaddr_in *b = (struct sockaddr_in *)B_;
-		result = (a->sin_port == b->sin_port) &&
-			((!p->receiver_mode && p->listening) ||
-				(a->sin_addr.s_addr == b->sin_addr.s_addr));
-		if (result && !p->remote_port)
-			p->remote_port = a->sin_port;
-	} else {
-		/* ipv6 */
-		struct sockaddr_in6 *a = (struct sockaddr_in6 *)A_;
-		struct sockaddr_in6 *b = (struct sockaddr_in6 *)B_;
-		result = a->sin6_port == b->sin6_port &&
-			((!p->receiver_mode && p->listening) ||
-				!memcmp(&a->sin6_addr, &b->sin6_addr, sizeof(struct in6_addr)));
-		if (result && !p->remote_port)
-			p->remote_port = a->sin6_port;
-	}
-
-	return result;
-}
-
 static void rist_peer_sockerr(struct evsocket_ctx *evctx, int fd, short revents, void *arg)
 {
 	RIST_MARK_UNUSED(evctx);
@@ -2389,7 +2354,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	uint16_t family = peer->address_family;
 	struct sockaddr_storage ss = {0};
 	struct sockaddr *addr = (struct sockaddr *)&ss;
-	struct rist_peer *p = peer;
+	struct rist_peer *p = NULL;
 	uint8_t *recv_buf = cctx->buf.recv;
 	uint16_t port = 0;
 
@@ -2467,24 +2432,23 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			payload_offset += 4;
 		}
 
+		p = _librist_peer_match_peer_addr(peer, family, addr);
+
 		if (has_seq && has_key && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL) {
 			// Key bit is set, that means the other side want to send
 			// encrypted data.
 			//
 			// make sure we have a key before attempting to decrypt
 			if (!k->key_size) {
-				if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Receiving encrypted data, but configured without keysize!\n");
-					p->log_repeat_timer = now;
+					peer->log_repeat_timer = now;
 				}
 				return;
 			}
 
-			while (p) {
-				if (equal_address(family, addr, p))
-					break;
-				p = p->next;
-			}
+
+
 			if (!p)
 				p = peer;
 #if ALLOW_INSECURE_IV_FALLBACK == 1
@@ -2504,15 +2468,17 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 			}
 			_librist_crypto_psk_decrypt(k, &recv_buf[nonce_offset], htobe32(seq), rist_gre_version,&recv_buf[payload_offset],  &recv_buf[payload_offset], (recv_bufsize - payload_offset));
 			pthread_mutex_unlock(&p->peer_lock);
-			p = peer;
+
+			if (p == peer)
+				p = NULL;
 
 			if (k->bad_decryption)
 				return;
 		} else if (k->key_size && gre_proto != RIST_GRE_PROTOCOL_TYPE_EAPOL && (!has_seq || !has_key)) {
-			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+			if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
 						"We expect encrypted data and the peer sent clear communication, ignoring ...\n");
-				p->log_repeat_timer = now;
+				peer->log_repeat_timer = now;
 			}
 			return;
 		}
@@ -2579,23 +2545,9 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		payload_offset += 4;
 	}
 
-
 protocol_bypass:
-	;
-	bool inchild = false;
-	while (p) {
-		if (equal_address(family, addr, p))
-			break;
-
-		if (p->listening) {
-			if (!inchild)
-				p = p->child;
-			else
-				p = p->sibling_next;
-		} else {
-			p = p->next;
-		}
-	}
+	if (!p)
+		p = _librist_peer_match_peer_addr(peer, family, addr);
 
 	if (!p && (peer->listening || peer->multicast_sender) && (gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL || cctx->profile == RIST_PROFILE_SIMPLE)) {
 		/* No match, new peer creation when on listening mode */
