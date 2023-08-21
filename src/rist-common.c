@@ -2424,7 +2424,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	uint32_t time_extension = 0;
 	uint8_t retry = 0;
 	size_t payload_offset = 0;
-	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0 };
+	struct rist_buffer payload = { .data = NULL, .size = 0, .type = 0, .src_port = 0, .dst_port = 0 };
 	uint32_t flow_id = 0;
 	uint16_t gre_proto = 0;
 	uint8_t rist_gre_version = RIST_GRE_VERSION_MIN;
@@ -3256,7 +3256,8 @@ static void rist_peer_periodic(struct rist_peer *p, uint64_t now) {
 	if (p->send_keepalive) {
 		if (now > p->next_periodic_rtcp) {
 			p->next_periodic_rtcp = now + p->rtcp_keepalive_interval;
-			rist_peer_rtcp(NULL, p);
+			if (p->remote_port != 0)
+				rist_peer_rtcp(NULL, p);
 		}
 		if (get_cctx(p)->profile == RIST_PROFILE_MAIN && p->next_keepalive_packet <= now) {
 			p->next_keepalive_packet = now + ONE_SECOND;
