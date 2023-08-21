@@ -2405,6 +2405,14 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 		gre = (void *) recv_buf;
 		payload_offset += sizeof(*gre);
 		gre_proto = be16toh(gre->prot_type);
+		if (CHECK_BIT(gre->flags1,  6) != 0 || (gre->flags2 & 0x7) != 0) {
+			if (now > (peer->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR,
+						"Non conformant main profile packet received\n");
+				peer->log_repeat_timer = now;
+			}
+			return;
+		}
 		uint8_t has_checksum = CHECK_BIT(gre->flags1, 7);
 		uint8_t has_key = CHECK_BIT(gre->flags1, 5);
 		uint8_t has_seq = CHECK_BIT(gre->flags1, 4);
@@ -2548,6 +2556,28 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 protocol_bypass:
 	if (!p)
 		p = _librist_peer_match_peer_addr(peer, family, addr);
+
+    struct rist_rtp_hdr *rtp = (struct rist_rtp_hdr *)&recv_buf[payload_offset];
+	if (cctx->profile == RIST_PROFILE_SIMPLE || gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED) {
+		/* Double check for a valid rtp header */
+		if ((rtp->flags & 0xc0) != 0x80)
+		{
+			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
+						rtp->flags);
+						p->log_repeat_timer = now;
+			}
+
+			if (k && k->key_size > 0) {
+				if (k->bad_count++ > 5) {
+					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
+					k->bad_decryption = true;
+				}
+			}
+			return;
+		}
+	}
+
 
 	if (!p && (peer->listening || peer->multicast_sender) && (gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED || gre_proto == RIST_GRE_PROTOCOL_TYPE_KEEPALIVE || gre_proto == RIST_GRE_PROTOCOL_TYPE_FULL || cctx->profile == RIST_PROFILE_SIMPLE)) {
 		/* No match, new peer creation when on listening mode */
@@ -2703,29 +2733,9 @@ protocol_bypass:
 		return;
 	}
 
-	struct rist_rtp_hdr *rtp = (struct rist_rtp_hdr *)&recv_buf[payload_offset];
-
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
 	if (cctx->profile == RIST_PROFILE_SIMPLE || gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED) {
-		/* Double check for a valid rtp header */
-		if ((rtp->flags & 0xc0) != 0x80)
-		{
-			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
-				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
-						rtp->flags);
-						p->log_repeat_timer = now;
-			}
-
-			if (k && k->key_size > 0) {
-				if (k->bad_count++ > 5) {
-					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Disabling packet processing till new NONCE\n");
-					k->bad_decryption = true;
-				}
-			}
-			return;
-		}
-
 		// Finish defining the payload (we assume reduced header)
 		if(rtp->payload_type < 200) {
 			flow_id = be32toh(rtp->ssrc);
