@@ -604,7 +604,7 @@ struct rist_peer {
 	uint64_t next_periodic_rtcp;
 	uint64_t next_keepalive_packet;
 	uint64_t session_timeout;
-	uint64_t last_rtcp_received;
+	uint64_t last_pkt_received;
 	uint64_t last_sender_report_time;
 	uint64_t last_sender_report_ts;
 

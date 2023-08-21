@@ -2735,7 +2735,7 @@ protocol_bypass:
 			//TODO: handle capabilities in some way
 			memcpy(&p->data, &info.ka, sizeof(peer->data));
 		}
-		p->last_rtcp_received = now;
+		p->last_pkt_received = now;
 		return;
 	}
 
@@ -2819,7 +2819,7 @@ protocol_bypass:
 	;
 	bool failed_eap = false;
 	if (p->eap_authentication_state != 1 && p->dead) {
-		uint64_t dead_time = (now - p->last_rtcp_received);
+		uint64_t dead_time = (now - p->last_pkt_received);
 		p->dead = false;
 		//Only used on main profile
 		if (p->parent)
@@ -2830,7 +2830,7 @@ protocol_bypass:
 		if (p->peer_data)
 			p->peer_data->dead = 0;
 	}
-	p->last_rtcp_received = now;
+	p->last_pkt_received = now;
 	if (p->flow)
 		p->flow->last_recv_ts = now;
 	payload.peer = p;
@@ -3306,11 +3306,11 @@ void rist_timeout_check(struct rist_common_ctx *cctx, uint64_t now)
 	while (peer)
 	{
 		struct rist_peer *next = peer->next;
-		uint64_t last_rtcp_received = peer->last_rtcp_received;
+		uint64_t last_rtcp_received = peer->last_pkt_received;
 		if (cctx->profile == RIST_PROFILE_SIMPLE &&
 			!peer->is_rtcp && peer->peer_rtcp != NULL &&
-			peer->peer_rtcp->last_rtcp_received > last_rtcp_received)
-			last_rtcp_received = peer->peer_rtcp->last_rtcp_received;
+			peer->peer_rtcp->last_pkt_received > last_rtcp_received)
+			last_rtcp_received = peer->peer_rtcp->last_pkt_received;
 		if (!peer->dead && now > last_rtcp_received && last_rtcp_received > 0)
 		{
 			if ((now - last_rtcp_received) > peer->session_timeout)
