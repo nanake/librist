@@ -921,7 +921,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 							drop? "dropping" : "releasing");
 
 				}
-				else if (b->target_output_time > now && (!f->currently_scaling_buffer || (f->currently_scaling_buffer && (b->time + f->recovery_buffer_ticks) > now))) {
+				else if (b->target_output_time > now && (!f->currently_scaling_buffer || (f->currently_scaling_buffer && (b->packet_time + f->recovery_buffer_ticks) > now))) {
 					// This is how we keep the buffer at the correct level
 					//rist_log_priv(&ctx->common, RIST_LOG_WARN, "age is %"PRIu64"/%"PRIu64" < %"PRIu64", size %zu\n",
 					//	delay_rtc / RIST_CLOCK , delay / RIST_CLOCK, recovery_buffer_ticks / RIST_CLOCK, f->receiver_queue_size);
@@ -3162,6 +3162,10 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 			uint64_t now = timestampNTP_u64();
 			if (target_recovery_buffer_size == flow->recovery_buffer_ticks) {
 				if (now >= next_buffer_adjust_step) {
+					if (flow->currently_scaling_buffer) {
+						flow->currently_scaling_buffer = false;
+						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Done rescaling buffer\n");
+					}
 					next_buffer_adjust_step += ONE_SECOND;
 					uint64_t tmp_target_buffer_size = 0;
 					for (size_t i=0; i < flow->peer_lst_len; i++) {
@@ -3194,8 +3198,10 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 				buffer_adjust_steps_left--;
 				next_buffer_adjust_step += buffer_adjust_step_time;
 				if (buffer_adjust_steps_left == 0) {
-					flow->currently_scaling_buffer = false;
 					flow->recovery_buffer_ticks = target_recovery_buffer_size;
+					uint64_t next_min = 2 * ONE_SECOND;
+					if (flow->recovery_buffer_ticks *1.5 > next_min)
+						next_min = flow->recovery_buffer_ticks *1.5;
 					next_buffer_adjust_step = now +  2 *ONE_SECOND;// We don't want to adjust to often, so keep 2 seconds between adjustments
 				}
 			}
