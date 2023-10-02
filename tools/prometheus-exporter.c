@@ -346,7 +346,7 @@ void rist_prometheus_handle_sender_peer_stats(struct rist_prometheus_stats *ctx,
 	}
 }
 
-void rist_prometheus_parse_stats(struct rist_prometheus_stats *ctx, const struct rist_stats *stats_container, uint64_t id) {
+void rist_prometheus_parse_stats(struct rist_prometheus_stats *ctx, const struct rist_stats *stats_container, uintptr_t id) {
 	pthread_mutex_lock(&ctx->lock);
 	uint64_t now = get_timestamp();
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW) {

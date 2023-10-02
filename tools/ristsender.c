@@ -53,7 +53,7 @@ uint64_t prometheus_id = 0;
 
 struct rist_ctx_wrap {
 	struct rist_ctx *ctx;
-	uint64_t id;
+	uintptr_t id;
 	bool sender;
 };
 
@@ -427,7 +427,7 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container)
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n\n", stats_container->stats_json);
 #if HAVE_PROMETHEUS_SUPPORT
 	if (prom_stats_ctx != NULL)
-		rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uint64_t)arg);
+		rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uintptr_t)arg);
 #else
 	(void)arg;
 #endif

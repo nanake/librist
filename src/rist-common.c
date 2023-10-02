@@ -1437,7 +1437,7 @@ void rist_calculate_bitrate(size_t len, struct rist_bandwidth_estimation *bw)
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	uint64_t now = tv.tv_sec * 1000000;
+	uint64_t now = (uint64_t)tv.tv_sec * 1000000;
 	now += tv.tv_usec;
 	uint64_t time = now - bw->last_bitrate_calctime;
 	uint64_t time_fast = now - bw->last_bitrate_calctime_fast;
@@ -1482,7 +1482,7 @@ static void rist_calculate_flow_bitrate(struct rist_flow *flow, size_t len, stru
 {
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	uint64_t now = tv.tv_sec * 1000000;
+	uint64_t now = (uint64_t)tv.tv_sec * 1000000;
 	now += tv.tv_usec;
 	uint64_t time = now - bw->last_bitrate_calctime;
 	uint64_t time_fast = now - bw->last_bitrate_calctime_fast;
