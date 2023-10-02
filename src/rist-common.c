@@ -3163,9 +3163,6 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 			if (target_recovery_buffer_size == flow->recovery_buffer_ticks) {
 				if (now >= next_buffer_adjust_step) {
 					next_buffer_adjust_step += ONE_SECOND;
-					//Unlock here because otherwise we get lock order issues! _librist_receiver_buffer_calc takes common.peerlist_lock first and then the flow->mutex
-					pthread_mutex_unlock(&(flow->mutex));
-					pthread_mutex_lock(&receiver_ctx->common.peerlist_lock);
 					uint64_t tmp_target_buffer_size = 0;
 					for (size_t i=0; i < flow->peer_lst_len; i++) {
 						struct rist_peer *p = flow->peer_lst[i];
@@ -3173,8 +3170,6 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 							tmp_target_buffer_size = p->recovery_buffer_ticks;
 						}
 					}
-					pthread_mutex_unlock(&receiver_ctx->common.peerlist_lock);
-					pthread_mutex_lock(&(flow->mutex));
 
 					uint64_t diff = target_recovery_buffer_size - tmp_target_buffer_size;
 					if (tmp_target_buffer_size > target_recovery_buffer_size)
