@@ -935,6 +935,7 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 				f->too_late_ctr = 0;
 				// Check sequence number and report lost packet
 				uint32_t next_seq = f->last_seq_output + 1;
+				f->last_output_time = now;
 				if (f->short_seq)
 					next_seq = (uint16_t)next_seq;
 				if (b->seq != next_seq && !holes) {
