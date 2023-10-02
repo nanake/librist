@@ -97,7 +97,7 @@ void rist_sender_peer_statistics(struct rist_peer *peer)
 	stats_container->stats.sender_peer.received = peer->stats_sender_instant.received;
 	stats_container->stats.sender_peer.retransmitted = peer->stats_sender_instant.retrans;
 	stats_container->stats.sender_peer.quality = Q;
-	stats_container->stats.sender_peer.rtt = avg_rtt;
+	stats_container->stats.sender_peer.rtt = avg_rtt / RIST_CLOCK;
 
 	if (cctx->stats_callback != NULL)
 		cctx->stats_callback(cctx->stats_callback_argument, stats_container);
@@ -266,7 +266,7 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 	stats_container->stats.receiver_flow.min_inter_packet_spacing = flow->stats_instant.min_ips;
 	stats_container->stats.receiver_flow.cur_inter_packet_spacing = flow->stats_instant.cur_ips;
 	stats_container->stats.receiver_flow.max_inter_packet_spacing = flow->stats_instant.max_ips;
-	stats_container->stats.receiver_flow.rtt = flow->peer_lst_len ? flow_rtt / flow->peer_lst_len : 0;
+	stats_container->stats.receiver_flow.rtt = flow->peer_lst_len ? (flow_rtt / flow->peer_lst_len)/RIST_CLOCK : 0;
 
 	/* CALLBACK CALL */
 	if (ctx->common.stats_callback != NULL)
