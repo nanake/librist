@@ -2729,7 +2729,11 @@ protocol_bypass:
 			return;
 
 		if (p->receiver_ctx != NULL && sender_max_buffer != 0) {
-			p->sender_max_buffer_ticks = sender_max_buffer * RIST_CLOCK;
+			if (sender_max_buffer < p->config.recovery_length_min) {
+				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Sender max buffer %u smaller than min buffer %u, disabling buffer negotiation!\n", sender_max_buffer, p->config.recovery_length_min);
+				p->sender_max_buffer_ticks = 0;
+			} else
+				p->sender_max_buffer_ticks = sender_max_buffer * RIST_CLOCK;
 		}
 		return;
 	}
