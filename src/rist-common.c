@@ -3927,12 +3927,12 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
 								"\t************** Session Timeout after %" PRIu64 "s of no data, deleting flow with id %"PRIu32" ***************\n",
 								flow_age / RIST_CLOCK / 1000, f->flow_id);
+						pthread_mutex_unlock(&f->mutex);
 						pthread_mutex_lock(&ctx->common.peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
 							struct rist_peer *peer = f->peer_lst[i];
 							peer->flow = NULL;
 						}
-						pthread_mutex_unlock(&f->mutex);
 						rist_delete_flow(ctx, f);
 						pthread_mutex_unlock(&ctx->common.peerlist_lock);
 						f = next;
