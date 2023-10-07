@@ -410,7 +410,7 @@ void rist_create_socket(struct rist_peer *peer)
 #ifdef __linux__
 			else {
 				struct ifreq ifr = {0};
-				strncpy(ifr.ifr_name, peer->miface, sizeof(ifr.ifr_name));
+				memcpy(ifr.ifr_name, peer->miface, IF_NAMESIZE);
 				if (setsockopt(peer->sd, SOL_SOCKET, SO_BINDTODEVICE, &ifr, sizeof(ifr)) != 0) {
 					rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Couldn't bind to %s: %s\n", peer->miface, strerror(errno));
 				}
