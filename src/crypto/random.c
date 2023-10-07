@@ -12,7 +12,12 @@ static mbedtls_entropy_context entropy_ctx;
 static mbedtls_ctr_drbg_context ctr_drbg_ctx;
 
 #if !defined(_WIN32) || HAVE_PTHREADS
+//For some reason GNU Hurd complains that PTHREAD_ONCE_INIT isn't a constant
+#if defined(__GNU__)
+static pthread_once_t entropy_init_once = {__PTHREAD_ONCE_INIT};
+#else
 static pthread_once_t entropy_init_once = PTHREAD_ONCE_INIT;
+#endif
 #endif
 #if defined(_WIN32) && !HAVE_PTHREADS
 static INIT_ONCE entropy_init_once = INIT_ONCE_STATIC_INIT;

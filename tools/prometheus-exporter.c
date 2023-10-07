@@ -23,6 +23,19 @@
 
 #if HAVE_LIBMICROHTTPD
 #include <microhttpd.h>
+
+#if !MICROHTTPD_HAS_RESULT_ENUM
+#define MHD_OUT int
+#else
+#define MHD_OUT enum MHD_Result
+#endif /* MICROHTTPD_HAS_RESULT_ENUM */
+
+#if !MICROHTTPD_HAS_AUTO_INTERNAL_THREAD
+#define MHD_START_FLAGS MHD_USE_INTERNAL_POLLING_THREAD | MHD_USE_POLL | MHD_USE_EPOLL
+#else
+#define MHD_START_FLAGS MHD_USE_AUTO_INTERNAL_THREAD
+#endif /* MICROHTTPD_HAS_AUTO_INTERNAL_THREAD */
+
 #endif
 
 struct rist_prometheus_client_flow_stats {
@@ -209,7 +222,7 @@ static int rist_prometheus_format_client_flow_stats(struct rist_prometheus_stats
 	PROMETHEUS_GAUGE_PRINT_CLIENT(rist_client_flow_cur_iat_seconds, "Current inter arrival time in seconds", "seconds")
 	PROMETHEUS_GAUGE_PRINT_CLIENT(rist_client_flow_max_iat_seconds, "Maximum inter arrival time in seconds", "seconds")
 	PROMETHEUS_GAUGE_PRINT_CLIENT(rist_client_flow_rtt_seconds, "Current RTT in seconds", "seconds");
-	PROMETHEUS_GAUGE_PRINT_CLIENT(rist_client_flow_quality, "Current connection quality percentage", "seconds");
+	PROMETHEUS_GAUGE_PRINT_CLIENT(rist_client_flow_quality, "Current connection quality percentage", "ratio");
 	return offset;
 }
 
@@ -224,7 +237,7 @@ static int rist_prometheus_format_sender_peer_stats(struct rist_prometheus_stats
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_retransmitted_packets, "Total number of packets retransmitted", "packets")
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_received_packets, "Total number of packets received (rtcp)", "packets")
 	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_rtt_seconds, "Current RTT in seconds", "seconds");
-	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_quality, "Current connection quality percentage", "seconds");
+	PROMETHEUS_GAUGE_PRINT_SENDER_PEER(rist_sender_peer_quality, "Current connection quality percentage", "ratio");
 	return offset;
 }
 
@@ -346,7 +359,7 @@ void rist_prometheus_handle_sender_peer_stats(struct rist_prometheus_stats *ctx,
 	}
 }
 
-void rist_prometheus_parse_stats(struct rist_prometheus_stats *ctx, const struct rist_stats *stats_container, uint64_t id) {
+void rist_prometheus_parse_stats(struct rist_prometheus_stats *ctx, const struct rist_stats *stats_container, uintptr_t id) {
 	pthread_mutex_lock(&ctx->lock);
 	uint64_t now = get_timestamp();
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW) {
@@ -442,7 +455,7 @@ static int rist_prometheus_stats_format(struct rist_prometheus_stats *ctx) {
 }
 
 #if HAVE_LIBMICROHTTPD
-static enum MHD_Result rist_prometheus_httpd_handler(void *cls, struct MHD_Connection *connection,
+static MHD_OUT rist_prometheus_httpd_handler(void *cls, struct MHD_Connection *connection,
                              const char *url, const char *method, const char *version,
 							 const char *upload_data, size_t *upload_data_size, void **con_cls)
 {
@@ -469,7 +482,7 @@ static enum MHD_Result rist_prometheus_httpd_handler(void *cls, struct MHD_Conne
 		pthread_mutex_lock(&ctx->lock);
 		int size = rist_prometheus_stats_format(ctx);
 		struct MHD_Response *response = MHD_create_response_from_buffer(size, (void *)ctx->format_buf, MHD_RESPMEM_MUST_COPY);
-		MHD_add_response_header(response, "Content-Type", "application/openmetrics-text; version=1.0.0; charset=utf-8");
+		MHD_add_response_header(response, "Content-Type", "application/openmetrics-text; version=1.0.0; charset=utf-8; produces=text/plain");
 		int ret = MHD_queue_response(connection, MHD_HTTP_OK, response);
 		MHD_destroy_response(response);
 		pthread_mutex_unlock(&ctx->lock);
@@ -649,7 +662,7 @@ struct rist_prometheus_stats *rist_setup_prometheus_stats(struct rist_logging_se
 		if (httpd_opt->ip != NULL) {
 			struct sockaddr_storage ss;
 			int fam;
-			int flags = MHD_USE_AUTO_INTERNAL_THREAD;
+			int flags = MHD_START_FLAGS;
 			if (inet_pton(AF_INET, httpd_opt->ip, &((struct sockaddr_in *)&ss)->sin_addr) != 0) {
 				fam = AF_INET;
 				((struct sockaddr_in *)&ss)->sin_family = AF_INET;
@@ -676,7 +689,7 @@ struct rist_prometheus_stats *rist_setup_prometheus_stats(struct rist_logging_se
 			}
 		} else {
 			fprintf(stderr, "Prometheus HTTPD: exposing stats on: http://0.0.0.0:%u/metrics\n", httpd_opt->port);
-			stats->httpd = MHD_start_daemon(MHD_USE_AUTO_INTERNAL_THREAD, httpd_opt->port, NULL, NULL, rist_prometheus_httpd_handler, stats, MHD_OPTION_END);
+			stats->httpd = MHD_start_daemon(MHD_START_FLAGS, httpd_opt->port, NULL, NULL, rist_prometheus_httpd_handler, stats, MHD_OPTION_END);
 			if (stats->httpd == NULL) {
 				rist_log(logging_settings, RIST_LOG_ERROR, "Prometheus error: failed to start HTTPD Server\n");
 				rist_prometheus_stats_destroy(stats);

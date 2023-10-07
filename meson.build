@@ -150,6 +150,20 @@ sock_un_h = cc.has_header('sys/un.h')
 cdata.set10('HAVE_SOCK_UN_H', sock_un_h)
 microhttpd = dependency('libmicrohttpd', required: false)
 cdata.set10('HAVE_LIBMICROHTTPD', microhttpd.found())
+if microhttpd.found()
+	code = '''
+#include <microhttpd.h>
+static enum MHD_Result test(void) {
+	return MHD_NO;
+}'''
+	cdata.set10('MICROHTTPD_HAS_RESULT_ENUM',cc.compiles(code, dependencies: [microhttpd], name: 'libmicrohttpd has MHD_Result enum'))
+	code = '''
+#include <microhttpd.h>
+static void test(void) {
+	MHD_start_daemon(MHD_USE_AUTO_INTERNAL_THREAD, 0, NULL, NULL, NULL, NULL, MHD_OPTION_END);
+}'''
+	cdata.set10('MICROHTTPD_HAS_AUTO_INTERNAL_THREAD',cc.compiles(code, dependencies: [microhttpd], name: 'libmicrohttpd has MHD_USE_AUTO_INTERNAL_THREAD flag'))
+endif
 compile_prometheus = sock_un_h or microhttpd.found()
 cdata.set10('HAVE_PROMETHEUS_SUPPORT', compile_prometheus)
 

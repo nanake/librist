@@ -173,7 +173,7 @@ void user_verifier_lookup(char * username,
 	if (stat(srpfile, &buf) != 0)
 		return;
 
-	*generation = (buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
+	*generation = ((uint64_t)buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
 #endif
 
 	if (!lookup_data || !hashversion)

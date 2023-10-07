@@ -7,6 +7,9 @@
 #include <ifaddrs.h>
 #ifdef __linux__
 #include <netpacket/packet.h>
+#elif defined(__GNU__)
+#include <sys/ioctl.h>
+#include <net/if.h>
 #else
 #include <net/if_dl.h>
 #endif
@@ -17,6 +20,9 @@
 int _librist_network_get_macaddr(uint8_t mac[]) {
   char mac_null[6] = {0};
 #ifndef _WIN32
+#if defined(__GNU__)
+  int sock = socket(PF_INET, SOCK_DGRAM, 0);
+#endif
   struct ifaddrs *ifaddr = NULL;
   struct ifaddrs *ifa = NULL;
   if (getifaddrs(&ifaddr) == -1) {
@@ -32,6 +38,16 @@ int _librist_network_get_macaddr(uint8_t mac[]) {
           break;
         }
       }
+#elif defined(__GNU__)
+      struct ifreq ifr;
+      strcpy(ifr.ifr_name, ifa->ifa_name);
+      if (ioctl(sock, SIOCGIFHWADDR, &ifr) < 0) {
+       continue;
+      }
+      if (ifr.ifr_hwaddr.sa_family != 1)
+       continue;
+      memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+      break;
 #else
       if ((ifa->ifa_addr) && (ifa->ifa_addr->sa_family == AF_LINK)) {
         struct sockaddr_dl *s = (struct sockaddr_dl *)ifa->ifa_addr;
@@ -44,6 +60,9 @@ int _librist_network_get_macaddr(uint8_t mac[]) {
     }
     freeifaddrs(ifaddr);
   }
+#if defined(__GNU__)
+  close(sock);
+#endif
 #else
   IP_ADAPTER_INFO adaptors[16];
   DWORD adaptors_size = sizeof(adaptors);

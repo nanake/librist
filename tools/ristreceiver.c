@@ -443,7 +443,7 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 				 stats->flow_id, stats->received, stats->recovered, stats->lost);
 #if HAVE_PROMETHEUS_SUPPORT
 		if (prom_stats_ctx != NULL)
-			rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uint64_t)arg);
+			rist_prometheus_parse_stats(prom_stats_ctx, stats_container, (uintptr_t)arg);
 #else
 		(void)arg;
 #endif
