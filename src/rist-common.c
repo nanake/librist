@@ -2563,6 +2563,8 @@ protocol_bypass:
 		/* Double check for a valid rtp header */
 		if ((rtp->flags & 0xc0) != 0x80)
 		{
+			if (!p)
+				p = peer;
 			if (now > (p->log_repeat_timer + RIST_LOG_QUIESCE_TIMER)) {
 				rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Malformed packet, rtp flag value is %02x instead of 0x80.\n",
 						rtp->flags);

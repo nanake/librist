@@ -1,0 +1,18 @@
+[binaries]
+c       = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang'
+cpp     = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android21-clang++'
+ar      = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ar'
+as      = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-as'
+ranlib  = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-ranlib'
+ld      = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-link'
+strip   = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/bin/llvm-strip'
+pkgconfig = 'false'
+
+[properties]
+sys_root = '/usr/lib/android-ndk/toolchains/llvm/prebuilt/linux-x86_64/sysroot'
+
+[host_machine]
+system = 'android'
+cpu_family = 'arm'
+cpu = 'aarch64'
+endian = 'little'
