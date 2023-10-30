@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 project('libRIST', 'c',
-	version: '0.2.8',
+	version: '0.2.10',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
         meson_version: '>= 0.51.0')
 
@@ -18,7 +18,7 @@ cdata = configuration_data()
 #If any interfaces have been added since the last public release, then increment age.
 #If any interfaces have been removed or changed since the last public release, then set age to 0.
 librist_abi_current = 7
-librist_abi_revision = 0
+librist_abi_revision = 1
 librist_abi_age = 3
 librist_soversion = librist_abi_current - librist_abi_age
 librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
@@ -30,7 +30,7 @@ librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, li
 #PATCH not used (doesn't make sense for API version, remains here for backwards compat)
 
 librist_api_version_major = 4
-librist_api_version_minor = 3
+librist_api_version_minor = 4
 librist_api_version_patch = 0
 
 librist_src_root = meson.current_source_dir()
