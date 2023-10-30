@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 project('libRIST', 'c',
-	version: '0.2.8',
+	version: '0.2.10',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
         meson_version: '>= 0.51.0')
 
@@ -18,7 +18,7 @@ cdata = configuration_data()
 #If any interfaces have been added since the last public release, then increment age.
 #If any interfaces have been removed or changed since the last public release, then set age to 0.
 librist_abi_current = 7
-librist_abi_revision = 0
+librist_abi_revision = 1
 librist_abi_age = 3
 librist_soversion = librist_abi_current - librist_abi_age
 librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
@@ -30,7 +30,7 @@ librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, li
 #PATCH not used (doesn't make sense for API version, remains here for backwards compat)
 
 librist_api_version_major = 4
-librist_api_version_minor = 3
+librist_api_version_minor = 4
 librist_api_version_patch = 0
 
 librist_src_root = meson.current_source_dir()
@@ -45,6 +45,15 @@ builtin_cjson = get_option('builtin_cjson')
 builtin_mbedtls = get_option('builtin_mbedtls')
 use_mbedtls = get_option('use_mbedtls')
 use_nettle = get_option('use_nettle')
+use_gnutls = get_option('use_gnutls')
+
+if not use_gnutls
+	if use_nettle
+		warning('use_nettle is deprecated, use use_gnutls')
+	endif
+	use_gnutls = use_nettle
+endif
+
 cdata.set10('ALLOW_INSECURE_IV_FALLBACK', get_option('allow_insecure_iv_fallback'))
 
 required_library = false
@@ -237,7 +246,7 @@ if use_mbedtls
 	subdir('contrib/mbedtls')
 
 	crypto_deps += mbedcrypto_lib
-elif use_nettle
+elif use_gnutls
 	crypto_deps = [dependency('nettle'), dependency('hogweed')]
 	test_mini_gmp = '''
 #include <nettle/bignum.h>
@@ -270,7 +279,7 @@ if get_option('allow_obj_filter') and get_option('default_library') != 'shared' 
 	endif
 endif
 
-if not mbedcrypto_lib_found and not use_nettle
+if not mbedcrypto_lib_found and not use_gnutls
 	platform_files += [
 		'contrib/aes.c',
 		'contrib/sha256.c',
@@ -278,7 +287,7 @@ if not mbedcrypto_lib_found and not use_nettle
 	]
 endif
 
-have_srp = mbedcrypto_lib_found or use_nettle
+have_srp = mbedcrypto_lib_found or use_gnutls
 
 if have_srp
     platform_files += 'src/proto/eap.c'
@@ -288,7 +297,7 @@ if have_srp
 endif
 
 cdata.set10('HAVE_MBEDTLS', mbedcrypto_lib_found)
-cdata.set10('HAVE_NETTLE', use_nettle and not mbedcrypto_lib_found)
+cdata.set10('HAVE_NETTLE', use_gnutls and not mbedcrypto_lib_found)
 # Generate config.h
 config_file = configure_file(output: 'config.h', configuration: cdata)
 
