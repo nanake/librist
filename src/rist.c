@@ -203,11 +203,7 @@ int rist_receiver_data_read2(struct rist_ctx *rist_ctx, struct rist_data_block *
 
 	*data_buffer = data_block;
 
-	bool overflow = false;
-	while (!atomic_compare_exchange_weak(&f->fifo_overflow, &overflow, false)) {
-		//
-	}
-	if (overflow)
+	if (RIST_UNLIKELY(f->fifo_overflow == true))
 		data_block->flags |= RIST_DATA_FLAGS_OVERFLOW;
 
 	return (int)num;
