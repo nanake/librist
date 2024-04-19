@@ -445,12 +445,12 @@ int rist_sender_npd_enable(struct rist_ctx *rist_ctx)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with null context");
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_npd_enable call with null context");
 		return -1;
 	}
 	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
 	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with ctx not set up for sending\n");
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_npd_enable call with ctx not set up for sending\n");
 		return -1;
 	}
 	struct rist_sender *ctx = rist_ctx->sender_ctx;
@@ -463,12 +463,12 @@ int rist_sender_npd_disable(struct rist_ctx *rist_ctx)
 {
 	if (RIST_UNLIKELY(!rist_ctx))
 	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with null context");
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_npd_disable call with null context");
 		return -1;
 	}
 	if (RIST_UNLIKELY(rist_ctx->mode != RIST_SENDER_MODE || !rist_ctx->sender_ctx))
 	{
-		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_flow_id_set call with ctx not set up for sending\n");
+		rist_log_priv3(RIST_LOG_ERROR, "rist_sender_npd_disable call with ctx not set up for sending\n");
 		return -1;
 	}
 	struct rist_sender *ctx = rist_ctx->sender_ctx;
