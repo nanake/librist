@@ -375,10 +375,10 @@ if get_option('static_analyze')
 	run_target('cppcheck', command : ['cppcheck',
 									  '--quiet',
 									  '--std=c99',
-									  '--suppressions-list=' + join_paths(meson.source_root(), 'common/configs/cppcheck-suppressions.txt'),
+									  '--suppressions-list=' + join_paths(librist_src_root, 'common/configs/cppcheck-suppressions.txt'),
 									  '--project=' + join_paths(meson.build_root(),
 									  'compile_commands.json')])
-	run_target('analyze', command: ['bash', join_paths(meson.source_root(), 'common/scripts/analyze.sh')])
+	run_target('analyze', command: ['bash', join_paths(librist_src_root, 'common/scripts/analyze.sh')])
 endif
 
 librist_dep = declare_dependency(include_directories: inc, link_with : librist)
