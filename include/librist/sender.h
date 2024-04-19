@@ -6,6 +6,7 @@
 #include "headers.h"
 
 #include <stdint.h>
+#include <stdbool.h>
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,6 +35,17 @@ RIST_API uint32_t rist_flow_id_create(void);
  */
 RIST_API int rist_sender_create(struct rist_ctx **ctx, enum rist_profile profile,
 				uint32_t flow_id, struct rist_logging_settings *logging_settings);
+
+/**
+ * @brief Get RIST NULL Packet deletion status
+ *
+ * Returns the current status of NULL Packet deletion (NPD).
+ *
+ * @param ctx RIST sender ctx
+ * @param[out] npd current NPD status, true if NPD is enabled.
+ * @return 0 on success, -1 in case of error.
+ */
+RIST_API int rist_sender_npd_get(const struct rist_ctx *ctx, bool *npd);
 
 /**
  * @brief Enable RIST NULL Packet deletion
