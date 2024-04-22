@@ -66,7 +66,7 @@ void populate_ipv4_rist_header(uint16_t address_family, uint8_t *recv_buf, ssize
 	(void)addrlen;
 }
 
-int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *message, int message_len)
+int oob_build_api_payload(uint16_t *buffer, char *sourceip, char *destip, char *message, int message_len)
 {
 	// We populate a valid IP header here but we do not really use it for any type of routing
 	// We also populate a message that has the same information already present in the IP header but write it in text format
@@ -81,7 +81,7 @@ int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *mess
 	int total_len = sizeof(struct ipheader) + message_len;
 	ip->iph_len = htons(total_len);
 	// Calculate the checksum for integrity since there is no packet recovery
-	ip->iph_chksum = csum((unsigned short *)buffer, total_len);
+	ip->iph_chksum = csum(buffer, (total_len + 1) / 2);
 	return total_len;
 }
 

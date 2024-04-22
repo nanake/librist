@@ -334,7 +334,7 @@ static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connec
 	}
 #endif
 	struct rist_ctx *ctx = w->ctx;
-	char buffer[500];
+	uint16_t buffer[250];
 	char message[200];
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
