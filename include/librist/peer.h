@@ -115,7 +115,7 @@ struct rist_peer_config
 	/* Connection options */
 	uint32_t session_timeout;
 	uint32_t keepalive_interval;
-	uint32_t timing_mode;
+	enum rist_timing_mode timing_mode;
 	char srp_username[RIST_MAX_STRING_LONG];
 	char srp_password[RIST_MAX_STRING_LONG];
 };
