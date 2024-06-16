@@ -430,7 +430,7 @@ static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 			stats = stats->next;
 		}
 		if (!stats) {
-			stats = calloc(sizeof(*stats), 1);
+			stats = calloc(1, sizeof(*stats));
 			stats->flow_id = stats_container->stats.receiver_flow.flow_id;
 			*prev = stats;
 		}

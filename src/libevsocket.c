@@ -182,7 +182,7 @@ static void rebuild_poll(struct evsocket_ctx *ctx)
 
 	if (ctx->n_events > 0) {
 		ctx->pfd = malloc(sizeof(struct pollfd) * ctx->n_events);
-		ctx->_array = calloc(sizeof(struct evsocket_event), ctx->n_events);
+		ctx->_array = calloc(ctx->n_events, sizeof(struct evsocket_event));
 	}
 
 	if ((!ctx->pfd) || (!ctx->_array)) {
