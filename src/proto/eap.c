@@ -697,7 +697,7 @@ int eap_clone_ctx(struct eapsrp_ctx *in, struct rist_peer *peer)
 		return 0;
 	if (peer->eap_ctx != NULL)
 		return -1;
-	struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
+	struct eapsrp_ctx *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
 		return -1;
 
@@ -923,7 +923,7 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 		return RIST_ERR_INVALID_PROFILE;
 	if ((peer->listening && !peer->multicast_receiver) || peer->multicast_sender)
 	{
-		struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
+		struct eapsrp_ctx *ctx = calloc(1, sizeof(*ctx));
 		ctx->config.logging_settings = get_cctx(peer)->logging_settings;
 		if (ctx == NULL)
 			return RIST_ERR_MALLOC;
@@ -978,7 +978,7 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 	size_t p_len = strlen(password);
 	if (u_len == 0 || u_len > 255 || p_len == 0 || p_len > 255)
 		return RIST_ERR_INVALID_STRING_LENGTH;
-	struct eapsrp_ctx *ctx = calloc(sizeof(*ctx), 1);
+	struct eapsrp_ctx *ctx = calloc(1, sizeof(*ctx));
 	if (ctx == NULL)
 		return RIST_ERR_MALLOC;
 	if (pthread_mutex_init(&ctx->eap_lock, NULL) != 0) {
