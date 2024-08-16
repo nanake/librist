@@ -18,7 +18,7 @@ const char help_urlstr[] = "\nUsage: append to end of individual rist:// url(s) 
 "    param cname=abcde  arbitrary name for stream for display in logging\n"
 "    param rtt-min=###  minimum expected rtt\n"
 "    param rtt-max=###  maximum expected rtt\n"
-"    param verbose-level=#  Disable -1; Error 3, Warning 4, Notice 5, Info 6, Debug 7, simulation/dry-run 100\n"
+//"    param verbose-level=#  Disable -1; Error 3, Warning 4, Notice 5, Info 6, Debug 7, simulation/dry-run 100\n"
 "    param timing-mode=#  0 = RTP Timestamp (default); 1 = Arrival Time, 2 = RTP/RTCP Timestamp+NTP\n"
 "  Main and Advanced Profiles\n"
 "    param aes-type=#  128 = AES-128, 256 = AES-256 must have passphrase too\n"
