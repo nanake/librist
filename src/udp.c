@@ -455,6 +455,9 @@ void rist_create_socket(struct rist_peer *peer)
 #endif
 		}
 		peer->local_port = 32768 + (get_cctx(peer)->peer_counter % 28232);
+#ifdef _WIN32
+		udpsocket_set_nonblocking(peer->sd);
+#endif
 	}
 
 	// Increase default OS udp receive buffer size
