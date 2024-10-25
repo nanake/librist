@@ -1,6 +1,6 @@
 ![librist logo](docs/librist_logo.png)
 
-# librist
+# libRIST
 
 A library that can be used to easily add the RIST protocol to your application.
 
@@ -12,7 +12,7 @@ This project is partially funded by the SipRadius LLC.
 
 ## Goal and Features
 
-The goal of this project is to provide a rist library for **most platforms**.
+The goal of this project is to provide a RIST library for **most platforms**.
 
 It supports all features from the TR-06-1 and most of the features of TR-06-2.
 
@@ -22,7 +22,7 @@ None. This library has no external runtime dependencies on any OS other than nor
 
 ## License
 
-**librist** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
+**libRIST** is released under a very liberal license, a contrario from the other VideoLAN projects, so that it can be embedded anywhere, including non-open-source software; or even drivers, to allow the creation of hybrid decoders.
 
 The reasoning behind this decision is the same as for libvorbis, see [RMS on vorbis](https://lwn.net/2001/0301/a/rms-ov-license.php3).
 
@@ -106,15 +106,15 @@ This company can provide support and integration help, should you need it.
 
 # FAQ
 
-## Why do you not improve srt rather than starting a new project?
+## Why do you not improve SRT rather than starting a new project?
 
-- Although SRT provides a similar solution, it is the result of the vision and design of a single company, Haivision, and it is maintained almost exclusively by Haivision paid developers. rist on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, rist has been based on clear and open standards. Just from SipRadius installations alone, top tier broadcasters have over 4000 rist point-to-point links running 24/7h.
+- Although SRT provides a similar solution, it is the result of the vision and design of a single company, Haivision, and it is maintained almost exclusively by Haivision paid developers. RIST on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, RIST has been based on clear and open standards. Just from SipRadius installations alone, top tier broadcasters have over 4000 RIST point-to-point links running 24/7h.
 
 Here is a table of comparison of the two protocols:
 
 ![librist logo](docs/RIST_vs_SRT.png)
 
-## Is librist an acronym?
+## Is libRIST an acronym?
 
 - Yes, libRIST stands for Library - Reliable Internet Stream Transport
 
