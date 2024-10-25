@@ -799,6 +799,17 @@ int main(int argc, char *argv[])
 			goto next;
 		}
 
+#ifdef USE_TUN
+		if (strcmp(udp_config->prefix, "tun") == 0) {
+			if (!callback_object.tun) {
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Detected 'tun://' usage in output url but '--tun' argument was not given\n");
+				exit(1);
+			}
+			atleast_one_socket_opened = true;
+			goto next;
+		}
+#endif
+
 		// Now parse the address 127.0.0.1:5000
 		char hostname[200] = {0};
 		int outputlisten;
