@@ -38,7 +38,7 @@ RIST_PACKED_STRUCT(udpheader, {
 })
 
 void populate_ipv4_rist_header(unsigned short int address_family, unsigned char *recv_buf, ssize_t recv_bufsize, struct sockaddr * addr, socklen_t addrlen);
-int oob_build_api_payload(char *buffer, char *sourceip, char *destip, char *message, int message_len);
+int oob_build_api_payload(uint16_t *buffer, char *sourceip, char *destip, char *message, int message_len);
 char *oob_process_api_message(int buffer_len, char *buffer, int *message_len);
 #ifdef USE_TUN
 int oob_setup_tun_device(char *oobtun);

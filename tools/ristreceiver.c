@@ -320,7 +320,7 @@ static void intHandler(int signal) {
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_callback_object *callback_object = (void *) arg;
-	char buffer[500];
+	uint16_t buffer[250];
 	char message[200];
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
@@ -798,6 +798,17 @@ int main(int argc, char *argv[])
 			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not parse outputurl %s\n", outputtoken);
 			goto next;
 		}
+
+#ifdef USE_TUN
+		if (strcmp(udp_config->prefix, "tun") == 0) {
+			if (!callback_object.tun) {
+				rist_log(&logging_settings, RIST_LOG_ERROR, "Detected 'tun://' usage in output url but '--tun' argument was not given\n");
+				exit(1);
+			}
+			atleast_one_socket_opened = true;
+			goto next;
+		}
+#endif
 
 		// Now parse the address 127.0.0.1:5000
 		char hostname[200] = {0};

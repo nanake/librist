@@ -97,7 +97,7 @@ static void usage(char *cmd)
 static int cb_auth_connect(void *arg, const char* connecting_ip, uint16_t connecting_port, const char* local_ip, uint16_t local_port, struct rist_peer *peer)
 {
 	struct rist_ctx *receiver_ctx = (struct rist_ctx *)arg;
-	char buffer[500];
+	uint16_t buffer[250];
 	char message[200];
 	int message_len = snprintf(message, 200, "auth,%s:%d,%s:%d", connecting_ip, connecting_port, local_ip, local_port);
 	// To be compliant with the spec, the message must have an ipv4 header
