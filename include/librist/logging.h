@@ -41,14 +41,25 @@ enum rist_log_level
  * when using UDP logging to prevent fd's leaking.
  **/
 
+#if !defined(__cplusplus) || __cplusplus >= 202002L
 #define LOGGING_SETTINGS_INITIALIZER        \
-	{                                       \
-		.log_level = RIST_LOG_DISABLE,      \
+    {                                       \
+        .log_level = RIST_LOG_DISABLE,      \
         .log_cb = NULL,                     \
-		.log_cb_arg = NULL,                 \
+        .log_cb_arg = NULL,                 \
         .log_socket = -1,                   \
         .log_stream = NULL,                 \
-	}
+    }
+#else
+#define LOGGING_SETTINGS_INITIALIZER        \
+    {                                       \
+        RIST_LOG_DISABLE,                   \
+        NULL,                               \
+        NULL,                               \
+        -1,                                 \
+        NULL,                               \
+    }
+#endif
 
 struct rist_logging_settings {
 	enum rist_log_level log_level;///<minimum log level
