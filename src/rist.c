@@ -675,6 +675,17 @@ uint32_t rist_peer_get_id(const struct rist_peer *peer)
     return peer->adv_peer_id;
 }
 
+uint32_t rist_peer_get_cname(const struct rist_peer *peer, const char **cname)
+{
+	if (peer)
+	{
+		*cname = &peer->cname[0];
+		return strlen(*cname);
+	}
+	else
+		return 0;
+}
+
 int rist_peer_config_free(const struct rist_peer_config **peer_config)
 {
   return rist_peer_config_free2((struct rist_peer_config **)peer_config);
