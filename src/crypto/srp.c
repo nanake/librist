@@ -799,7 +799,7 @@ struct librist_crypto_srp_client_ctx *librist_crypto_srp_client_ctx_create(bool 
 	if (!s_bytes || s_len == 0 || (!default_ng && (!N_bytes || N_len == 0 || !g_bytes || g_len == 0)))
 		return NULL;
 
-	struct librist_crypto_srp_client_ctx *ctx = calloc(sizeof(*ctx), 1);
+	struct librist_crypto_srp_client_ctx *ctx = calloc(1, sizeof(*ctx));
 	if (!ctx)
 		return NULL;
 
