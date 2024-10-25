@@ -108,7 +108,11 @@ This company can provide support and integration help, should you need it.
 
 ## Why do you not improve srt rather than starting a new project?
 
-- Although SRT provides a similar solution, it is the result of the vision and design of a single company. librist on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, rist has been based on clear and open standards.
+- Although SRT provides a similar solution, it is the result of the vision and design of a single company, Haivision, and it is maintained almost exclusively by Haivision paid developers. rist on the other hand, was the collective design work of a large group of experts (companies) that have been providing packet recovery services for many years. From its conception, rist has been based on clear and open standards. Just from SipRadius installations alone, top tier broadcasters have over 4000 rist point-to-point links running 24/7h.
+
+Here is a table of comparison of the two protocols:
+
+![librist logo](docs/RIST_vs_SRT.png)
 
 ## Is librist an acronym?
 
