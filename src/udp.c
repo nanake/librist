@@ -329,7 +329,7 @@ void rist_create_socket(struct rist_peer *peer)
 		return;
 	}
 
-	if (peer->local_port) {
+	if (peer->listening) {
 		const char* host;
 		uint16_t port;
 
@@ -361,6 +361,26 @@ void rist_create_socket(struct rist_peer *peer)
 
 		peer->sd = udpsocket_open_bind(host, port, peer->miface);
 		if (peer->sd >= 0) {
+			if (port == 0)
+			{
+				// Populate peer->local_port with ephemeral port assigned
+				struct sockaddr_storage local_addr;
+				socklen_t n = sizeof( struct sockaddr_storage );
+				if( getsockname( peer->sd, (struct sockaddr *) &local_addr, &n ) != 0)
+					rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Could not find assigned port (socket# %d)\n", peer->sd);
+				else
+				{
+					if (local_addr.ss_family == AF_INET) {
+						struct sockaddr_in *a = (struct sockaddr_in *)&local_addr;
+						port = a->sin_port;
+					} else {
+						/* ipv6 */
+						struct sockaddr_in6 *a = (struct sockaddr_in6 *)&local_addr;
+						port = a->sin6_port;
+					}
+					peer->local_port = port;
+				}
+			}
 			rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Starting in URL listening mode (socket# %d)\n", peer->sd);
 		} else {
 			rist_log_priv(get_cctx(peer), RIST_LOG_ERROR, "Could not start in URL listening mode. %s\n", strerror(errno));

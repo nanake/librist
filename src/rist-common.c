@@ -978,6 +978,8 @@ static void receiver_output(struct rist_receiver *ctx, struct rist_flow *f)
 						atomic_store_explicit(&f->fifo_overflow, true, memory_order_release);
 					} else
 					{
+						if (RIST_UNLIKELY(f->fifo_overflow == true))
+							atomic_store_explicit(&f->fifo_overflow, false, memory_order_release);
 						f->dataout_fifo_queue[dataout_fifo_write_index] = block;
 						atomic_store_explicit(&f->dataout_fifo_queue_write_index, (dataout_fifo_write_index + 1)& (ctx->fifo_queue_size-1), memory_order_relaxed);
 						// Wake up the fifo read thread (poll)
