@@ -2742,11 +2742,24 @@ protocol_bypass:
 		return;
 	}
 
+	// This is for legacy compatibility (to be removed later)
+	if (rtp->payload_type == PTYPE_XR_LEGACY)
+		rtp->payload_type = PTYPE_XR;
+
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
+	uint8_t payload_type = rtp->payload_type;
+	uint8_t payload_type_nomarker_bit = rtp->payload_type & 127;
+
 	if (cctx->profile == RIST_PROFILE_SIMPLE || gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED) {
 		// Finish defining the payload (we assume reduced header)
-		if(rtp->payload_type < 200) {
+		// The check is for 200-205 and 72-77 (payload type minus 128)
+		if(payload_type_nomarker_bit < 72 || payload_type_nomarker_bit > 77) {
+			// This will mis-clasify rtp packets with payload types 72-77 as rtcp. However,
+			// this range is reserved for "RTCP conflict avoidance” on RFC4855. Furthermore,
+			// we are already using 77 for PTYPE_XR
+			// Remove the marker bit as it is not part of the payload type for non-rtcp data
+			payload_type = payload_type_nomarker_bit;
 			flow_id = be32toh(rtp->ssrc);
 			// If this is a retry, extract the information and restore correct flow_id
 			if (flow_id & 1UL)
@@ -2864,14 +2877,14 @@ protocol_bypass:
 			if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
 				source_time = timestampNTP_u64();
 			else
-				source_time = convertRTPtoNTP(rtp->payload_type, time_extension, rtp_time);
+				source_time = convertRTPtoNTP(payload_type, time_extension, rtp_time);
 			seq = (uint32_t)be16toh(rtp->seq);
 			if (RIST_UNLIKELY(!p->receiver_mode))
 				rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 						"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 			else {
 				rist_calculate_bitrate((recv_bufsize - payload_offset), &p->bw);//use the unexpanded size to show real BW
-				rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, rtp->payload_type);
+				rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, payload_type);
 			}
 			break;
 		case RIST_PAYLOAD_TYPE_EAPOL:

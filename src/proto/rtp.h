@@ -82,12 +82,20 @@ RTCP Control Channel:
 // RTCP constants
 #define RTCP_FB_HEADER_SIZE 12
 
+#define PTYPE_RTCP_CUSTOM1 72
+#define PTYPE_RTCP_CUSTOM2 73
+#define PTYPE_RTCP_CUSTOM3 74
+#define PTYPE_RTCP_CUSTOM4 75
+#define PTYPE_RTCP_CUSTOM5 76
+#define PTYPE_XR 77
+
 #define PTYPE_SR 200
 #define PTYPE_RR 201
 #define PTYPE_SDES 202
-#define PTYPE_XR 207
 #define PTYPE_NACK_CUSTOM  204
 #define PTYPE_NACK_BITMASK 205
+// To be deprecated in the future
+#define PTYPE_XR_LEGACY 207
 
 #define NACK_FMT_BITMASK 1
 #define NACK_FMT_RANGE 0
