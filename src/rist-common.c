@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
-
+#include "proto/gre.h"
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again);
 static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
@@ -2710,12 +2710,12 @@ protocol_bypass:
 				"New keepalive received. MAC: %x:%x:%x:%x:%x:%x"
 				" X: %d R: %d B: %d A: %d P: %d E: %d L: %d: N: %d"
 				" D: %d T: %d V: %d: J: %d F: %d\n",
-				info.ka.mac[0], info.ka.mac[1], info.ka.mac[2],
-				info.ka.mac[3], info.ka.mac[4], info.ka.mac[5],
-				info.ka.x, info.ka.r, info.ka.b, info.ka.a,
-				info.ka.p, info.ka.e, info.ka.l, info.ka.e,
-				info.ka.n, info.ka.d, info.ka.t, info.ka.v,
-				info.ka.j, info.ka.f);
+				info.mac[0], info.mac[1], info.mac[2],
+				info.mac[3], info.mac[4], info.mac[5],
+				info.x, info.r, info.b, info.a,
+				info.p, info.e, info.l, info.e,
+				info.n, info.d, info.t, info.v,
+				info.j, info.f);
 			if (info.json_len)
 				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Keepalive JSON:\n%.*s\n", info.json_len, info.json);
 			//TODO: add callback?
