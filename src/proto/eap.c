@@ -942,11 +942,15 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 			lookup_func = internal_user_verifier_lookup;
 			const char *n = NULL;
 			const char *g = NULL;
-			assert(librist_get_ng_constants(LIBRIST_SRP_NG_2048, &n, &g) ==0);
+			int ret;
+			ret = librist_get_ng_constants(LIBRIST_SRP_NG_2048, &n, &g);
+			assert(ret == 0);
 #if HAVE_MBEDTLS
-			assert(librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt_old, &ctx->authenticator_len_salt_old, &ctx->authenticator_bytes_verifier_old, &ctx->authenticator_len_verifier_old, false) ==0);
+			ret = librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt_old, &ctx->authenticator_len_salt_old, &ctx->authenticator_bytes_verifier_old, &ctx->authenticator_len_verifier_old, false);
+			assert(ret == 0);
 #endif
-			assert(librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt, &ctx->authenticator_bytes_verifier, &ctx->authenticator_len_verifier, true) ==0);
+			ret = librist_crypto_srp_create_verifier(n, g, username, password, &ctx->authenticator_bytes_salt, &ctx->authenticator_len_salt, &ctx->authenticator_bytes_verifier, &ctx->authenticator_len_verifier, true);
+			assert(ret == 0);
 			strcpy(ctx->authenticator_username, username);
 			userdata = (void *)ctx;
 			rist_log_priv2(ctx->config.logging_settings, RIST_LOG_INFO, EAP_LOG_PREFIX"EAP Authentication enabled, role = authenticator, single user\n");
