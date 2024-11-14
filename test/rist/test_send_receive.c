@@ -253,7 +253,7 @@ int main(int argc, char *argv[]) {
             // Check string we wrote on byte #5
             if (strcmp(rcompare, (char*)b->payload+5)) {
                 fprintf(stderr, "Packet contents not as expected!\n");
-                fprintf(stderr, "Got : %s\n", (char*)b->payload);
+                fprintf(stderr, "Got : %s (%zu/%d)\n", (char*)b->payload, b->payload_len, b->virt_dst_port);
                 fprintf(stderr, "Expected : %s\n", (char*)rcompare);
                 atomic_store(&failed, 1);
                 atomic_store(&stop, 1);
