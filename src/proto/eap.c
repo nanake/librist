@@ -964,6 +964,7 @@ int rist_enable_eap_srp_2(struct rist_peer *peer, const char *username, const ch
 		ctx->config.lookup_func = lookup_func;
 		ctx->config.lookup_func_userdata = userdata;
 		ctx->config.role = EAP_ROLE_AUTHENTICATOR;
+		ctx->config.use_key_as_passphrase = peer->key_tx.password_len == 0;
 		ctx->eapversion3 = true;
 		peer->eap_ctx = ctx;
 		struct rist_peer *child = peer->child;
