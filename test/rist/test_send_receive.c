@@ -9,6 +9,7 @@
 #include "rist-private.h"
 #include <stdatomic.h>
 #include "mpegts.h"
+#include "endian-shim.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -267,7 +268,7 @@ int main(int argc, char *argv[]) {
                 if (hdr->syncbyte != 0x47)
                 {
                     fprintf(stderr, "Packet contents not as expected!\n");
-                    fprintf(stderr, "Sync Byte at index %d was %d instead of 0x47 with %lu\n", ts, hdr->syncbyte, b->payload_len);
+                    fprintf(stderr, "Sync Byte at index %d was %d instead of 0x47 with %zu bytes\n", ts, hdr->syncbyte, b->payload_len);
                     atomic_store(&failed, 1);
                     atomic_store(&stop, 1);
                     break;
