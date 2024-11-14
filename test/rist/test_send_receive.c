@@ -1,4 +1,4 @@
-/* librist. Copyright © 2020 SipRadius LLC. All right reserved.
+/* librist. Copyright © 2024 SipRadius LLC. All right reserved.
  * Author: Gijs Peskens <gijs@in2ip.nl>
  * Author: Sergio Ammirata, Ph.D. <sergio@ammirata.net>
  *
@@ -8,6 +8,7 @@
 #include "librist/librist.h"
 #include "rist-private.h"
 #include <stdatomic.h>
+#include "mpegts.h"
 
 #ifdef _WIN32
 #include <windows.h>
@@ -120,13 +121,30 @@ static PTHREAD_START_FUNC(send_data, arg) {
     int send_counter = 0;
     char buffer[1316] = { 0 };
     struct rist_data_block data = { 0 };
+    srand(time(NULL));
     /* we just try to send some string at ~20mbs for ~8 seconds */
     while (send_counter < 16000) {
         if (atomic_load(&stop))
             break;
-        sprintf(buffer, "DEADBEAF TEST PACKET #%i", send_counter);
+        sprintf(buffer+5, "DEADBEAF TEST PACKET #%i", send_counter);
+        // Make it a random size as a multiple of mpegts 188 bytes (max 7) and add sync byte, pid and flags
+        int random_num = (rand() % 7) + 1;
+        for(int ts = 1; ts <= random_num; ts++){
+            int offset = 188*(ts-1);
+            struct mpegts_header * hdr = (struct mpegts_header *)&buffer[offset];
+			memset(hdr, 0, sizeof(*hdr));
+			hdr->syncbyte = 0x47;
+            if (ts > 1) {
+                // All null pids except first one
+                hdr->flags1 = htobe16(0x1FFF);
+                SET_BIT(hdr->flags2,4);
+                memset(&buffer[offset + sizeof(*hdr)], 0xff, (188 - sizeof(*hdr)));
+            }
+            else
+                hdr->flags1 = htobe16(33 & 0x1FFF);
+        }
         data.payload = &buffer;
-        data.payload_len = 1316;
+        data.payload_len = 188 * random_num;
         int ret = rist_sender_data_write(rist_sender, &data);
         if (ret < 0) {
             fprintf(stderr, "Failed to send test packet with error code %d!\n", ret);
@@ -159,14 +177,18 @@ static PTHREAD_START_FUNC(send_data, arg) {
 }
 
 int main(int argc, char *argv[]) {
-    if (argc != 5) {
+    if (argc != 5 && argc != 6) {
         return 99;
     }
     int profile = atoi(argv[1]);
     char *url1 = strdup(argv[2]);
     char *url2 = strdup(argv[3]);
     int losspercent = atoi(argv[4]) * 10;
-	int ret = 0;
+    int npd = 0;
+    int ret = 0;
+
+    if (argc == 6)
+        npd = atoi(argv[5]);
 
     struct rist_ctx *receiver_ctx = NULL;
     struct rist_ctx *sender_ctx = NULL;
@@ -202,6 +224,9 @@ int main(int argc, char *argv[]) {
         sender_ctx->sender_ctx->simulate_loss = true;
         sender_ctx->sender_ctx->loss_percentage = losspercent;
     }
+    if (npd > 0)
+        rist_sender_npd_enable(sender_ctx);
+
     pthread_t send_loop;
     if (pthread_create(&send_loop, NULL, send_data, (void *)sender_ctx) != 0)
     {
@@ -224,13 +249,29 @@ int main(int argc, char *argv[]) {
 				got_first = true;
 			}
             sprintf(rcompare, "DEADBEAF TEST PACKET #%i", receive_count);
-            if (strcmp(rcompare, b->payload)) {
+            // Check string we wrote on byte #5
+            if (strcmp(rcompare, (char*)b->payload+5)) {
                 fprintf(stderr, "Packet contents not as expected!\n");
                 fprintf(stderr, "Got : %s\n", (char*)b->payload);
                 fprintf(stderr, "Expected : %s\n", (char*)rcompare);
                 atomic_store(&failed, 1);
                 atomic_store(&stop, 1);
                 break;
+            }
+            // Check mpegts sync bytes
+            int tsindex = b->payload_len / 188;
+            for(int ts = 1; ts < tsindex; ts++){
+                int offset = 188*ts;
+                uint8_t *payload = ((uint8_t*)b->payload + offset);
+                struct mpegts_header * hdr = (struct mpegts_header *)(payload);
+                if (hdr->syncbyte != 0x47)
+                {
+                    fprintf(stderr, "Packet contents not as expected!\n");
+                    fprintf(stderr, "Sync Byte at index %d was %d instead of 0x47 with %lu\n", ts, hdr->syncbyte, b->payload_len);
+                    atomic_store(&failed, 1);
+                    atomic_store(&stop, 1);
+                    break;
+                }
             }
             receive_count++;
             rist_receiver_data_block_free2((struct rist_data_block **const)&b);

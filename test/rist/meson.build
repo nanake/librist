@@ -32,6 +32,9 @@ test('Simple profile multicast packet loss 10%', test_send_receive, args: ['0', 
 test('Simple profile multicast packet loss 25%', test_send_receive, args: ['0', 'rist://@239.0.0.3:3234?rtt-max=10&rtt-min=1', 'rist://239.0.0.3:3234?rtt-max=10&rtt-min=1', '25'],suite: ['simple', 'multicast'])
 
 ###Main profile tests:
+#Null Packet Deletion
+test('Main profile NPD receive server mode, sender client mode', test_send_receive, args: ['1', 'rist://@127.0.0.1:4001?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:4001?rtt-max=10&rtt-min=1', '0', '1'], suite: ['main', 'unicast', 'server'])
+test('Main profile NPD receive client mode, sender server mode', test_send_receive, args: ['1', 'rist://127.0.0.1:5001?rtt-max=10&rtt-min=1', 'rist://@127.0.0.1:5001?rtt-max=10&rtt-min=1', '0', '1'], suite: ['main', 'unicast', 'client'])
 #Sender connecting to receiver
 test('Main profile receive server mode, sender client mode', test_send_receive, args: ['1', 'rist://@127.0.0.1:4001?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:4001?rtt-max=10&rtt-min=1', '0'],suite: ['main', 'unicast', 'server'])
 test('Main profile receive server mode, sender client mode packet loss 10%', test_send_receive, args: ['1', 'rist://@127.0.0.1:4002?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:4002?rtt-max=10&rtt-min=1', '10'],suite: ['main', 'unicast', 'server'])
