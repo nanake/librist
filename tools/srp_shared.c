@@ -172,8 +172,11 @@ void user_verifier_lookup(char * username,
 	struct stat buf;
 	if (stat(srpfile, &buf) != 0)
 		return;
-
-	*generation = ((uint64_t)buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
+	#ifdef _DARWIN_C_SOURCE
+		*generation = ((uint64_t)buf.st_mtimespec.tv_sec << 32) | buf.st_mtimespec.tv_nsec;
+	#else
+		*generation = ((uint64_t)buf.st_mtim.tv_sec << 32) | buf.st_mtim.tv_nsec;
+	#endif
 #endif
 
 	if (!lookup_data || !hashversion)
