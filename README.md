@@ -97,6 +97,11 @@ The [VideoLAN Code of Conduct](https://wiki.videolan.org/CoC) applies to this pr
 
 1. Simply do a `docker build` on the Dockerfile in the 'common' subdirectory
 
+# Install with HomeBrew on MacOS
+
+1. Assuming HomeBrew is already setup, enter "brew install librist" in a terminal.
+2. libRIST will be installed in /usr/local, except on Arm64-based Macs, where the root is /opt/homebrew. Make sure to have the bin folder (/usr/local/bin or /opt/homebrew/bin, respectively) in your PATH.
+
 # Support
 
 This project is partially funded by SipRadius LLC.
