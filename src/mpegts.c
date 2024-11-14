@@ -56,7 +56,8 @@ int expand_null_packets(uint8_t payload[], size_t *payload_len, uint8_t npd_bits
 	ssize_t remaining_bytes = *payload_len;
 	//We will be modifying the payload in a 10k byte pre-allocated buffer, so we should be able to get away without any memory management
 	int counter = 0;
-	for (int i = 6; i >= 0; i--)
+	int max_ts = (remaining_bytes - 1) / packet_size;
+	for (int i = max_ts - 1; i >= 0; i--)
 	{
 		if (CHECK_BIT(npd_bits, i))
 		{
