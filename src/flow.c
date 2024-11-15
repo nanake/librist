@@ -300,6 +300,11 @@ int rist_receiver_associate_flow(struct rist_peer *p, uint32_t flow_id)
 		f->flow_auto_buffer_scaling = true;
 	}
 
+	if (p->session_timeout > f->session_timeout) {
+		f->session_timeout = p->session_timeout;
+		rist_log_priv(&ctx->common, RIST_LOG_INFO, "Setting flow session timeout to %"PRIu64"ms\n", f->session_timeout / RIST_CLOCK);
+	}
+
 	// Set the flow timeout as the buffer size for the flow
 	// However, we start with 250 ms as the minimum/default
 	// to make sure it is larger than the RTCP interval

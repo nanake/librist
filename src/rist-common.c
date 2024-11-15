@@ -3207,7 +3207,6 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 						diff = tmp_target_buffer_size - target_recovery_buffer_size;
 
 					if (diff > RIST_CLOCK * 15) {
-						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Adjusting flow buffer time to %"PRIu64"ms\n", tmp_target_buffer_size/ RIST_CLOCK);
 						target_recovery_buffer_size = tmp_target_buffer_size;
 						buffer_adjust_step_size = diff / 100;
 						buffer_adjust_steps_left = 100;
@@ -3218,6 +3217,8 @@ static PTHREAD_START_FUNC(receiver_pthread_dataout, arg)
 						if ((target_recovery_buffer_size *2ULL) > flow->session_timeout)
 							flow->session_timeout = 2ULL * target_recovery_buffer_size;
 						flow->currently_scaling_buffer = true;
+						rist_log_priv(&receiver_ctx->common, RIST_LOG_INFO, "Adjusting flow buffer time to %"PRIu64"ms, flow timeout is  %"PRIu64"ms\n", tmp_target_buffer_size/ RIST_CLOCK, flow->session_timeout/ RIST_CLOCK);
+
 					}
 				}
 			} else if (now >= next_buffer_adjust_step) {
