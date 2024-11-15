@@ -2359,6 +2359,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct sockaddr *addr = (struct sockaddr *)&ss;
 	struct rist_peer *p = NULL;
 	uint8_t *recv_buf = cctx->buf.recv;
+	uint8_t *recv_buf_npd = cctx->buf.recv_npd;
 	uint16_t port = 0;
 
 	ssize_t ret = recvfrom(peer->sd, (char*)recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
@@ -2773,16 +2774,20 @@ protocol_bypass:
 			payload.data = (void *)data_payload;
 
 			if (CHECK_BIT(rtp->flags, 4)) {
+				uint8_t *data_payload_out = &recv_buf_npd[0];
 				//RTP extension header
 				struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(&recv_buf[payload_offset]);
+				payload.size -= sizeof(*hdr_ext);
+				data_payload += sizeof(*hdr_ext);
+				payload.data = (void *)data_payload;
 				if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
 				{
-					payload.size -= sizeof(*hdr_ext);
-					data_payload += sizeof(*hdr_ext);
-					if (CHECK_BIT(hdr_ext->flags, 7))
-						expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+					// Null packet expansion (use a separate buffer and replace it when we had nulls)
+					if (CHECK_BIT(hdr_ext->flags, 7)) {
+						if (expand_null_packets(data_payload, data_payload_out, &payload.size, hdr_ext->npd_bits))
+							payload.data = (void *)data_payload_out;
+					}
 				}
-				payload.data = (void *)data_payload;
 			}
 			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 		} else {

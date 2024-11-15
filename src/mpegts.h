@@ -36,6 +36,6 @@ RIST_PACKED_STRUCT(mpegts_header, {
 })
 
 RIST_PRIV int suppress_null_packets(const uint8_t payload_in[], uint8_t payload_out[], size_t *payload_len, struct rist_rtp_hdr_ext *header_ext);
-RIST_PRIV int expand_null_packets(uint8_t payload[], size_t *payload_len, uint8_t npd_bits);
+RIST_PRIV int expand_null_packets(uint8_t payload_in[], uint8_t payload_out[], size_t *payload_len, uint8_t npd_bits);
 
 #endif

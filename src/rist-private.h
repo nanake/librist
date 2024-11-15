@@ -301,6 +301,7 @@ struct rist_common_ctx {
 		uint8_t enc[RIST_MAX_PACKET_SIZE];
 		uint8_t dec[RIST_MAX_PACKET_SIZE];
 		uint8_t recv[RIST_MAX_PACKET_SIZE];
+		uint8_t recv_npd[RIST_MAX_PACKET_SIZE];
 		uint8_t rtcp[RIST_MAX_PACKET_SIZE];
 	} buf;
 	struct rist_buffer *rist_free_buffer;
