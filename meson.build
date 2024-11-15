@@ -40,7 +40,9 @@ platform_files = []
 inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
 if (host_machine.system() == 'darwin')
-	inc += include_directories('/opt/homebrew/include')
+	# This should be coming from "brew --prefix" but I do not know how to run this from this file
+	# For now, we add the default path for arm64 and x86 macs
+	inc += include_directories('/opt/homebrew/include','/usr/local/include')
 endif
 
 #builtin_lz4 = get_option('builtin_lz4')
