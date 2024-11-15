@@ -17,6 +17,7 @@ test_send_receive = executable('test_send_receive',
                                 link_with: librist,
                                 dependencies: [
                                     threads,
+                                    tools_dependencies,
 									stdatomic_dependency
                                 ])
 
@@ -27,11 +28,14 @@ test('Simple profile unicast', test_send_receive, args: ['0', 'rist://@127.0.0.1
 test('Simple profile unicast packet loss 10%', test_send_receive, args: ['0', 'rist://@127.0.0.1:2234', 'rist://127.0.0.1:2234', '10'],suite: ['simple', 'unicast'])
 test('Simple profile unicast packet loss 25%', test_send_receive, args: ['0', 'rist://@127.0.0.1:3234', 'rist://127.0.0.1:3234', '25'],suite: ['simple', 'unicast'])
 #Multicast
-test('Simple profile multicast', test_send_receive, args: ['0', 'rist://@239.0.0.1:1234?rtt-max=10&rtt-min=1', 'rist://239.0.0.1:1234?rtt-max=10&rtt-min=1', '0'],suite: ['simple', 'multicast'])
-test('Simple profile multicast packet loss 10%', test_send_receive, args: ['0', 'rist://@239.0.0.2:2234?rtt-max=10&rtt-min=1', 'rist://239.0.0.2:2234?rtt-max=10&rtt-min=1', '10'],suite: ['simple', 'multicast'])
-test('Simple profile multicast packet loss 25%', test_send_receive, args: ['0', 'rist://@239.0.0.3:3234?rtt-max=10&rtt-min=1', 'rist://239.0.0.3:3234?rtt-max=10&rtt-min=1', '25'],suite: ['simple', 'multicast'])
+test('Simple profile multicast', test_send_receive, args: ['0', 'rist://@239.0.0.1:1236?rtt-max=10&rtt-min=1', 'rist://239.0.0.1:1236?rtt-max=10&rtt-min=1', '0'],suite: ['simple', 'multicast'])
+test('Simple profile multicast packet loss 10%', test_send_receive, args: ['0', 'rist://@239.0.0.2:2236?rtt-max=10&rtt-min=1', 'rist://239.0.0.2:2236?rtt-max=10&rtt-min=1', '10'],suite: ['simple', 'multicast'])
+test('Simple profile multicast packet loss 25%', test_send_receive, args: ['0', 'rist://@239.0.0.3:3236?rtt-max=10&rtt-min=1', 'rist://239.0.0.3:3236?rtt-max=10&rtt-min=1', '25'],suite: ['simple', 'multicast'])
 
 ###Main profile tests:
+#Null Packet Deletion
+test('Main profile NPD receive server mode, sender client mode', test_send_receive, args: ['1', 'rist://@127.0.0.1:3501?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:3501?rtt-max=10&rtt-min=1', '0', '1'], suite: ['main', 'unicast', 'server', 'NPD'])
+test('Main profile NPD receive client mode, sender server mode', test_send_receive, args: ['1', 'rist://127.0.0.1:3502?rtt-max=10&rtt-min=1', 'rist://@127.0.0.1:3502?rtt-max=10&rtt-min=1', '0', '1'], suite: ['main', 'unicast', 'client', 'NPD'])
 #Sender connecting to receiver
 test('Main profile receive server mode, sender client mode', test_send_receive, args: ['1', 'rist://@127.0.0.1:4001?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:4001?rtt-max=10&rtt-min=1', '0'],suite: ['main', 'unicast', 'server'])
 test('Main profile receive server mode, sender client mode packet loss 10%', test_send_receive, args: ['1', 'rist://@127.0.0.1:4002?rtt-max=10&rtt-min=1', 'rist://127.0.0.1:4002?rtt-max=10&rtt-min=1', '10'],suite: ['main', 'unicast', 'server'])

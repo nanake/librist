@@ -4,7 +4,7 @@
 # SPDX-License-Identifier: BSD-2-Clause
 
 project('libRIST', 'c',
-	version: '0.2.10',
+	version: '0.2.11',
 	default_options: ['c_std=c99', 'warning_level=3', 'libdir=lib'],
         meson_version: '>= 0.51.0')
 
@@ -17,9 +17,9 @@ cdata = configuration_data()
 #If any interfaces have been added, removed, or changed since the last update, increment current, and set revision to 0.
 #If any interfaces have been added since the last public release, then increment age.
 #If any interfaces have been removed or changed since the last public release, then set age to 0.
-librist_abi_current = 7
-librist_abi_revision = 1
-librist_abi_age = 3
+librist_abi_current = 8
+librist_abi_revision = 0
+librist_abi_age = 4
 librist_soversion = librist_abi_current - librist_abi_age
 librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, librist_abi_age, librist_abi_revision)
 
@@ -30,7 +30,7 @@ librist_version = '@0@.@1@.@2@'.format(librist_abi_current - librist_abi_age, li
 #PATCH not used (doesn't make sense for API version, remains here for backwards compat)
 
 librist_api_version_major = 4
-librist_api_version_minor = 4
+librist_api_version_minor = 5
 librist_api_version_patch = 0
 
 librist_src_root = meson.current_source_dir()
@@ -39,6 +39,11 @@ deps = []
 platform_files = []
 inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
+if (host_machine.system() == 'darwin')
+	# This should be coming from "brew --prefix" but I do not know how to run this from this file
+	# For now, we add the default path for arm64 and x86 macs
+	inc += include_directories('/opt/homebrew/include','/usr/local/include')
+endif
 
 #builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')

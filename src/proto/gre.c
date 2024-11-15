@@ -205,20 +205,21 @@ int _librist_proto_gre_parse_keepalive(const uint8_t buf[], size_t buflen, struc
 		return -1;
 	}
 	struct rist_gre_keepalive *ka = (struct rist_gre_keepalive *)buf;
-	memcpy(info->ka.mac, ka->mac_array, sizeof(ka->mac_array));
-	info->ka.x = CHECK_BIT(ka->capabilities1, 7);
-	info->ka.r = CHECK_BIT(ka->capabilities1, 6);
-	info->ka.b = CHECK_BIT(ka->capabilities1, 5);
-	info->ka.a = CHECK_BIT(ka->capabilities1, 4);
-	info->ka.p = CHECK_BIT(ka->capabilities1, 3);
-	info->ka.e = CHECK_BIT(ka->capabilities1, 2);
-	info->ka.l = CHECK_BIT(ka->capabilities1, 1);
-	info->ka.n = CHECK_BIT(ka->capabilities1, 0);
-	info->ka.d = CHECK_BIT(ka->capabilities2, 7);
-	info->ka.t = CHECK_BIT(ka->capabilities2, 6);
-	info->ka.v = CHECK_BIT(ka->capabilities2, 5);
-	info->ka.j = CHECK_BIT(ka->capabilities2, 4);
-	info->ka.f = CHECK_BIT(ka->capabilities2, 3);
+	memcpy(&info->ka, ka, SIZEOF_GRE_KEEPALIVE);
+	memcpy(info->mac, ka->mac_array, sizeof(ka->mac_array));
+	info->x = CHECK_BIT(ka->capabilities1, 7);
+	info->r = CHECK_BIT(ka->capabilities1, 6);
+	info->b = CHECK_BIT(ka->capabilities1, 5);
+	info->a = CHECK_BIT(ka->capabilities1, 4);
+	info->p = CHECK_BIT(ka->capabilities1, 3);
+	info->e = CHECK_BIT(ka->capabilities1, 2);
+	info->l = CHECK_BIT(ka->capabilities1, 1);
+	info->n = CHECK_BIT(ka->capabilities1, 0);
+	info->d = CHECK_BIT(ka->capabilities2, 7);
+	info->t = CHECK_BIT(ka->capabilities2, 6);
+	info->v = CHECK_BIT(ka->capabilities2, 5);
+	info->j = CHECK_BIT(ka->capabilities2, 4);
+	info->f = CHECK_BIT(ka->capabilities2, 3);
 	info->json_len = buflen - sizeof(*ka);
 	if (info->json_len > 0) {
 		info->json = (const char *)&buf[sizeof(*ka)];

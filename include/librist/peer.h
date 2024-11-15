@@ -240,6 +240,15 @@ RIST_API int rist_auth_handler_set(struct rist_ctx *ctx,
 
 RIST_API uint32_t rist_peer_get_id(const struct rist_peer *peer);
 
+/**
+ * @brief Retrieve the cname associated to a peer (if any)
+ *
+ * @param peer The peer to extract the cname from
+ * @param[out] cname a pointer to the string containing the cname
+ * @return the length of the cname string
+ */
+RIST_API uint32_t rist_peer_get_cname(const struct rist_peer *peer, const char **cname);
+
 #if HAVE_SRP_SUPPORT
 /*
 	@brief Update the shared passphrase for the peer

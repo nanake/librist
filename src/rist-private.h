@@ -30,6 +30,7 @@
 #include <errno.h>
 #include <stdatomic.h>
 #include "librist/logging.h"
+#include "proto/gre.h"
 
 #undef RIST_DEPRECATED
 
@@ -300,6 +301,7 @@ struct rist_common_ctx {
 		uint8_t enc[RIST_MAX_PACKET_SIZE];
 		uint8_t dec[RIST_MAX_PACKET_SIZE];
 		uint8_t recv[RIST_MAX_PACKET_SIZE];
+		uint8_t recv_npd[RIST_MAX_PACKET_SIZE];
 		uint8_t rtcp[RIST_MAX_PACKET_SIZE];
 	} buf;
 	struct rist_buffer *rist_free_buffer;
@@ -453,23 +455,6 @@ struct rist_ctx {
 	struct rist_receiver *receiver_ctx;
 };
 
-struct rist_keepalive_data {
-	uint8_t mac[6];
-	bool x : 1;
-	bool r : 1;
-	bool b : 1;
-	bool a : 1;
-	bool p : 1;
-	bool e : 1;
-	bool l : 1;
-	bool n : 1;
-	bool d : 1;
-	bool t : 1;
-	bool v : 1;
-	bool j : 1;
-	bool f : 1;
-};
-
 struct rist_peer {
 	/* linked list */
 	pthread_mutex_t peer_lock;//Currently only used for setting password & in sending/receiving
@@ -615,7 +600,8 @@ struct rist_peer {
 
 	uint64_t log_repeat_timer;
 
-	struct rist_keepalive_data data;
+	uint8_t data[SIZEOF_GRE_KEEPALIVE];
+
 };
 
 static inline struct rist_common_ctx *rist_struct_get_common(struct rist_ctx *ctx) {

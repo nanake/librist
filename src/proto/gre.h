@@ -120,6 +120,8 @@ Data Channel:
 
 */
 
+#define SIZEOF_GRE_KEEPALIVE 8
+
 RIST_PACKED_STRUCT(rist_gre_keepalive,{
 	uint8_t mac_array[6];
 	uint8_t capabilities1;

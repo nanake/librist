@@ -5,9 +5,24 @@
 #include <stdint.h>
 #include <stddef.h>
 #include "rist-private.h"
+#include "proto/gre.h"
 
 struct rist_keepalive_info {
-  	struct rist_keepalive_data ka;
+	uint8_t ka[SIZEOF_GRE_KEEPALIVE];
+	uint8_t mac[6];
+	bool x : 1;
+	bool r : 1;
+	bool b : 1;
+	bool a : 1;
+	bool p : 1;
+	bool e : 1;
+	bool l : 1;
+	bool n : 1;
+	bool d : 1;
+	bool t : 1;
+	bool v : 1;
+	bool j : 1;
+	bool f : 1;
 	size_t json_len;
 	const char *json;
 };

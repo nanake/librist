@@ -31,7 +31,7 @@
 #include <stdbool.h>
 #include "stdio-shim.h"
 #include <assert.h>
-
+#include "proto/gre.h"
 
 static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, void *arg, bool *again);
 static void rist_peer_recv_wrap(struct evsocket_ctx *evctx, int fd, short revents, void *arg);
@@ -2359,6 +2359,7 @@ static void rist_peer_recv(struct evsocket_ctx *evctx, int fd, short revents, vo
 	struct sockaddr *addr = (struct sockaddr *)&ss;
 	struct rist_peer *p = NULL;
 	uint8_t *recv_buf = cctx->buf.recv;
+	uint8_t *recv_buf_npd = cctx->buf.recv_npd;
 	uint16_t port = 0;
 
 	ssize_t ret = recvfrom(peer->sd, (char*)recv_buf, RIST_MAX_PACKET_SIZE, MSG_DONTWAIT, (struct sockaddr *)addr, &addrlen);
@@ -2710,12 +2711,12 @@ protocol_bypass:
 				"New keepalive received. MAC: %x:%x:%x:%x:%x:%x"
 				" X: %d R: %d B: %d A: %d P: %d E: %d L: %d: N: %d"
 				" D: %d T: %d V: %d: J: %d F: %d\n",
-				info.ka.mac[0], info.ka.mac[1], info.ka.mac[2],
-				info.ka.mac[3], info.ka.mac[4], info.ka.mac[5],
-				info.ka.x, info.ka.r, info.ka.b, info.ka.a,
-				info.ka.p, info.ka.e, info.ka.l, info.ka.e,
-				info.ka.n, info.ka.d, info.ka.t, info.ka.v,
-				info.ka.j, info.ka.f);
+				info.mac[0], info.mac[1], info.mac[2],
+				info.mac[3], info.mac[4], info.mac[5],
+				info.x, info.r, info.b, info.a,
+				info.p, info.e, info.l, info.e,
+				info.n, info.d, info.t, info.v,
+				info.j, info.f);
 			if (info.json_len)
 				rist_log_priv(get_cctx(peer), RIST_LOG_INFO, "Keepalive JSON:\n%.*s\n", info.json_len, info.json);
 			//TODO: add callback?
@@ -2742,11 +2743,24 @@ protocol_bypass:
 		return;
 	}
 
+	// This is for legacy compatibility (to be removed later)
+	if (rtp->payload_type == PTYPE_XR_LEGACY)
+		rtp->payload_type = PTYPE_XR;
+
 	uint32_t rtp_time = 0;
 	uint64_t source_time = 0;
+	uint8_t payload_type = rtp->payload_type;
+	uint8_t payload_type_nomarker_bit = rtp->payload_type & 127;
+
 	if (cctx->profile == RIST_PROFILE_SIMPLE || gre_proto == RIST_GRE_PROTOCOL_TYPE_REDUCED) {
 		// Finish defining the payload (we assume reduced header)
-		if(rtp->payload_type < 200) {
+		// The check is for 200-205 and 72-77 (payload type minus 128)
+		if(payload_type_nomarker_bit < 72 || payload_type_nomarker_bit > 77) {
+			// This will mis-clasify rtp packets with payload types 72-77 as rtcp. However,
+			// this range is reserved for "RTCP conflict avoidance” on RFC4855. Furthermore,
+			// we are already using 77 for PTYPE_XR
+			// Remove the marker bit as it is not part of the payload type for non-rtcp data
+			payload_type = payload_type_nomarker_bit;
 			flow_id = be32toh(rtp->ssrc);
 			// If this is a retry, extract the information and restore correct flow_id
 			if (flow_id & 1UL)
@@ -2760,16 +2774,20 @@ protocol_bypass:
 			payload.data = (void *)data_payload;
 
 			if (CHECK_BIT(rtp->flags, 4)) {
+				uint8_t *data_payload_out = &recv_buf_npd[0];
 				//RTP extension header
 				struct rist_rtp_hdr_ext * hdr_ext = (struct rist_rtp_hdr_ext *)(&recv_buf[payload_offset]);
+				payload.size -= sizeof(*hdr_ext);
+				data_payload += sizeof(*hdr_ext);
+				payload.data = (void *)data_payload;
 				if (memcmp(&hdr_ext->identifier, "RI", 2) == 0 && be16toh(hdr_ext->length) == 1)
 				{
-					payload.size -= sizeof(*hdr_ext);
-					data_payload += sizeof(*hdr_ext);
-					if (CHECK_BIT(hdr_ext->flags, 7))
-						expand_null_packets(data_payload, &payload.size, hdr_ext->npd_bits);
+					// Null packet expansion (use a separate buffer and replace it when we had nulls)
+					if (CHECK_BIT(hdr_ext->flags, 7)) {
+						if (expand_null_packets(data_payload, data_payload_out, &payload.size, hdr_ext->npd_bits))
+							payload.data = (void *)data_payload_out;
+					}
 				}
-				payload.data = (void *)data_payload;
 			}
 			payload.type = RIST_PAYLOAD_TYPE_DATA_RAW;
 		} else {
@@ -2864,14 +2882,14 @@ protocol_bypass:
 			if (RIST_UNLIKELY(p->config.timing_mode == RIST_TIMING_MODE_ARRIVAL))
 				source_time = timestampNTP_u64();
 			else
-				source_time = convertRTPtoNTP(rtp->payload_type, time_extension, rtp_time);
+				source_time = convertRTPtoNTP(payload_type, time_extension, rtp_time);
 			seq = (uint32_t)be16toh(rtp->seq);
 			if (RIST_UNLIKELY(!p->receiver_mode))
 				rist_log_priv(get_cctx(peer), RIST_LOG_WARN,
 						"Received data packet on sender, ignoring (%d bytes)...\n", payload.size);
 			else {
 				rist_calculate_bitrate((recv_bufsize - payload_offset), &p->bw);//use the unexpanded size to show real BW
-				rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, rtp->payload_type);
+				rist_receiver_recv_data(p, seq, flow_id, source_time, now, &payload, retry, payload_type);
 			}
 			break;
 		case RIST_PAYLOAD_TYPE_EAPOL:

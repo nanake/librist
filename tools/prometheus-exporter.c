@@ -344,7 +344,7 @@ void rist_prometheus_handle_sender_peer_stats(struct rist_prometheus_stats *ctx,
 	s->container[s->container_offset].rist_sender_peer_retransmitted_packets = s->counters.rist_sender_peer_retransmitted_packets += stats->retransmitted;
 	s->container[s->container_offset].rist_sender_peer_bandwidth_bps = stats->bandwidth;
 	s->container[s->container_offset].rist_sender_peer_retry_bandwidth_bps = stats->retry_bandwidth;
-	s->container[s->container_offset].rist_sender_peer_rtt_seconds= stats->rtt;
+	s->container[s->container_offset].rist_sender_peer_rtt_seconds= ((double)1 / (double)1000) * stats->rtt;
 	s->container[s->container_offset].rist_sender_peer_quality = stats->quality;
 	s->container[s->container_offset].updated = now;
 	s->last_updated = now;
