@@ -39,6 +39,9 @@ deps = []
 platform_files = []
 inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
+if (host_machine.system() == 'darwin')
+	inc += include_directories('/opt/homebrew/include')
+endif
 
 #builtin_lz4 = get_option('builtin_lz4')
 builtin_cjson = get_option('builtin_cjson')
