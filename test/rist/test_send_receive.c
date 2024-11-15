@@ -127,22 +127,23 @@ static PTHREAD_START_FUNC(send_data, arg) {
     while (send_counter < 16000) {
         if (atomic_load(&stop))
             break;
-        sprintf(buffer+5, "DEADBEAF TEST PACKET #%i", send_counter);
         // Make it a random size as a multiple of mpegts 188 bytes (max 7) and add sync byte, pid and flags
         int random_num = (rand() % 7) + 1;
-        for(int ts = 1; ts <= random_num; ts++){
-            int offset = 188*(ts-1);
+        for(int ts = 0; ts < random_num; ts++){
+            int offset = 188*ts;
             struct mpegts_header * hdr = (struct mpegts_header *)&buffer[offset];
 			memset(hdr, 0, sizeof(*hdr));
 			hdr->syncbyte = 0x47;
-            if (ts > 1) {
-                // All null pids except first one
+            // Random null pids
+            int random_bit = rand() % 2;
+            if (random_bit) {
                 hdr->flags1 = htobe16(0x1FFF);
                 SET_BIT(hdr->flags2,4);
-                memset(&buffer[offset + sizeof(*hdr)], 0xff, (188 - sizeof(*hdr)));
             }
-            else
-                hdr->flags1 = htobe16(33 & 0x1FFF);
+            else {
+                hdr->flags1 = htobe16(0x1111);
+            }
+            sprintf(&buffer[offset+sizeof(*hdr)+1], "DEADBEAF TEST PACKET #%i-%i", send_counter, ts);
         }
         data.payload = &buffer;
         data.payload_len = 188 * random_num;
@@ -249,19 +250,9 @@ int main(int argc, char *argv[]) {
                 receive_count = (int)b->seq;
 				got_first = true;
 			}
-            sprintf(rcompare, "DEADBEAF TEST PACKET #%i", receive_count);
-            // Check string we wrote on byte #5
-            if (strcmp(rcompare, (char*)b->payload+5)) {
-                fprintf(stderr, "Packet contents not as expected!\n");
-                fprintf(stderr, "Got : %s (%zu/%d)\n", (char*)b->payload, b->payload_len, b->virt_dst_port);
-                fprintf(stderr, "Expected : %s\n", (char*)rcompare);
-                atomic_store(&failed, 1);
-                atomic_store(&stop, 1);
-                break;
-            }
-            // Check mpegts sync bytes
+            // Check entire mpegts structure
             int tsindex = b->payload_len / 188;
-            for(int ts = 1; ts < tsindex; ts++){
+            for(int ts = 0; ts < tsindex; ts++){
                 int offset = 188*ts;
                 uint8_t *payload = ((uint8_t*)b->payload + offset);
                 struct mpegts_header * hdr = (struct mpegts_header *)(payload);
@@ -272,6 +263,21 @@ int main(int argc, char *argv[]) {
                     atomic_store(&failed, 1);
                     atomic_store(&stop, 1);
                     break;
+                }
+                // We only check for non-null segments or when null packet deletion is not enabled
+                // Otherwise our data would have been replaced with 0xff everywhere
+                if ((npd == 0 || (npd == 1 && be16toh(hdr->flags1) != 0x1FFF)))
+                {
+                    // Check for string we wrote
+                    sprintf(rcompare, "DEADBEAF TEST PACKET #%i-%i", receive_count, ts);
+                    if (strcmp(rcompare, (char *)b->payload + offset + sizeof(*hdr) + 1)) {
+                        fprintf(stderr, "Packet contents not as expected at index %i!\n", ts);
+                        fprintf(stderr, "Got : %s (%zu/%d)\n", (char*)b->payload, b->payload_len, b->virt_dst_port);
+                        fprintf(stderr, "Expected : %s\n", (char*)rcompare);
+                        atomic_store(&failed, 1);
+                        atomic_store(&stop, 1);
+                        break;
+                    }
                 }
             }
             receive_count++;
