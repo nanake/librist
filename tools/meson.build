@@ -29,7 +29,7 @@ if compile_prometheus
 endif
 
 executable('ristsender',
-	['ristsender.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
+	['ristsender.c', 'yamlparse.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
 	dependencies: [
 		librist_dep,
 		threads,
@@ -40,7 +40,7 @@ executable('ristsender',
 	install: should_install)
 
 executable('ristreceiver',
-	['ristreceiver.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
+	['ristreceiver.c', 'yamlparse.c', 'oob_shared.c', srp_shared, tools_deps, rev_target],
 	dependencies: [
 		librist_dep,
 		tools_dependencies,
