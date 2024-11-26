@@ -2653,6 +2653,7 @@ protocol_bypass:
 				port = p->remote_port;
 			if (incoming_ip_string) {
 				if (cctx->auth.conn_cb(cctx->auth.arg,incoming_ip_string,port,parent_ip_string, parent_port, p)) {
+					free(p->eap_ctx);
 					free(p);
 					return;
 				}
