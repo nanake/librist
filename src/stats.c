@@ -130,6 +130,8 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		flow->stats_instant.cur_ips = (flow->stats_instant.total_ips / flow->stats_instant.avg_count);
 	}
 
+	stats_container->stats.receiver_flow.peers = calloc(flow->peer_lst_len, sizeof(struct rist_stats_receiver_peer));
+
 	cJSON *stats = cJSON_CreateObject();
 	cJSON *stats_obj = cJSON_AddObjectToObject(stats, "receiver-stats");
 	cJSON *flow_obj = cJSON_AddObjectToObject(stats_obj, "flowinstant");
@@ -163,6 +165,16 @@ void rist_receiver_flow_statistics(struct rist_receiver *ctx, struct rist_flow *
 		cJSON_AddNumberToObject(peer_stats, "bitrate", (double)bitrate);
 		cJSON_AddNumberToObject(peer_stats, "avg_bitrate", (double)avg_bitrate);
 		cJSON_AddItemToArray(peers, peer_obj);
+
+		stats_container->stats.receiver_flow.peers[i].peer_id = peer->adv_peer_id;
+		stats_container->stats.receiver_flow.peers[i].received_data = peer->stats_receiver_instant.received;
+		stats_container->stats.receiver_flow.peers[i].received_rtcp = peer->stats_receiver_instant.received_rtcp;
+		stats_container->stats.receiver_flow.peers[i].sent_rtcp = peer->stats_receiver_instant.sent_rtcp;
+		stats_container->stats.receiver_flow.peers[i].rtt = peer->last_rtt / RIST_CLOCK;
+		stats_container->stats.receiver_flow.peers[i].avg_rtt = avg_rtt / RIST_CLOCK;
+		stats_container->stats.receiver_flow.peers[i].bandwidth = bitrate;
+		stats_container->stats.receiver_flow.peers[i].avg_bandwidth = avg_bitrate;
+
 		// Clear peer instant stats
 		memset(&peer->stats_receiver_instant, 0, sizeof(peer->stats_receiver_instant));
 	}

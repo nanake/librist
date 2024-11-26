@@ -34,6 +34,26 @@ struct rist_stats_sender_peer
 	uint32_t rtt;
 };
 
+struct rist_stats_receiver_peer
+{
+	/* internal peer id */
+	uint32_t peer_id;
+	/* num received packets */
+	uint64_t received_data;
+	/* num received rtcp packets */
+	uint32_t received_rtcp;
+	/* sent rtcp packets */
+	uint32_t sent_rtcp;
+	/* current RTT */
+	uint64_t rtt;
+	/* average RTT */
+	double avg_rtt;
+	/* current bandwidth */
+	size_t bandwidth;
+	/* average bandwidth */
+	size_t avg_bandwidth;
+};
+
 struct rist_stats_receiver_flow
 {
 	/* peer count */
@@ -70,6 +90,8 @@ struct rist_stats_receiver_flow
 	uint64_t max_inter_packet_spacing;
 	/* avg rtt all non dead peers */
 	uint32_t rtt;
+	/* peers */
+	struct rist_stats_receiver_peer *peers;
 };
 
 enum rist_stats_type
