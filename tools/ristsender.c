@@ -32,6 +32,7 @@
 #include <sys/ioctl.h>
 #include <linux/if_tun.h>
 #endif
+#include "yamlparse.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 #define strtok_r strtok_s
@@ -127,6 +128,7 @@ static struct option long_options[] = {
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
 { "fast-start",      required_argument, NULL, 'f' },
+{ "config",          required_argument, NULL, 'c' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 #if HAVE_PROMETHEUS_SUPPORT
@@ -174,6 +176,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "                                                 | 2 = no data goes into or out of oob channel              |\n"
 #endif
 "       -f | --fast-start value                   | Controls data output flow before handshake is completed  |\n"
+"       -c | --config name.yaml                   | YAML config file                                         |\n"
 //"                                                 | -1 = hold data out and igmp source joins                 |\n"
 "                                                 |  0 = hold data out                                       |\n"
 "                                                 |  1 = start to send data immediately                      |\n"
@@ -728,6 +731,8 @@ int main(int argc, char *argv[])
 #else
 	pthread_t thread_main_loop[MAX_INPUT_COUNT+1] = { 0 };
 #endif
+	rist_tools_config_object *yaml_config = NULL;
+	char *yamlfile = NULL;
 
 	for (size_t i = 0; i < MAX_INPUT_COUNT; i++)
 		event[i] = NULL;
@@ -753,7 +758,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:v:hunM", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:c:v:hunM", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -838,6 +843,59 @@ int main(int argc, char *argv[])
 			prometheus_unix_sock = strdup(optarg);
 			break;
 #endif
+		case 'c':
+			yamlfile = strdup(optarg);
+			yaml_config = parse_yaml(yamlfile);
+			free(yamlfile);
+			if (!yaml_config){
+				fprintf(stderr,"Could not import yaml file %s\n",optarg);
+				cleanup_tools_config(yaml_config);
+				exit(1);
+			}
+			if (yaml_config->input_url)
+				inputurl = strdup(yaml_config->input_url);
+			if (yaml_config->output_url)
+				outputurl = strdup(yaml_config->output_url);
+			buffer_size = yaml_config->buffer;
+			if (yaml_config->secret)
+				shared_secret = strdup(yaml_config->secret);
+			encryption_type = yaml_config->encryption_type;
+			loglevel = yaml_config->verbose_level;
+			if (yaml_config->remote_log_address)
+				remote_log_address = strdup(yaml_config->remote_log_address);
+			faststart = yaml_config->fast_start;
+			npd = yaml_config->null_packet_deletion;
+			profile = yaml_config->profile;
+			statsinterval = yaml_config->stats_interval;
+#ifdef USE_TUN
+			// hardcoded mode for now
+			// callback_tun_object.tun_mode = 1; (yaml_config->tun_mode)
+			if (yaml_config->tunnel_interface)
+				oobtun = strdup(yaml_config->tunnel_interface);
+#endif
+#if HAVE_SRP_SUPPORT
+			if (yaml_config->srp_file)
+				srpfile = strdup(yaml_config->srp_file);
+#endif
+#if HAVE_PROMETHEUS_SUPPORT
+			enable_prometheus = yaml_config->enable_metrics;
+			if (yaml_config->metrics_tags)
+				prometheus_tags = strdup(yaml_config->metrics_tags);
+			prometheus_multipoint = yaml_config->metrics_multipoint;
+			prometheus_nocreated = yaml_config->metrics_nocreated;
+#if HAVE_LIBMICROHTTPD
+        	prometheus_httpd = yaml_config->metrics_http;
+        	prometheus_port = yaml_config->metrics_port;
+			if (yaml_config->metrics_ip)
+	        	prometheus_ip = strdup(yaml_config->metrics_ip);
+#endif
+#if HAVE_SOCK_UN_H
+			if (yaml_config->metrics_unix)
+	        	prometheus_unix_sock = strdup(yaml_config->metrics_unix);
+#endif
+#endif
+			cleanup_tools_config(yaml_config);
+			break;
 		case 'h':
 			/* Fall through */
 		default:

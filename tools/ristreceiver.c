@@ -34,6 +34,7 @@
 #include <sys/ioctl.h>
 #include <linux/if_tun.h>
 #endif
+#include "yamlparse.h"
 
 #if defined(_WIN32) || defined(_WIN64)
 # define strtok_r strtok_s
@@ -84,6 +85,7 @@ static struct option long_options[] = {
 #if HAVE_SRP_SUPPORT
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
+{ "config",          required_argument, NULL, 'c' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 #if HAVE_PROMETHEUS_SUPPORT
@@ -115,6 +117,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "       -e | --encryption-type TYPE               | Default Encryption type (0, 128 = AES-128, 256 = AES-256)|\n"
 "       -p | --profile number                     | Rist profile (0 = simple, 1 = main, 2 = advanced)        |\n"
 "       -S | --statsinterval value (ms)           | Interval at which stats get printed, 0 to disable        |\n"
+"       -c | --config name.yaml                   | YAML config file                                         |\n"
 "       -v | --verbose-level value                | To disable logging: -1, log levels match syslog levels   |\n"
 "       -r | --remote-logging IP:PORT             | Send logs and stats to this IP:PORT using udp messages   |\n"
 #if HAVE_SRP_SUPPORT
@@ -524,6 +527,8 @@ int main(int argc, char *argv[])
 	/* Receiver pipe handle */
 	int receiver_pipe[2];
 #endif
+	rist_tools_config_object *yaml_config = NULL;
+	char *yamlfile = NULL;
 
 #if HAVE_SRP_SUPPORT
 	char *srpfile = NULL;
@@ -554,7 +559,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:h:uM", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:uM", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -633,6 +638,57 @@ int main(int argc, char *argv[])
 			prometheus_unix_sock = strdup(optarg);
 			break;
 #endif
+		case 'c':
+			yamlfile = strdup(optarg);
+			yaml_config = parse_yaml(yamlfile);
+			free(yamlfile);
+			if (!yaml_config){
+				fprintf(stderr,"Could not import yaml file %s\n",optarg);
+				cleanup_tools_config(yaml_config);
+				exit(1);
+			}
+			if (yaml_config->input_url)
+				inputurl = strdup(yaml_config->input_url);
+			if (yaml_config->output_url)
+				outputurl = strdup(yaml_config->output_url);
+			buffer = yaml_config->buffer;
+			if (yaml_config->secret)
+				shared_secret = strdup(yaml_config->secret);
+			encryption_type = yaml_config->encryption_type;
+			loglevel = yaml_config->verbose_level;
+			if (yaml_config->remote_log_address)
+				remote_log_address = strdup(yaml_config->remote_log_address);
+			profile = yaml_config->profile;
+			statsinterval = yaml_config->stats_interval;
+#ifdef USE_TUN
+			// hardcoded mode for now
+			// callback_tun_object.tun_mode = 1; (yaml_config->tun_mode)
+			if (yaml_config->tunnel_interface)
+				oobtun = strdup(yaml_config->tunnel_interface);
+#endif
+#if HAVE_SRP_SUPPORT
+			if (yaml_config->srp_file)
+				srpfile = strdup(yaml_config->srp_file);
+#endif
+#if HAVE_PROMETHEUS_SUPPORT
+			enable_prometheus = yaml_config->enable_metrics;
+			if (yaml_config->metrics_tags)
+				prometheus_tags = strdup(yaml_config->metrics_tags);
+			prometheus_multipoint = yaml_config->metrics_multipoint;
+			prometheus_nocreated = yaml_config->metrics_nocreated;
+#if HAVE_LIBMICROHTTPD
+        	prometheus_httpd = yaml_config->metrics_http;
+        	prometheus_port = yaml_config->metrics_port;
+			if (yaml_config->metrics_ip)
+	        	prometheus_ip = strdup(yaml_config->metrics_ip);
+#endif
+#if HAVE_SOCK_UN_H
+			if (yaml_config->metrics_unix)
+	        	prometheus_unix_sock = strdup(yaml_config->metrics_unix);
+#endif
+#endif
+			cleanup_tools_config(yaml_config);
+			break;
 		case 'h':
 			/* Fall through */
 		default:
@@ -977,7 +1033,6 @@ next:
 		}
 	}
 #endif
-	fprintf(stderr, "DESTROY\n");
 	rist_destroy(ctx);
 
 	for (size_t i = 0; i < MAX_OUTPUT_COUNT; i++) {
