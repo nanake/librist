@@ -664,8 +664,9 @@ int rist_stats_free(const struct rist_stats *stats_container)
 {
 	if (!stats_container)
 		return -1;
-	if (stats_container->stats_json)
-		free(stats_container->stats_json);
+	free(stats_container->stats_json);
+	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW) 
+		free(stats_container->stats.receiver_flow.peers);
 	free((void *)stats_container);
 	return 0;
 }
