@@ -103,6 +103,29 @@ RIST_DEPRECATED RIST_API int rist_receiver_data_callback_set(struct rist_ctx *ct
 RIST_API int rist_receiver_data_callback_set2(struct rist_ctx *ctx, receiver_data_callback2_t, void *arg);
 
 /**
+ * @brief Session Timeout callback function
+ *
+ * This function will notify the app that a session timeout has occured
+ *
+ * @param arg optional user data set via rist_session_timeout_callback_set
+ * @param flow_id id of the flow that is timing out
+ * @return int, ignored.
+ */
+typedef int (*receiver_session_timeout_callback_t)(void *arg, uint32_t flow_id);
+
+/**
+ * @brief Enable Session Timeout callback channel
+ *
+ * Call to enable session timeout callback channel.
+ *
+ * @param ctx RIST receiver context
+ * @param session_timeout_callback The function that will be called when a session times out
+ * @param arg the extra argument passed to the `session_timeout_callback`
+ * @return 0 on success, -1 on error
+ */
+RIST_API int rist_receiver_session_timeout_callback_set(struct rist_ctx *ctx, receiver_session_timeout_callback_t, void *arg);
+
+/**
  * @brief Free rist data block
  *
  * Must be called whenever a received data block is no longer needed by the calling application.

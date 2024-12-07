@@ -366,6 +366,10 @@ struct rist_receiver {
 	void *receiver_data_callback_argument;
 	int receiver_data_ready_notify_fd;
 
+	/* Receiver session timeout callback */
+	receiver_session_timeout_callback_t receiver_session_timeout_callback;
+	void *receiver_session_timeout_callback_argument;
+
 	/* Receiver thread variables */
 	bool protocol_running;
 	pthread_t receiver_thread;

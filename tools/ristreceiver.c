@@ -40,7 +40,7 @@
 # define strtok_r strtok_s
 #endif
 
-#define RISTRECEIVER_VERSION "2"
+#define RISTRECEIVER_VERSION "3"
 
 #define MAX_INPUT_COUNT 20
 #define MAX_OUTPUT_COUNT 20
@@ -86,6 +86,7 @@ static struct option long_options[] = {
 { "srpfile",         required_argument, NULL, 'F' },
 #endif
 { "config",          required_argument, NULL, 'c' },
+{ "session-timeout-exit",  no_argument, NULL, 'x' },
 { "help",            no_argument,       NULL, 'h' },
 { "help-url",        no_argument,       NULL, 'u' },
 #if HAVE_PROMETHEUS_SUPPORT
@@ -147,6 +148,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 "          | --metrics-unix                       | Unix socket to expose metrics on                         |\n"
 #endif //HAVE_SOCK_UN_H
 #endif //HAVE_PROMETHEUS_SUPPORT
+"       -x | --session-timeout-exit               | Exit on Session Timeout                                  |\n"
 "       -h | --help                               | Show this help                                           |\n"
 "       -u | --help-url                           | Show all the possible url options                        |\n"
 "   * == mandatory value \n"
@@ -170,6 +172,7 @@ struct rist_callback_object {
 	int tun;
 	int tun_mode;
 #endif
+	int session_timeout_exit;
 };
 
 static inline void risttools_rtp_set_hdr(uint8_t *p_rtp, uint8_t i_type, uint16_t i_seqnum, uint32_t i_timestamp, uint32_t i_ssrc)
@@ -421,6 +424,14 @@ struct ristreceiver_flow_cumulative_stats {
 
 struct ristreceiver_flow_cumulative_stats *stats_list;
 
+static int session_timeout_callback(void *arg, uint32_t flow_id) {
+	struct rist_callback_object *callback_object = (void *) arg;
+	rist_log(&logging_settings, RIST_LOG_INFO, "Flow with id %"PRIu32" has timed out\n",  flow_id);
+	if (callback_object->session_timeout_exit)
+		exit(1);
+	return 0;
+}
+
 static int cb_stats(void *arg, const struct rist_stats *stats_container) {
 	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n",  stats_container->stats_json);
 	if (stats_container->stats_type == RIST_STATS_RECEIVER_FLOW)
@@ -559,7 +570,7 @@ int main(int argc, char *argv[])
 
 	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
 
-	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:uM", long_options, &option_index)) != -1) {
+	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:uMx", long_options, &option_index)) != -1) {
 		switch (c) {
 		case 'i':
 			inputurl = strdup(optarg);
@@ -689,6 +700,9 @@ int main(int argc, char *argv[])
 #endif
 			cleanup_tools_config(yaml_config);
 			break;
+		case 'x':
+			callback_object.session_timeout_exit = 1;
+			break;
 		case 'h':
 			/* Fall through */
 		default:
@@ -756,6 +770,15 @@ int main(int argc, char *argv[])
 	if (rist_stats_callback_set(ctx, statsinterval, cb_stats, (void*)0) == -1) {
 		rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable stats callback\n");
 		exit(1);
+	}
+
+	double api_version = strtod(librist_api_version(), NULL);
+	if (api_version > 4.5)
+	{
+		if (rist_receiver_session_timeout_callback_set(ctx, session_timeout_callback, (void *)&callback_object) == -1) {
+			rist_log(&logging_settings, RIST_LOG_ERROR, "Could not enable session timeout callback\n");
+			exit(1);
+		}
 	}
 
 #ifdef USE_TUN
