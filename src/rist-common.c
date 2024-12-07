@@ -3951,6 +3951,9 @@ PTHREAD_START_FUNC(receiver_pthread_protocol, arg)
 						rist_log_priv(&ctx->common, RIST_LOG_INFO,
 								"\t************** Session Timeout after %" PRIu64 "s of no data, deleting flow with id %"PRIu32" ***************\n",
 								flow_age / RIST_CLOCK / 1000, f->flow_id);
+						if (ctx->receiver_session_timeout_callback) {
+							ctx->receiver_session_timeout_callback(ctx->receiver_session_timeout_callback_argument, f->flow_id);
+						}
 						pthread_mutex_unlock(&f->mutex);
 						pthread_mutex_lock(&ctx->common.peerlist_lock);
 						for (size_t i = 0; i < f->peer_lst_len; i++) {
