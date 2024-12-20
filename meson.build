@@ -39,7 +39,8 @@ deps = []
 platform_files = []
 inc = []
 inc += include_directories('.', 'src', 'include/librist', 'include', 'contrib')
-if (host_machine.system() == 'darwin')
+if (host_machine.system() == 'darwin'
+    and find_program('brew', required : false).found())
 	r = run_command('brew', '--prefix', check: true)
 	brewoutput = r.stdout().strip()
 	inc += include_directories(brewoutput + '/include')
