@@ -187,7 +187,7 @@ int rist_send_common_rtcp(struct rist_peer *p, uint8_t payload_type, uint8_t *pa
 
 	size_t ret = rist_send_seq_rtcp(p, (uint16_t)seq_rtp, payload_type, payload, payload_len, source_time, src_port, dst_port, false);
 
-	if ((!p->compression && ret < payload_len) || ret <= 0)
+	if ((!p->compression && ret < payload_len) || ret == (size_t)-1)
 	{
 		if (p->address_family == AF_INET6) {
 			// TODO: print IP and port (and error number?)
@@ -917,11 +917,11 @@ ssize_t rist_retry_dequeue(struct rist_sender *ctx)
 	uint16_t src_port = buffer->src_port;
 	if (src_port == 0)
 		src_port = 32768 + retry->peer->peer_data->adv_peer_id;
-	ret = (size_t)rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
+	ret = rist_send_seq_rtcp(retry->peer->peer_data, buffer->seq_rtp, buffer->type, &payload[RIST_MAX_PAYLOAD_OFFSET], buffer->size, buffer->source_time, src_port, (retry->peer->peer_data->config.virt_dst_port & ~1UL), true);
 	// update bandwidth value
 	rist_calculate_bitrate(ret, retry_bw);
 
-	if (ret < buffer->size) {
+	if ((ret == (size_t)-1) || (ret < buffer->size)) {
 		rist_log_priv(&ctx->common, RIST_LOG_ERROR,
 			"Resending of packet failed %zu != %zu for seq %"PRIu32"\n", ret, buffer->size, retry->seq);
 		retry->peer->stats_sender_instant.retrans_skip++;
