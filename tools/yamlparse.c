@@ -10,7 +10,7 @@
 #include <stdbool.h>
 #include <yamlparse.h>
 #include <ctype.h>
-#include <strings.h>
+#include <string.h>
 #include "headers.h"
 #include "logging.h"
 
