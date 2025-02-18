@@ -18,6 +18,7 @@ RUN git clone https://code.videolan.org/rist/librist.git && \
 FROM ubuntu:focal as release
 
 COPY --from=builder /librist/build/tools/rist2rist /usr/bin/
+COPY --from=builder /librist/build/tools/udp2udp /usr/bin/
 COPY --from=builder /librist/build/tools/ristreceiver /usr/bin/
 COPY --from=builder /librist/build/tools/ristsender /usr/bin/
 COPY --from=builder /librist/build/tools/ristsrppasswd /usr/bin/

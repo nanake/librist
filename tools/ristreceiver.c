@@ -40,7 +40,7 @@
 # define strtok_r strtok_s
 #endif
 
-#define RISTRECEIVER_VERSION "3"
+#define RISTRECEIVER_VERSION "30"
 
 #define MAX_INPUT_COUNT 20
 #define MAX_OUTPUT_COUNT 20
@@ -159,7 +159,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, RISTRECEIVER_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -568,7 +568,7 @@ int main(int argc, char *argv[])
       exit(1);
 	}
 
-	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristreceiver version: %s libRIST library: %s API version: %s\n", RISTRECEIVER_VERSION, librist_version(), librist_api_version());
 
 	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:v:F:c:h:uMx", long_options, &option_index)) != -1) {
 		switch (c) {

@@ -41,7 +41,7 @@
 
 #define RIST_MARK_UNUSED(unused_param) ((void)(unused_param))
 
-#define RISTSENDER_VERSION "2"
+#define RISTSENDER_VERSION "30"
 
 #define MAX_INPUT_COUNT 20
 #define MAX_OUTPUT_COUNT 20
@@ -308,7 +308,7 @@ static void input_udp_sockerr(struct evsocket_ctx *evctx, int fd, short revents,
 
 static void usage(char *cmd)
 {
-	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, RISTSENDER_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -756,7 +756,7 @@ int main(int argc, char *argv[])
       exit(1);
 	}
 
-	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting ristsender version: %s libRIST library: %s API version: %s\n", RISTSENDER_VERSION, librist_version(), librist_api_version());
 
 	while ((c = getopt_long(argc, argv, "r:i:o:b:s:e:t:m:p:S:F:f:c:v:hunM", long_options, &option_index)) != -1) {
 		switch (c) {
