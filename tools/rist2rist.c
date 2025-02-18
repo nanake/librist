@@ -26,6 +26,8 @@
 #endif
 #include "oob_shared.h"
 
+#define RIST2RIST_VERSION "30"
+
 struct rist_sender_args {
 	char* cname;
 	char* shared_secret;
@@ -90,7 +92,7 @@ const char help_str[] = "Usage: %s [OPTIONS] \nWhere OPTIONS are:\n"
 
 static void usage(char *cmd)
 {
-	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "%s\n%s version %s libRIST library: %s API version: %s\n", cmd, help_str, RIST2RIST_VERSION, librist_version(), librist_api_version());
 	exit(1);
 }
 
@@ -294,7 +296,7 @@ int main (int argc, char **argv) {
 		exit(1);
 	}
 
-	rist_log(&logging_settings, RIST_LOG_INFO, "Starting rist2rist version: %s libRIST library: %s API version: %s\n", LIBRIST_VERSION, librist_version(), librist_api_version());
+	rist_log(&logging_settings, RIST_LOG_INFO, "Starting rist2rist version: %s libRIST library: %s API version: %s\n", RIST2RIST_VERSION, librist_version(), librist_api_version());
 
 	int option_index;
 	int c;
